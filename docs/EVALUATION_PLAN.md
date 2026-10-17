@@ -84,3 +84,9 @@
 ## 6. 报告
 
 `evaluations/run_eval.py` 输出 `evaluations/reports/<日期>.md`：各类别通过率、失败用例明细、平均延迟、工具调用次数。作品集 README 引用最新报告。
+
+## 7. 评估记录
+
+| 日期 | 评估 | 结果 | 说明 |
+|---|---|---|---|
+| 2026-10-17 | 话题路由（`evaluations/router_cases.yaml`，24 条，6 个标签） | 24/24，中位延迟 0.73 秒 | kimi-k2.6 关闭思考、temperature 0.6；单轮运行，样本小，作为可行性验证而非生产准确率 |

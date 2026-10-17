@@ -15,13 +15,20 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.moonshot.ai/v1"
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = "kimi-k2.6"
-    llm_temperature: float = 1.0  # kimi-k2.6 / kimi-k3 只接受 1；确定性由工具与规则保证，而非温度
+    # Kimi 思考模式只接受 temperature=1，关闭思考只接受 0.6；确定性由工具与规则保证，而非温度
+    llm_temperature: float = 1.0
+    llm_temperature_no_thinking: float = 0.6
+    llm_agent_thinking: bool = False  # 主 Agent 是否开启思考（关闭约快一倍）；话题路由始终关闭
     llm_timeout_seconds: float = 60
     llm_max_retries: int = 1
 
     agent_max_tool_calls: int = 6
 
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    # 演示身份：前端通过 X-Demo-User 请求头切换；demo_mode 允许一键清空演示数据
+    demo_users: list[str] = ["demo_customer_1", "demo_customer_2"]
+    demo_mode: bool = True
 
 
 @lru_cache

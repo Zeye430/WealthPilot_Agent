@@ -202,3 +202,95 @@
 **状态**：等待产品负责人审核问卷。
 
 **提交**：待产品负责人执行。
+
+---
+
+## 2026-10-17 · 第 9 步：Phase 2 风险测评门禁、话题路由与规则引擎
+
+**目标**：实现「先测评，后服务」：未测评客户只能获得金融常识和通用测算，推荐产品必须在测评之后；无关问题不调用主模型。
+
+**关键实测与决策**
+- **Kimi 思考模式可以关闭**（关闭后温度须为 0.6）。路由分类实测：关闭后 0.7 秒 / 约 5 token，开启时 1.6–3.4 秒 / 67–165 token，结果相同。主 Agent 关闭后从 8–9 秒降到 4–6 秒，6 次冒烟测试全部通过。决定：路由始终关闭，主 Agent 默认关闭（新增架构决策 D13）。
+- 问卷待定项的处理：矛盾作答只做软提示，不改分；高龄客户只加强提示，不设评级上限（不自行发明监管未明确的规则）；重测冷却从上次**确认**评级起算，确认前重新作答不受限。
+
+**做了什么**
+- **问卷与计分**：问卷写成 YAML 配置（题目、分值、分档与代码分离）；计分为纯函数，启动时校验满分必须为 100、分档递增；给前端的版本不含分值。
+- **测评流程**：提交后为待确认状态，客户确认后生效，有效期 12 个月；每次测评新增记录，不覆盖历史。
+- **Policy Engine**：门禁每条消息都从数据库重新计算；测评前允许的工具白名单为 `start_risk_assessment`、`calculate_growth`。
+- **话题路由**：6 个标签；分类失败时默认放行（合规由门禁保证，不依赖路由）。
+- **Agent 流程重写**，合规三道防线全部落地：
+  1. 按权限绑定工具：未测评时 LLM 拿不到产品类工具；
+  2. 工具执行前再校验：模型「幻觉」调用未绑定的工具也会被拦截；
+  3. 输出审查：识别承诺性表述（能区分「不保证收益」这类否定句），测评前不得出现推荐表述；首次未通过让模型改写，再次未通过使用安全兜底回答。
+- **审计**：每条消息记录门禁、路由、工具拦截、输出审查的决策及规则版本（`policy_decisions` 表）。
+- **API**：`/me`、问卷、提交、确认、清空演示数据；演示身份通过 `X-Demo-User` 请求头切换。
+- **前端**：测评问卷弹窗（原生 `<dialog>`，带进度条）、结果页（五级刻度、得分、可购买范围、否决与矛盾提示）、对话内测评入口（完整卡片 / 一行提醒）、右侧面板显示真实测评状态、演示客户切换与清空、手机顶栏评级标签。
+- 修复：模型常用 Markdown 表格回答，原先显示为原始文本，加入 `remark-gfm` 后正常渲染。
+
+**文件**
+- 🆕 `backend/app/assessment/questionnaire_v1.yaml`、`scoring.py`、`service.py`
+- 🆕 `backend/app/compliance/policy.py`、`output_guard.py`
+- 🆕 `backend/app/agent/router.py`
+- 🆕 `backend/app/tools/assessment_tools.py`
+- 🆕 `backend/app/api/assessment.py`、`deps.py`
+- 🆕 `backend/migrations/versions/f51613deca6c_risk_assessments_and_policy_decisions.py`
+- ✏️ `backend/app/agent/graph.py`：路由、门禁、工具校验、输出审查
+- ✏️ `backend/app/agent/prompts.py`：按测评状态生成系统提示；固定话术
+- ✏️ `backend/app/api/chat.py`：接入门禁、记录合规决策、返回客户状态
+- ✏️ `backend/app/llm/client.py`、`backend/app/core/config.py`：思考模式开关、演示用户
+- ✏️ `backend/app/db/models.py`：`risk_assessments`、`policy_decisions` 两张表
+- ✏️ `backend/app/main.py`、`backend/pyproject.toml`、`backend/uv.lock`（新增 PyYAML）
+- 🆕 `backend/tests/test_assessment_scoring.py`（23 个）、`test_compliance.py`（16 个）
+- ✏️ `backend/tests/test_agent_graph.py`（17 个）、`test_api_chat.py`（19 个）
+- 🆕 `evaluations/router_cases.yaml`、`evaluations/run_router_eval.py`
+- 🆕 `frontend/src/components/AssessmentDialog.tsx`、`blocks/AssessmentPrompt.tsx`
+- ✏️ `frontend/src/components/AppShell.tsx`、`Chat.tsx`、`src/lib/api.ts`、`src/lib/types.ts`
+- ✏️ `frontend/package.json`、`package-lock.json`（新增 remark-gfm）
+- ✏️ `docs/ARCHITECTURE.md`（D13）、`COMPLIANCE_DESIGN.md`、`RISK_QUESTIONNAIRE.md`（审核通过、待定项处理）、`EVALUATION_PLAN.md`（评估记录）、`ROADMAP.md`、`README.md`、`.env.example`
+
+**验证**
+- 后端 96 个测试全部通过；ruff lint 与格式检查通过；前端类型检查、lint、生产构建通过。
+- 话题路由真实 Kimi 评估：24/24，中位延迟 0.73 秒（单轮、样本小，仅作可行性验证）。
+- 浏览器端到端（真实 Kimi）：未测评要推荐 → 门禁拦截，0.9 秒，未调用主模型；无关问题 → 固定话术，0.8 秒；金融常识 → 正常回答并附测评提醒；完成测评（主场景，C2）→ 再要推荐时正确识别 C2 / PR2；手机宽度无横向滚动。
+
+**发现的问题**
+- 测评后模型凭自身知识列出「结构性存款保本（存款保险保障本金）」，未提及 50 万元赔付上限，也没有数据来源。这说明产品事实必须来自有出处的结构化数据（Phase 3 解决）。
+
+**提交**：待产品负责人执行。
+
+---
+
+## 2026-10-17 · 第 10 步：修复启动问题，收集真实产品文件
+
+**问题 1：页面提示「请求失败（500）」**
+- 原因：只启动了前端，后端没有运行。Next.js 把 `/api` 转发到 8000 端口时连不上，于是返回 500。
+- 改进：
+  - 错误提示改为「后端服务无响应：请确认后端已启动」，不再只显示状态码；
+  - 新增一键启动脚本 `scripts/dev.sh`：检查 `.env` 和 Docker、检查端口占用，再依次启动数据库（含迁移）、后端、前端；按 Ctrl+C 同时停止前后端。
+
+**问题 2：产品说明书由谁下载**
+- 产品负责人提议由 Claude 直接查找下载。
+- 过程：
+  - 用网络搜索找到银行官网公开托管的理财产品文件（主要是中国银行代销页面 `e.boc.cn`）；
+  - 下载前检查 robots 协议，相关站点均无限制；
+  - 下载 21 份候选文件到隔离的临时目录（外部文件按不可信数据处理）；
+  - 用 `pdftotext` 提取首页，识别发行机构、产品类型和风险等级；
+  - 选定 10 份。
+- 结果：PR1 × 1、PR2 × 7（含开放式、最短持有期、封闭式、两年持有）、PR3 × 1（仅风险揭示书）、PR4 × 1；涉及招银理财、汇华理财、工银理财。**PR5 未找到**：银行理财以固收为主，PR5 的权益类产品很少，改用标注清楚的合成产品补充。
+- 版权处理：PDF 不提交到 GitHub，只在本地保存（已加入 `.gitignore`）。提交的清单记录每份文件的官方地址、下载日期和 SHA-256，配合下载脚本可从官方来源复现完全相同的文件。
+
+**文件**
+- ✏️ `frontend/src/lib/api.ts`：后端无响应时给出明确提示
+- 🆕 `scripts/dev.sh`：一键启动
+- 🆕 `scripts/fetch_documents.py`：按清单下载并校验
+- 🆕 `data/documents/manifest.yaml`：10 份文件的来源清单（字段摘自首页，待核对）
+- ✏️ `.gitignore`：排除 `data/documents/public/*.pdf`
+- ✏️ `README.md`：快速开始改用 `dev.sh`；说明文件下载方式
+- ✏️ `docs/ROADMAP.md`：产品数据任务更新
+
+**验证**
+- `dev.sh`：语法检查通过；端口被占用时能正确提示并退出。完整启动需先停掉已在运行的前端，待产品负责人验证。
+- `fetch_documents.py`：已有文件全部校验通过；删除一份后重新运行，能从官方来源重新下载，且校验一致。
+- 前端类型检查通过。
+
+**提交**：待产品负责人执行。

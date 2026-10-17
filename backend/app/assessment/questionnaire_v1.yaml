@@ -1,0 +1,131 @@
+# 模拟风险承受能力测评问卷 v1
+# 设计说明与校准验证见 docs/RISK_QUESTIONNAIRE.md（2026-10-17 产品负责人审核通过）。
+# 修改题目或分值时，请新建 questionnaire_v2.yaml，不要改动已用于测评的版本。
+
+version: v1
+title: 风险承受能力测评（模拟）
+disclaimer: 本问卷为演示系统自行设计，非任何金融机构的正式问卷，测评结果仅用于本演示。
+validity_months: 12
+reassessment_cooldown_hours: 24
+
+questions:
+  - id: q1
+    dimension: 年龄
+    text: 您的年龄是？
+    options:
+      - { id: A, text: 18–30 岁, score: 8 }
+      - { id: B, text: 31–45 岁, score: 10 }
+      - { id: C, text: 46–55 岁, score: 7 }
+      - { id: D, text: 56–65 岁, score: 4 }
+      - { id: E, text: 65 岁以上, score: 2 }
+
+  - id: q2
+    dimension: 财务状况
+    text: 您的收入来源和稳定性如何？
+    options:
+      - { id: A, text: 目前没有稳定收入, score: 1 }
+      - { id: B, text: 收入不太稳定（如个体经营、佣金制）, score: 4 }
+      - { id: C, text: 收入稳定（如工资、养老金）, score: 7 }
+      - { id: D, text: 收入稳定，且有其他来源（如租金、经营收入、投资收益）, score: 10 }
+
+  - id: q3
+    dimension: 财务状况
+    text: 您计划投资的金额，占家庭金融资产的比例大约是？
+    options:
+      - { id: A, text: 70% 以上, score: 1 }
+      - { id: B, text: 50%–70%, score: 3 }
+      - { id: C, text: 20%–50%, score: 6 }
+      - { id: D, text: 20% 以下, score: 10 }
+
+  - id: q4
+    dimension: 投资经验
+    text: 您投资过的风险最高的产品是？
+    options:
+      - { id: A, text: 只有存款、国债, score: 1 }
+      - { id: B, text: 银行理财、货币基金, score: 4 }
+      - { id: C, text: 债券基金、「固收+」类产品, score: 6 }
+      - { id: D, text: 股票、偏股型基金, score: 8 }
+      - { id: E, text: 期货、期权等衍生品, score: 10 }
+
+  - id: q5
+    dimension: 流动性要求
+    text: 这笔资金预计多久之后可能需要使用？
+    options:
+      - { id: A, text: 1 年内随时可能使用, score: 1 }
+      - { id: B, text: 1–3 年, score: 4 }
+      - { id: C, text: 3–5 年, score: 7 }
+      - { id: D, text: 5 年以上, score: 10 }
+
+  - id: q6
+    dimension: 投资目的
+    text: 您投资的主要目的是？
+    options:
+      - { id: A, text: 保住本金，收益跑赢存款即可, score: 1 }
+      - { id: B, text: 稳健增值，可以接受小幅波动, score: 4 }
+      - { id: C, text: 获取较高收益，可以接受较大波动, score: 7 }
+      - { id: D, text: 资产长期大幅增值，可以接受剧烈波动, score: 10 }
+
+  - id: q7
+    dimension: 收益预期
+    text: 以下几种一年期投资情景，您最倾向哪一种？
+    options:
+      - { id: A, text: 收益与存款相近，基本不波动, score: 1 }
+      - { id: B, text: 收益略高于存款，可能出现小幅亏损, score: 4 }
+      - { id: C, text: 收益较高，可能亏损 10% 左右, score: 7 }
+      - { id: D, text: 收益很高，可能亏损 30% 以上, score: 10 }
+
+  - id: q8
+    dimension: 风险偏好
+    text: 如果您买的产品在 3 个月内下跌了 20%，您会怎么做？
+    options:
+      - { id: A, text: 立即全部赎回, score: 1 }
+      - { id: B, text: 赎回一部分, score: 4 }
+      - { id: C, text: 继续持有，观察一段时间, score: 8 }
+      - { id: D, text: 追加投资，摊低成本, score: 12 }
+
+  - id: q9
+    dimension: 风险认识
+    text: 关于银行理财产品，您认为以下哪种说法正确？
+    options:
+      - { id: A, text: 和存款一样，保本保收益, score: 0 }
+      - { id: B, text: 一般不会亏本金，最多收益少一些, score: 3 }
+      - { id: C, text: 不保本，净值会波动，可能亏损本金, score: 8 }
+      - { id: D, text: 不清楚, score: 0 }
+
+  - id: q10
+    dimension: 风险损失承受程度
+    text: 您能接受的最大本金亏损幅度是？
+    veto_option: A   # 选 A 时无论总分多少，评为 C1（最低类别）
+    options:
+      - { id: A, text: 不能接受任何本金亏损, score: 0 }
+      - { id: B, text: 5% 以内, score: 3 }
+      - { id: C, text: 5%–15%, score: 6 }
+      - { id: D, text: 15%–30%, score: 8 }
+      - { id: E, text: 30% 以上, score: 10 }
+
+ratings:
+  - rating: C1
+    name: 保守型
+    max_score: 25
+    max_product_risk: PR1
+    description: 您的首要目标是保护本金，几乎不能承受亏损。
+  - rating: C2
+    name: 稳健型
+    max_score: 55
+    max_product_risk: PR2
+    description: 您希望资产稳健增值，可以承受小幅波动和有限的本金亏损。
+  - rating: C3
+    name: 平衡型
+    max_score: 72
+    max_product_risk: PR3
+    description: 您在收益与风险之间寻求平衡，可以承受一定的本金亏损。
+  - rating: C4
+    name: 进取型
+    max_score: 88
+    max_product_risk: PR4
+    description: 您追求较高收益，可以承受较大的波动和本金亏损。
+  - rating: C5
+    name: 激进型
+    max_score: 100
+    max_product_risk: PR5
+    description: 您追求高收益，可以承受大幅波动和较大的本金亏损。

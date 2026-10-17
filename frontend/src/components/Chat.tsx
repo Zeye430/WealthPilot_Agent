@@ -1,27 +1,41 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
+import { AssessmentPrompt } from "@/components/blocks/AssessmentPrompt";
 import { CalculationSlip } from "@/components/blocks/CalculationSlip";
 import { LineChartBlock } from "@/components/blocks/LineChartBlock";
 import { ApiError, sendChat } from "@/lib/api";
-import type { ChatMessage, UIBlock } from "@/lib/types";
+import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
 
 const SUGGESTIONS = [
   "100万按每年5%复利10年是多少？",
-  "每月定投3000元，年化4%，10年后有多少？",
+  "什么是业绩比较基准？",
+  "我有100万，想稳一点，有什么产品推荐？",
   "100万在2%、3%、4%三种年化下，10年后分别是多少？",
-  "10万元申购费0.3%，持有期净值涨2%，到手多少？",
 ];
 
-export function Chat() {
+export type ChatHandle = { addNotice: (text: string) => void };
+
+type Props = {
+  ref?: Ref<ChatHandle>;
+  onStartAssessment: () => void;
+  onStateChange: (state: CustomerState) => void;
+};
+
+export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    addNotice: (text) => setMessages((m) => [...m, { role: "notice", content: text, ui_blocks: [] }]),
+  }));
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -38,6 +52,7 @@ export function Chat() {
       const res = await sendChat(message, conversationId);
       setConversationId(res.conversation_id);
       setMessages((m) => [...m, { role: "assistant", ...res.reply }]);
+      onStateChange(res.state);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "出现未知错误，请重试。");
       setMessages((m) => m.slice(0, -1));
@@ -64,11 +79,17 @@ export function Chat() {
           ) : (
             <ol className="space-y-8">
               {messages.map((m, i) => (
-                <li key={i}>{m.role === "user" ? <UserMessage text={m.content} /> : <AssistantMessage message={m} />}</li>
+                <li key={i}>
+                  {m.role === "user" && <UserMessage text={m.content} />}
+                  {m.role === "assistant" && (
+                    <AssistantMessage message={m} onStartAssessment={onStartAssessment} />
+                  )}
+                  {m.role === "notice" && <Notice text={m.content} />}
+                </li>
               ))}
               {pending && (
                 <li className="text-sm text-ink-2" aria-live="polite">
-                  <span className="inline-block animate-pulse">正在分析并计算…</span>
+                  <span className="inline-block animate-pulse">正在思考…</span>
                 </li>
               )}
             </ol>
@@ -125,9 +146,9 @@ export function Chat() {
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="pt-6 sm:pt-16">
-      <h1 className="font-serif text-2xl font-bold sm:text-3xl">您好，想先算一笔账吗？</h1>
+      <h1 className="font-serif text-2xl font-bold sm:text-3xl">您好，今天想了解些什么？</h1>
       <p className="mt-3 max-w-prose leading-7 text-ink-2">
-        我可以帮您测算复利、定投、通胀和申赎费用。所有数字由计算引擎精确算出，并注明测算假设。
+        我可以解释理财知识，测算收益和费用。完成风险测评后，还能在您的风险等级范围内筛选产品。
       </p>
       <ul className="mt-8 grid gap-2 sm:grid-cols-2">
         {SUGGESTIONS.map((s) => (
@@ -154,16 +175,39 @@ function UserMessage({ text }: { text: string }) {
   );
 }
 
-function AssistantMessage({ message }: { message: ChatMessage }) {
+function Notice({ text }: { text: string }) {
+  return (
+    <p role="status" className="border-y border-rule py-2 text-center text-sm text-ink-2">
+      {text}
+    </p>
+  );
+}
+
+function AssistantMessage({
+  message,
+  onStartAssessment,
+}: {
+  message: ChatMessage;
+  onStartAssessment: () => void;
+}) {
   return (
     <div className="space-y-4">
-      <div className="prose-reply max-w-prose leading-7">
+      <div className="max-w-prose leading-7">
         <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
           components={{
             p: (props) => <p className="my-2" {...props} />,
             ul: (props) => <ul className="my-2 list-disc pl-5" {...props} />,
             ol: (props) => <ol className="my-2 list-decimal pl-5" {...props} />,
             strong: (props) => <strong className="font-medium" {...props} />,
+            // 模型常用表格做对比；外层可横向滚动，避免手机上撑破页面
+            table: (props) => (
+              <div className="my-3 overflow-x-auto rounded-sm border border-rule bg-surface">
+                <table className="w-full border-collapse text-sm" {...props} />
+              </div>
+            ),
+            th: (props) => <th className="border-b border-rule bg-paper px-3 py-2 text-left font-medium" {...props} />,
+            td: (props) => <td className="border-b border-rule px-3 py-2 align-top last:border-b-0" {...props} />,
             blockquote: (props) => (
               <blockquote className="my-3 border-l-2 border-notice bg-notice-soft px-3 py-2 text-sm text-ink-2 [&>p]:my-0" {...props} />
             ),
@@ -173,18 +217,20 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         </ReactMarkdown>
       </div>
       {message.ui_blocks.map((block, i) => (
-        <Block key={i} block={block} />
+        <Block key={i} block={block} onStartAssessment={onStartAssessment} />
       ))}
     </div>
   );
 }
 
-function Block({ block }: { block: UIBlock }) {
+function Block({ block, onStartAssessment }: { block: UIBlock; onStartAssessment: () => void }) {
   switch (block.type) {
     case "calculation_result":
       return <CalculationSlip block={block} />;
     case "line_chart":
       return <LineChartBlock block={block} />;
+    case "assessment_prompt":
+      return <AssessmentPrompt block={block} onStart={onStartAssessment} />;
     default:
       return null;
   }
