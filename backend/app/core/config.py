@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://wealthpilot:wealthpilot@localhost:5433/wealthpilot"
 
     # Kimi（Moonshot）提供 OpenAI 兼容接口；换模型只改这三项
-    llm_base_url: str = "https://api.moonshot.cn/v1"
+    llm_base_url: str = "https://api.moonshot.ai/v1"
     llm_api_key: SecretStr = SecretStr("")
-    llm_model: str = "kimi-k2-turbo-preview"
-    llm_temperature: float = 0.3
+    llm_model: str = "kimi-k2.6"
+    llm_temperature: float = 1.0  # kimi-k2.6 / kimi-k3 只接受 1；确定性由工具与规则保证，而非温度
     llm_timeout_seconds: float = 60
     llm_max_retries: int = 1
 

@@ -38,7 +38,8 @@ def main() -> None:
     print("调用的工具：", called or "无")
     print("回答：", result["reply"])
     reply = result["reply"].replace(",", "").replace(" ", "")
-    ok = "calculate_growth" in called and "1628894.63" in reply
+    # 接受完整金额或「万元」近似写法（162.89万），两者都来自工具结果
+    ok = "calculate_growth" in called and ("1628894.63" in reply or "162.89万" in reply)
     print("\n结果：", "通过 ✅" if ok else "需要检查 ⚠️（未调用工具或数字不一致）")
 
 
