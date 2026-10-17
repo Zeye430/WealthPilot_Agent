@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AssessmentDialog } from "@/components/AssessmentDialog";
 import { Chat, type ChatHandle } from "@/components/Chat";
+import { ProductBrowser } from "@/components/products/ProductBrowser";
 import {
   DEMO_USERS,
   formatDate,
@@ -14,13 +15,19 @@ import {
 } from "@/lib/api";
 import type { CustomerState } from "@/lib/types";
 
-const COMING_SOON = ["产品浏览", "我的理财目标", "联系理财经理"];
+const COMING_SOON = ["我的理财目标", "联系理财经理"];
+const VIEWS = [
+  { id: "chat", label: "对话与测算" },
+  { id: "products", label: "产品浏览" },
+] as const;
+type View = (typeof VIEWS)[number]["id"];
 
 export function AppShell() {
   const [demoUser, setDemoUser] = useState(DEMO_USERS[0].id);
   const [chatKey, setChatKey] = useState(0);
   const [state, setState] = useState<CustomerState | null>(null);
   const [assessing, setAssessing] = useState(false);
+  const [view, setView] = useState<View>("chat");
   const chatRef = useRef<ChatHandle>(null);
 
   const refreshState = useCallback(() => {
@@ -36,6 +43,7 @@ export function AppShell() {
 
   function newChat() {
     setChatKey((k) => k + 1); // 改变 key 会重新挂载 Chat，即开始新对话
+    setView("chat");
   }
 
   async function reset() {
@@ -58,7 +66,20 @@ export function AppShell() {
           新对话
         </button>
         <ul className="mt-6 space-y-1 text-sm">
-          <li className="rounded-sm bg-brand-soft px-3 py-2 font-medium">对话与测算</li>
+          {VIEWS.map((v) => (
+            <li key={v.id}>
+              <button
+                type="button"
+                onClick={() => setView(v.id)}
+                aria-current={view === v.id ? "page" : undefined}
+                className={`w-full rounded-sm px-3 py-2 text-left ${
+                  view === v.id ? "bg-brand-soft font-medium" : "hover:bg-brand-soft/50"
+                }`}
+              >
+                {v.label}
+              </button>
+            </li>
+          ))}
           {COMING_SOON.map((item) => (
             <li key={item} className="flex items-center justify-between px-3 py-2 text-ink-3">
               {item}
@@ -106,7 +127,25 @@ export function AppShell() {
             </button>
           </div>
         </header>
-        <div className="min-h-0 flex-1">
+        <nav className="flex border-b border-rule md:hidden" aria-label="页面切换">
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setView(v.id)}
+              className={`flex-1 py-2 text-sm ${view === v.id ? "border-b-2 border-brand font-medium text-brand" : "text-ink-2"}`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </nav>
+        {view === "products" && (
+          <div className="min-h-0 flex-1">
+            <ProductBrowser state={state} onStartAssessment={startAssessment} />
+          </div>
+        )}
+        {/* 对话保持挂载，切换到产品页时只隐藏，避免丢失对话内容 */}
+        <div className={`min-h-0 flex-1 ${view === "chat" ? "" : "hidden"}`}>
           <Chat
             key={`${demoUser}-${chatKey}`}
             ref={chatRef}

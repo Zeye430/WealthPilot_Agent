@@ -210,3 +210,34 @@ def test_reset_clears_assessment(client):
 
 def test_health():
     assert TestClient(app).get("/health").json()["database"] == "ok"
+
+
+# ---------- 产品 API（Phase 3） ----------
+
+
+def test_products_api_requires_assessment(client):  # S11
+    assert client.get("/api/v1/products").status_code == 403
+    assert client.get("/api/v1/products/ZA-F01").status_code == 403
+
+
+def test_products_api_filters_by_rating(client):  # S11
+    complete_assessment(client)  # C2
+    body = client.get("/api/v1/products").json()
+    levels = {i["risk_level"] for i in body["items"]}
+    assert levels <= {"PR1", "PR2"}
+    assert body["rating"] == {"code": "C2", "name": "稳健型", "max_product_risk": "PR2"}
+    assert {"reason": "风险等级超出您的风险承受能力", "count": 5} in body["excluded"]
+
+
+def test_products_api_type_filter(client):
+    complete_assessment(client)
+    body = client.get("/api/v1/products", params={"product_type": "CASH_MANAGEMENT"}).json()
+    assert {i["code"] for i in body["items"]} == {"ZA-C01", "HY-C01"}
+
+
+def test_product_detail_over_rating_has_warning(client):  # S04b
+    complete_assessment(client)
+    body = client.get("/api/v1/products/ZA-M01").json()
+    assert body["eligible"] is False
+    assert "无权限购买" in body["eligibility_messages"][0]
+    assert client.get("/api/v1/products/NOPE").status_code == 404

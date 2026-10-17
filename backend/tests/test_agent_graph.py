@@ -252,3 +252,56 @@ def test_recommendation_before_assessment_is_rewritten():
     )
     assert decisions(result, "OUTPUT")[0]["reason_codes"] == ["O-PERMISSION_LEAK"]
     assert "建议您购买" not in result["reply"]
+
+
+# ---------- 产品工具（Phase 3） ----------
+
+
+def test_search_products_uses_injected_rating():
+    model = ScriptedChatModel(
+        responses=[
+            tool_call("search_products", {"max_lockup_days": 0}),
+            AIMessage("在您的风险等级范围内，有几款每日开放的产品，详见列表。"),
+        ]
+    )
+    result = run(model, label="PRODUCT_OR_ADVICE", text="有什么随时能取的产品？", rating="C2")
+    block = result["ui_blocks"][0]
+    assert block["type"] == "product_list"
+    assert {i["code"] for i in block["items"]} == {"ZA-C01", "HY-C01", "ZA-F01"}
+    assert "PR2" in block["title"]
+
+
+def test_llm_cannot_pass_rating_to_widen_results():
+    # 即使模型试图塞入 risk_rating 参数，工具也只认流程状态里的评级
+    model = ScriptedChatModel(
+        responses=[
+            tool_call("search_products", {"risk_rating": "C5", "product_types": ["EQUITY"]}),
+            AIMessage("在您的风险等级范围内没有权益类产品。"),
+        ]
+    )
+    result = run(model, label="PRODUCT_OR_ADVICE", text="给我看权益类", rating="C2")
+    items = next(b for b in result["ui_blocks"] if b["type"] == "product_list")["items"]
+    assert items == []
+
+
+def test_product_tools_unavailable_before_assessment():
+    model = ScriptedChatModel(
+        responses=[
+            tool_call("search_products", {}),
+            AIMessage("完成风险测评后才能查询产品。"),
+        ]
+    )
+    result = run(model, label="FINANCE_KNOWLEDGE", permission=Permission.ASSESSMENT_REQUIRED)
+    assert decisions(result, "TOOL")[0]["reason_codes"] == ["TOOL:search_products"]
+    assert "product_list" not in block_types(result)
+
+
+def test_made_up_product_is_rewritten():
+    model = ScriptedChatModel(
+        responses=[
+            AIMessage("可以考虑知岸权益精选。"),
+            AIMessage("我可以先帮您在风险等级范围内搜索产品。"),
+        ]
+    )
+    result = run(model, label="PRODUCT_OR_ADVICE", text="有什么好产品？")
+    assert decisions(result, "OUTPUT")[0]["reason_codes"] == ["O-UNGROUNDED_PRODUCT"]

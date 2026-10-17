@@ -44,6 +44,9 @@ flowchart LR
 
 | D13 | Kimi **关闭思考模式**：话题路由始终关闭；主 Agent 默认关闭（`LLM_AGENT_THINKING` 可开启） | 实测路由分类：关闭后 0.7 秒 / 约 5 token，开启时 1.6–3.4 秒 / 67–165 token，准确率相同；主 Agent 从 8–9 秒降到 4–6 秒。算数与合规由代码负责，不依赖模型推理 | 全程开启思考：复杂推理更强，但慢一倍 |
 | D14 | **金融知识库 + 来源标注 + 到期降级**（方案 C）：常识问题以人工编写、出处已核对的知识库为依据；条目带版本与复核到期日，过期自动不再作为依据 | 模型记忆会出错且无出处（实测遗漏存款保险限额；核对法规时也纠正了 6 处记忆错误）；把维护与运行时挂钩，无人维护时系统也不会引用过期内容 | 只靠 Prompt 约束（无出处、不可控）；知识库无维护机制（内容会随法规变化而过期） |
+| D15 | **产品要素存 YAML、启动时加载并校验，不建产品表**；说明书由要素生成 | 16 个只读产品，YAML + Git 天然具备版本与审核记录；避免数据库与文件两份数据的同步问题；Python 中逐个产品给出排除原因代码；保留「产品仓库」接口，生产环境可替换为产品主数据系统 | 原计划的 products / product_fees / product_return_metrics 三张表：MVP 阶段增加迁移与同步成本 |
+| D16 | **客户评级通过 LangGraph `InjectedState` 注入产品工具**，LLM 不可见、不可传入 | 评级若作为工具参数由 LLM 填写，可能填错或被客户诱导；测试验证模型塞入 `risk_rating: C5` 也无效 | 由 LLM 传参后在工具内校验：多一个出错环节 |
+| D17 | **候选排序只用期限匹配、流动性、费用**，不用业绩比较基准、历史收益或销售佣金 | 业绩比较基准不是预期收益率，按它排序等于变相推荐「基准更高、通常风险更高」的产品；排序因素逐项可解释 | 按收益排序：直观但与适当性原则冲突 |
 
 > **D12 与 D3/D4 的分工**：话题路由负责**成本与范围**，可能分错；合规门禁负责**安全**，不依赖路由结果。即使路由把「推荐产品」误判成「金融常识」，未测评状态下 LLM 依然没有产品工具。
 
@@ -219,6 +222,8 @@ erDiagram
  "investment_horizon_months": {"value": null, "source": null}}
 ```
 用 jsonb 而不是每字段一列：画像字段会迭代，每个字段都要带来源（用户提供 / 系统推断 / 正式验证）。
+
+> 实现说明（D15）：产品数据最终存放在 `data/products/products.yaml`，由 `app/products/catalog.py` 加载校验，未建以下三张表；字段设计保留作为数据结构参考。
 
 **products**：`id`, `code`, `name`, `issuer`, `distributor`, `product_type`(现金管理/固收/混合/权益…), `issuer_risk_level`(PR), `distributor_risk_level`(R), `effective_risk_level`(取高), `investment_scope`, `minimum_investment`, `term_days`, `open_frequency`, `subscription_rules`, `redemption_rules`, `product_status`, `data_origin`(SYNTHETIC), `data_quality_status`(VERIFIED / PARTIAL / UNVERIFIED), `last_verified_at`, `field_sources`(jsonb)
 - `field_sources` 记录每个字段来自哪份文档的哪一页：`{"risk_level": {"document_id": "...", "page": 3, "quote": "本产品风险等级为PR2"}}`

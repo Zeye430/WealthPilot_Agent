@@ -1,0 +1,346 @@
+# 虚构产品要素（单一数据源）。机构与产品均为虚构，仅供 WealthPilot 演示。
+# 目录说明见 docs/PRODUCT_CATALOG.md；说明书由 scripts/generate_product_docs.py 根据本文件生成。
+#
+# 字段约定
+#   operation_mode: OPEN 每日开放 | MIN_HOLDING 最短持有期 | CLOSED 封闭式 | PERIODIC_OPEN 定期开放
+#   lockup_days:    OPEN 为 0；MIN_HOLDING 为最短持有天数；CLOSED 为封闭天数；PERIODIC_OPEN 为开放间隔天数
+#   费率写作百分数（如 0.10%），年化费率按日计提；缺失写 null，且 data_quality 必须为 UNVERIFIED
+#   distributor_risk_level: 知岸银行的销售评级（R1–R5），与发行评级不一致时取较高者
+
+catalog_version: "2026-10-17.1"
+as_of: 2026-10-16
+
+products:
+  - code: ZA-C01
+    name: 知岸活钱宝
+    issuer: 知岸理财
+    product_type: CASH_MANAGEMENT
+    operation_mode: OPEN
+    lockup_days: 0
+    redemption_settlement: T+1
+    issuer_risk_level: PR1
+    distributor_risk_level: R1
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2023-06-01
+    investment_scope: 现金，期限在 1 年以内（含）的银行存款、债券回购、中央银行票据、同业存单等货币市场工具。
+    strategy: 以流动性管理为首要目标，控制组合平均剩余期限，在保持高流动性的前提下获取稳定的货币市场收益。
+    fees: { management: 0.10%, custody: 0.02%, sales_service: 0.20%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: SEVEN_DAY_ANNUALIZED, value: 1.42%, as_of: 2026-10-16 }
+      - { type: TEN_THOUSAND_UNIT_INCOME, value_yuan: "0.3871", as_of: 2026-10-16 }
+
+  - code: HY-C01
+    name: 鸿屿日日盈
+    issuer: 鸿屿理财
+    product_type: CASH_MANAGEMENT
+    operation_mode: OPEN
+    lockup_days: 0
+    redemption_settlement: T+1
+    issuer_risk_level: PR1
+    distributor_risk_level: R1
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2022-11-15
+    investment_scope: 现金，期限在 1 年以内（含）的银行存款、债券回购、中央银行票据、同业存单等货币市场工具。
+    strategy: 精选高流动性货币市场工具，动态管理组合久期，满足投资者日常现金管理需求。
+    fees: { management: 0.12%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: SEVEN_DAY_ANNUALIZED, value: 1.38%, as_of: 2026-10-16 }
+      - { type: TEN_THOUSAND_UNIT_INCOME, value_yuan: "0.3762", as_of: 2026-10-16 }
+
+  - code: ZA-F01
+    name: 知岸稳享每日开放
+    issuer: 知岸理财
+    product_type: FIXED_INCOME
+    operation_mode: OPEN
+    lockup_days: 0
+    redemption_settlement: T+1
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-01-10
+    investment_scope: 债权类资产比例不低于 80%，主要投资于国债、政策性金融债、高等级信用债、同业存单及货币市场工具。
+    strategy: 以短久期高等级债券为主，控制信用风险和利率风险，兼顾流动性与稳健收益。
+    fees:
+      management: 0.20%
+      custody: 0.03%
+      sales_service: 0.20%
+      subscription: 0%
+      redemption: [{ max_days: 7, rate: 0.5% }, { max_days: null, rate: 0% }]
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 1.9%, high: 2.5%, basis: 参考短期高等级债券收益水平，结合产品投资策略与费用测算。 }
+
+  - code: ZA-F02
+    name: 知岸稳享 30 天持有
+    issuer: 知岸理财
+    product_type: FIXED_INCOME
+    operation_mode: MIN_HOLDING
+    lockup_days: 30
+    redemption_settlement: T+1
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-05-20
+    investment_scope: 债权类资产比例不低于 80%，主要投资于利率债、高等级信用债、同业存单及货币市场工具。
+    strategy: 匹配 30 天最短持有期限配置资产，适度拉长久期以提高收益，严格控制回撤。
+    fees: { management: 0.25%, custody: 0.03%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.1%, high: 2.7%, basis: 参考 1 年期以内高等级债券收益水平，扣除产品费用后测算。 }
+
+  - code: HY-F01
+    name: 鸿屿安盈 60 天持有
+    issuer: 鸿屿理财
+    product_type: FIXED_INCOME
+    operation_mode: MIN_HOLDING
+    lockup_days: 60
+    redemption_settlement: T+1
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2023-09-01
+    investment_scope: 债权类资产比例不低于 80%，主要投资于高等级信用债、金融债、同业存单及货币市场工具。
+    strategy: 以票息收益为主，配合适度的久期管理，追求与 60 天持有期相匹配的稳健回报。
+    fees: { management: 0.30%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.2%, high: 2.8%, basis: 参考中短期高等级信用债收益水平，结合投资策略与费用测算。 }
+
+  - code: ZA-F03
+    name: 知岸稳享一年持有
+    issuer: 知岸理财
+    product_type: FIXED_INCOME
+    operation_mode: MIN_HOLDING
+    lockup_days: 365
+    redemption_settlement: T+1
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-03-15
+    investment_scope: 债权类资产比例不低于 80%，主要投资于利率债、高等级信用债、二级资本债及同业存单。
+    strategy: 匹配一年持有期配置中等久期债券，以票息收益为主，辅以利率波段操作。
+    fees: { management: 0.30%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.5%, high: 3.2%, basis: 参考 1–3 年期高等级债券收益水平，扣除产品费用后测算。 }
+      - type: ANNUAL_PERFORMANCE
+        periods:
+          - { label: 2024 年（成立日至年末，年化）, start: 2024-03-15, end: 2024-12-31, value: 2.71% }
+          - { label: 2025 年度, start: 2025-01-01, end: 2025-12-31, value: 2.93% }
+
+  - code: HY-F02
+    name: 鸿屿睿远两年持有
+    issuer: 鸿屿理财
+    product_type: FIXED_INCOME
+    operation_mode: MIN_HOLDING
+    lockup_days: 730
+    redemption_settlement: T+2
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-08-01
+    investment_scope: 债权类资产比例不低于 80%，主要投资于中长期利率债、高等级信用债及资产支持证券优先级。
+    strategy: 利用两年持有期的资金稳定性配置较长久期资产，获取期限溢价。
+    fees: { management: 0.35%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 3.5%, basis: 参考 3–5 年期高等级债券收益水平，扣除产品费用后测算。 }
+
+  - code: ZA-F04
+    name: 知岸定享 180 天第 12 期
+    issuer: 知岸理财
+    product_type: FIXED_INCOME
+    operation_mode: CLOSED
+    lockup_days: 180
+    redemption_settlement: 到期后 T+2 兑付
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 10000
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2026-10-28
+    maturity_date: 2027-04-26
+    investment_scope: 债权类资产比例不低于 80%，主要投资于与产品期限相匹配的债券、同业存单及货币市场工具。
+    strategy: 采用持有到期为主的策略，配置剩余期限与产品期限相近的资产，降低净值波动。
+    fees: { management: 0.25%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.4%, high: 2.9%, basis: 参考期限相近的高等级债券收益水平，结合产品期限与费用测算。 }
+
+  - code: HY-F03
+    name: 鸿屿臻享一年封闭第 8 期
+    issuer: 鸿屿理财
+    product_type: FIXED_INCOME
+    operation_mode: CLOSED
+    lockup_days: 365
+    redemption_settlement: 到期后 T+2 兑付
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 300000
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2026-11-05
+    maturity_date: 2027-11-05
+    investment_scope: 债权类资产比例不低于 80%，主要投资于高等级信用债、金融债及期限匹配的同业资产。
+    strategy: 持有到期为主，精选信用资质较好的债券，追求期限内的稳健回报。
+    fees: { management: 0.30%, custody: 0.02%, sales_service: 0.20%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.7%, high: 3.3%, basis: 参考 1 年期高等级信用债收益水平，结合产品期限与费用测算。 }
+
+  - code: ZA-F05
+    name: 知岸定享 90 天第 3 期
+    issuer: 知岸理财
+    product_type: FIXED_INCOME
+    operation_mode: CLOSED
+    lockup_days: 90
+    redemption_settlement: 到期后 T+2 兑付
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 10000
+    status: ENDED
+    data_quality: VERIFIED
+    inception_date: 2026-05-12
+    maturity_date: 2026-08-10
+    investment_scope: 债权类资产比例不低于 80%，主要投资于与产品期限相匹配的债券、同业存单及货币市场工具。
+    strategy: 持有到期为主，配置剩余期限与产品期限相近的资产。
+    fees: { management: 0.25%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.2%, high: 2.6%, basis: 参考期限相近的高等级债券收益水平，结合产品期限与费用测算。 }
+
+  - code: HY-F04
+    name: 鸿屿安享半年定开
+    issuer: 鸿屿理财
+    product_type: FIXED_INCOME
+    operation_mode: PERIODIC_OPEN
+    lockup_days: 180
+    redemption_settlement: 开放日后 T+2
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 10000
+    status: ON_SALE
+    data_quality: UNVERIFIED
+    inception_date: 2025-04-01
+    investment_scope: 债权类资产比例不低于 80%，主要投资于中短期债券、同业存单及货币市场工具。
+    strategy: 按半年开放周期配置资产，以票息收益为主。
+    fees: { management: 0.30%, custody: null, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.4%, high: 3.0%, basis: 参考中短期高等级债券收益水平，结合开放周期与费用测算。 }
+
+  - code: ZA-P01
+    name: 知岸稳进 90 天持有（固收+）
+    issuer: 知岸理财
+    product_type: FIXED_INCOME_PLUS
+    operation_mode: MIN_HOLDING
+    lockup_days: 90
+    redemption_settlement: T+2
+    issuer_risk_level: PR3
+    distributor_risk_level: R3
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-06-18
+    investment_scope: 债权类资产比例不低于 80%；权益类资产（股票、偏股型基金）比例不超过 20%。
+    strategy: 以高等级债券打底获取票息，用不超过 20% 的权益仓位增强收益，严格控制组合回撤。
+    fees:
+      management: 0.50%
+      custody: 0.03%
+      sales_service: 0.30%
+      subscription: 0%
+      redemption: [{ max_days: null, rate: 0% }]
+      performance_fee: { rate: 20%, condition: 年化收益超过业绩比较基准上限的部分 }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 4.5%, basis: 债券部分参考中短期高等级债券收益，权益部分参考宽基指数长期表现，按配置比例加权测算。 }
+
+  - code: HY-P01
+    name: 鸿屿季季开放（固收+）
+    issuer: 鸿屿理财
+    product_type: FIXED_INCOME_PLUS
+    operation_mode: PERIODIC_OPEN
+    lockup_days: 90
+    redemption_settlement: 开放日后 T+2
+    issuer_risk_level: PR2
+    distributor_risk_level: R3
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-02-26
+    investment_scope: 债权类资产比例不低于 80%；可转债及权益类资产合计比例不超过 15%。
+    strategy: 以债券票息为基础，适度参与可转债与权益资产，按季度开放。
+    fees: { management: 0.40%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.6%, high: 4.0%, basis: 债券部分参考中短期债券收益，可转债与权益部分参考相关指数表现，按配置比例加权测算。 }
+
+  - code: ZA-M01
+    name: 知岸均衡配置
+    issuer: 知岸理财
+    product_type: MIXED
+    operation_mode: OPEN
+    lockup_days: 0
+    redemption_settlement: T+2
+    issuer_risk_level: PR4
+    distributor_risk_level: R4
+    minimum_investment: 1
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2023-12-04
+    investment_scope: 债权类资产、权益类资产均可投资，任一类资产比例均不超过 80%；权益类资产比例 20%–60%。
+    strategy: 股债均衡配置，根据市场估值动态调整权益仓位，追求中长期资产增值。
+    fees:
+      management: 0.80%
+      custody: 0.05%
+      sales_service: 0.40%
+      subscription: 0%
+      redemption: [{ max_days: 30, rate: 1% }, { max_days: null, rate: 0% }]
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, formula: 沪深 300 指数收益率×40% + 中债综合财富指数收益率×60%, basis: 按产品股债中枢配置比例选取对应市场指数加权。 }
+
+  - code: HY-M01
+    name: 鸿屿多元配置一年定开
+    issuer: 鸿屿理财
+    product_type: MIXED
+    operation_mode: PERIODIC_OPEN
+    lockup_days: 365
+    redemption_settlement: 开放日后 T+3
+    issuer_risk_level: PR4
+    distributor_risk_level: R4
+    minimum_investment: 10000
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2025-01-20
+    investment_scope: 可投资债权类、权益类及商品类资产，任一类资产比例均不超过 80%。
+    strategy: 多资产配置，在股票、债券、商品之间分散风险，每年开放一次。
+    fees: { management: 0.70%, custody: 0.05%, sales_service: 0.35%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 4.0%, high: 6.0%, basis: 参考各类资产长期收益水平，按目标配置比例加权测算。 }
+
+  - code: ZA-E01
+    name: 知岸权益精选
+    issuer: 知岸理财
+    product_type: EQUITY
+    operation_mode: OPEN
+    lockup_days: 0
+    redemption_settlement: T+3
+    issuer_risk_level: PR5
+    distributor_risk_level: R5
+    minimum_investment: 10000
+    status: ON_SALE
+    data_quality: VERIFIED
+    inception_date: 2024-09-09
+    investment_scope: 权益类资产（股票、股票型基金）比例不低于 80%。
+    strategy: 自下而上精选个股，行业分散配置，追求长期资本增值，净值波动较大。
+    fees:
+      management: 1.00%
+      custody: 0.05%
+      sales_service: 0.40%
+      subscription: 0%
+      redemption: [{ max_days: 180, rate: 0.5% }, { max_days: null, rate: 0% }]
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, formula: 中证 800 指数收益率×85% + 中债总财富指数收益率×15%, basis: 按产品权益中枢配置比例选取对应市场指数加权。 }

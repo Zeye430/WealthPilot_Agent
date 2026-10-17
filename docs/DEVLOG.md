@@ -414,3 +414,62 @@
 **实现计划**：P4 与知识库接入检索一起实现，约 2 小时。
 
 **提交**：待产品负责人执行。
+
+---
+
+## 2026-10-17 · 第 15 步：Phase 3 产品库与适当性
+
+**目标**：客户完成测评后，能在评级范围内查询、比较产品；不合格的产品进不了候选。
+
+**关键设计决策**（ARCHITECTURE D15–D17）
+- **D15 产品存 YAML、启动加载**：16 个只读产品用 YAML + Git 管理（自带版本与审核记录），不建数据库表，避免两份数据同步；启动时用 Pydantic 校验，配置错误直接报错。
+- **D16 评级由系统注入**：产品工具通过 LangGraph `InjectedState` 读取客户评级，LLM 看不到这个参数，也无法传入。测试中模拟模型塞入 `risk_rating: C5`，结果仍按 C2 过滤。
+- **D17 排序不看收益**：只按期限匹配、流动性、费用排序，不用业绩比较基准（它不是预期收益率，按它排序等于变相推荐高风险产品），也不用销售佣金；每个因素的得分都可解释。
+
+**做了什么**
+- **产品要素** `data/products/products.yaml`：16 个虚构产品。费率写成百分数便于审核，读取时精确转为 Decimal。校验规则包括：费率缺失却标为已核实 → 报错；现金管理类必须有七日年化、净值型产品必须有业绩比较基准及测算依据；代码前缀须与发行机构一致；评级取高。
+- **适当性规则** `compliance/suitability.py`：评级超限、非在售、起购金额不足、期限不匹配为硬过滤；数据未核实的产品可以展示但不参与排序；每个产品都返回原因代码和给客户看的说明。
+- **查询服务**：先按客户条件筛选，再做适当性过滤，最后只对合格产品排序；**AI 工具与 REST API 共用同一套服务**，绕过 AI 直接调接口也绕不过过滤（S11）。
+- **三个 LLM 工具**：
+  - `search_products`：只返回评级范围内的产品，被排除的按原因计数；
+  - `get_product_details`：超评级产品也能看条款，但附「不作推荐，您亦无权限购买」；
+  - `compare_products`：收益按口径分列，超评级产品不纳入对比，并说明原因。
+- **说明书生成**：从要素生成 16 份 Markdown 说明书，章节与知识库的引用一致；测试检查说明书与要素是否同步。
+- **输出审查扩展**：
+  - 真实理财公司名称（在运行时落实「不出现真实机构」）；
+  - 回答提到的产品必须在工具结果或之前的对话中出现过；
+  - 测评前不得出现客户没提过的产品名。
+- **前端**：产品卡片（收益数字始终带口径标签）、产品详情（超评级时顶部显著提示）、对比表、「产品浏览」页（按类型筛选，未测评时引导测评）；对话与产品页切换时，对话内容保留。
+- **修正**：
+  - 期限换算原按 30 天 / 月，会把「一年持有」误判为超过 12 个月，改为 365÷12；
+  - 费率显示改为两位小数（0.40%）。
+
+**端到端测试（真实 Kimi，C2 客户）中发现并修复的问题**
+1. 模型把「固定收益类」说成「固收+」，并凭记忆列举替代产品。
+2. 界面已展示对比表，模型又用文字表格重复了一遍。
+
+通过 Prompt 约束修复：类别等要素只能原样转述工具结果；介绍其他产品前必须先调用搜索；文字只总结要点。复测三个场景均已正常。
+
+**文件**
+- 🆕 `data/products/products.yaml`、`data/products/docs/*.md`（16 份生成的说明书）
+- 🆕 `backend/app/products/catalog.py`、`presenter.py`、`ranking.py`、`service.py`、`documents.py`
+- 🆕 `backend/app/compliance/suitability.py`
+- 🆕 `backend/app/tools/product_tools.py`、`backend/app/api/products.py`
+- 🆕 `scripts/generate_product_docs.py`
+- 🆕 `backend/tests/test_products.py`（25 个）
+- ✏️ `backend/app/agent/graph.py`：绑定产品工具；向 ToolNode 传入完整状态与运行配置
+- ✏️ `backend/app/agent/prompts.py`：产品相关规则
+- ✏️ `backend/app/compliance/output_guard.py`：真实机构、产品出处、测评前产品提及
+- ✏️ `backend/app/main.py`、`backend/pyproject.toml`（Prompt 文件不受行宽限制）
+- ✏️ `backend/tests/test_agent_graph.py`、`test_compliance.py`、`test_api_chat.py`
+- 🆕 `frontend/src/components/products/`（卡片、详情、详情弹窗、产品浏览页）、`blocks/ProductBlocks.tsx`
+- ✏️ `frontend/src/components/AppShell.tsx`、`Chat.tsx`、`src/lib/api.ts`、`src/lib/types.ts`
+- ✏️ `docs/ARCHITECTURE.md`（D15–D17）、`EVALUATION_PLAN.md`、`ROADMAP.md`、`PRODUCT_CATALOG.md`、`README.md`
+
+**验证**
+- 后端 132 个测试全部通过（新增 36 个）；ruff lint 与格式检查通过。
+- 前端类型检查、lint、生产构建通过。
+- `dev.sh` 首次完整启动验证通过。
+- 浏览器端到端（真实 Kimi）：搜索、点名查询 PR4、对比均符合规则；手机宽度无横向滚动。
+
+**提交**：待产品负责人执行。

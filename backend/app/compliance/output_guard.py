@@ -6,6 +6,7 @@
 import re
 
 from app.compliance.policy import Permission
+from app.products.catalog import load_catalog
 
 # 命中前若出现这些否定词（相距不超过 NEGATION_WINDOW 个字），视为否定陈述，不算违规
 NEGATIONS = ("不", "非", "没有", "无法", "不能", "不会", "并非", "绝非", "未")
@@ -33,6 +34,41 @@ RECOMMENDATION = [
 ]
 
 
+# 真实理财公司名称：产品负责人决定产品中不出现任何真实机构的产品信息（演示只用虚构机构）
+REAL_INSTITUTIONS = (
+    "工银理财",
+    "建信理财",
+    "农银理财",
+    "中银理财",
+    "交银理财",
+    "中邮理财",
+    "招银理财",
+    "兴银理财",
+    "信银理财",
+    "光大理财",
+    "平安理财",
+    "华夏理财",
+    "浦银理财",
+    "民生理财",
+    "广银理财",
+    "渤银理财",
+    "恒丰理财",
+    "汇华理财",
+    "贝莱德建信理财",
+    "施罗德交银理财",
+    "高盛工银理财",
+    "宁银理财",
+    "杭银理财",
+    "徽银理财",
+    "南银理财",
+    "青银理财",
+    "苏银理财",
+    "上银理财",
+    "北银理财",
+    "渝农商理财",
+)
+
+
 def _negated(text: str, start: int) -> bool:
     window = text[max(0, start - NEGATION_WINDOW) : start]
     return any(n in window for n in NEGATIONS)
@@ -42,13 +78,37 @@ def _affirmative_hits(text: str, patterns: list[re.Pattern]) -> list[str]:
     return [m.group() for p in patterns for m in p.finditer(text) if not _negated(text, m.start())]
 
 
-def check_output(reply: str, permission: Permission) -> list[str]:
-    """返回违规代码列表；空列表表示通过。"""
+def mentioned_products(text: str) -> set[str]:
+    """回答中提到的目录产品（按代码或完整名称匹配）。"""
+    compact = text.replace(" ", "")
+    return {
+        p.code
+        for p in load_catalog().products
+        if p.code in text or p.name.replace(" ", "") in compact
+    }
+
+
+def real_institutions(text: str) -> list[str]:
+    return [name for name in REAL_INSTITUTIONS if name in text]
+
+
+def check_output(reply: str, permission: Permission, grounding: str = "") -> list[str]:
+    """返回违规代码列表；空列表表示通过。
+
+    grounding 是本轮之前已出现的内容：测评前只含客户消息；测评后含客户消息、历史回答和工具结果。
+    回答中提到的产品必须在其中出现过，防止模型凭空编造或测评前泄露产品信息。
+    """
     violations = []
     if _affirmative_hits(reply, PROHIBITED_CLAIMS):
         violations.append("O-PROHIBITED_CLAIM")
-    if permission is Permission.ASSESSMENT_REQUIRED and _affirmative_hits(reply, RECOMMENDATION):
-        violations.append("O-PERMISSION_LEAK")
+    ungrounded = mentioned_products(reply) - mentioned_products(grounding)
+    if permission is Permission.ASSESSMENT_REQUIRED:
+        if _affirmative_hits(reply, RECOMMENDATION) or ungrounded:
+            violations.append("O-PERMISSION_LEAK")
+    elif ungrounded:
+        violations.append("O-UNGROUNDED_PRODUCT")
+    if real_institutions(reply):
+        violations.append("O-REAL_INSTITUTION")
     return violations
 
 
@@ -59,5 +119,11 @@ def describe(violations: list[str], reply: str) -> str:
         "你的上一条回答未通过合规审查（"
         + "、".join(violations)
         + f"），问题表述：{'、'.join(dict.fromkeys(hits))}。"
-        "请改写：不得承诺收益或保本；客户未完成风险测评时不得推荐任何产品。只输出改写后的回答。"
+        + (
+            f"提到了真实机构：{'、'.join(real_institutions(reply))}。"
+            if real_institutions(reply)
+            else ""
+        )
+        + "请改写：不得承诺收益或保本；客户未完成风险测评时不得推荐或介绍任何产品；"
+        "产品信息只能来自工具结果；不得提及真实机构的产品。只输出改写后的回答。"
     )

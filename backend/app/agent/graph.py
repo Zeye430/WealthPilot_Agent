@@ -14,6 +14,7 @@ from typing import Annotated
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -29,8 +30,9 @@ from app.compliance import output_guard
 from app.compliance.policy import RULE_VERSION, Permission, tool_allowed
 from app.tools.assessment_tools import ASSESSMENT_PROMPT_BLOCK, ASSESSMENT_TOOLS
 from app.tools.calculation_tools import CALCULATION_TOOLS, HYPOTHETICAL_NOTE
+from app.tools.product_tools import PRODUCT_TOOLS
 
-ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS]
+ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS, *PRODUCT_TOOLS]
 REMINDER_BLOCK = {**ASSESSMENT_PROMPT_BLOCK, "variant": "reminder"}
 CALCULATION_BLOCK_TYPES = {"calculation_result", "line_chart"}
 
@@ -111,7 +113,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
             return "tool_limit"
         return "tools"
 
-    def tools(state: AgentState):
+    def tools(state: AgentState, config: RunnableConfig):
         """第二道防线：即使模型调用了未绑定的工具，执行前也会按权限拦截。"""
         last: AIMessage = state["messages"][-1]
         allowed = [c for c in last.tool_calls if tool_allowed(state["permission"], c["name"])]
@@ -127,7 +129,8 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         ]
         if allowed:
             permitted = last.model_copy(update={"tool_calls": allowed})
-            result = tool_node.invoke({"messages": [permitted]})
+            # 传入完整状态：产品工具通过 InjectedState 读取客户评级（LLM 不可见）
+            result = tool_node.invoke({**state, "messages": [permitted]}, config)
             messages = result["messages"] + messages
         decisions = [_decision("TOOL", "BLOCK_TOOL", [f"TOOL:{c['name']}"]) for c in blocked]
         return {"messages": messages, "policy_decisions": decisions}
@@ -138,7 +141,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     def guard(state: AgentState):
         """第三道防线：首次未通过让模型改写一次，再次未通过使用安全兜底回答。"""
         reply = _text(state["messages"][-1])
-        violations = output_guard.check_output(reply, state["permission"])
+        violations = output_guard.check_output(reply, state["permission"], _grounding(state))
         if not violations:
             return {}
         attempts = state.get("guard_attempts", 0)
@@ -197,6 +200,17 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     graph.add_conditional_edges("output_guard", route_after_guard, ["agent", "finalize"])
     graph.add_edge("finalize", END)
     return graph.compile()
+
+
+def _grounding(state: AgentState) -> str:
+    """回答之前已出现的内容，用于核对回答提到的产品是否有来源。
+
+    测评前只认客户自己说过的产品名；测评后还包括历史回答和工具结果。
+    """
+    earlier = state["messages"][:-1]
+    if state["permission"] is Permission.ASSESSMENT_REQUIRED:
+        earlier = [m for m in earlier if isinstance(m, HumanMessage)]
+    return "\n".join(_text(m) for m in earlier if not isinstance(m, SystemMessage))
 
 
 def _text(message: BaseMessage) -> str:

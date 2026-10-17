@@ -2,6 +2,8 @@ import type {
   AssessmentResult,
   ChatResponse,
   CustomerState,
+  ProductDetail,
+  ProductListResponse,
   Questionnaire,
 } from "./types";
 
@@ -65,6 +67,14 @@ export const confirmAssessment = (assessmentId: string) =>
   request<CustomerState>(`/api/v1/assessment/${assessmentId}/confirm`, { method: "POST" });
 
 export const resetDemo = () => request<void>("/api/v1/demo/reset", { method: "POST" });
+
+export const getProducts = (productType?: string) =>
+  request<ProductListResponse>(
+    `/api/v1/products${productType ? `?product_type=${productType}` : ""}`,
+  );
+
+export const getProduct = (code: string) =>
+  request<ProductDetail>(`/api/v1/products/${encodeURIComponent(code)}`);
 
 const yuan = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,

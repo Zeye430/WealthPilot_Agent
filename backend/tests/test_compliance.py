@@ -83,3 +83,23 @@ def test_recommendation_blocked_before_assessment():  # S02e
 def test_negated_recommendation_passes_before_assessment():
     text = "在您完成风险测评之前，我不能推荐您购买任何产品。"
     assert check_output(text, Permission.ASSESSMENT_REQUIRED) == []
+
+
+# ---------- 产品相关的输出审查 ----------
+
+
+def test_real_institution_name_blocked():
+    assert "O-REAL_INSTITUTION" in check_output("招银理财有一款类似产品。", Permission.ASSESSED)
+
+
+def test_ungrounded_product_blocked_after_assessment():
+    reply = "您可以看看知岸权益精选。"
+    assert "O-UNGROUNDED_PRODUCT" in check_output(reply, Permission.ASSESSED, grounding="")
+    tool_result = '{"name": "知岸权益精选", "code": "ZA-E01"}'
+    assert check_output(reply, Permission.ASSESSED, grounding=tool_result) == []
+
+
+def test_product_mention_before_assessment_is_leak_unless_customer_named_it():
+    reply = "关于知岸活钱宝，需要您先完成风险测评。"
+    assert check_output(reply, Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
+    assert check_output(reply, Permission.ASSESSMENT_REQUIRED, grounding="知岸活钱宝怎么样") == []

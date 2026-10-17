@@ -25,7 +25,73 @@ export type AssessmentPromptBlock = {
   message: string;
 };
 
-export type UIBlock = CalculationResultBlock | LineChartBlock | AssessmentPromptBlock;
+export type ProductCard = {
+  code: string;
+  name: string;
+  issuer: string;
+  type_label: string;
+  risk_level: string;
+  risk_note: string | null;
+  lockup: string;
+  minimum: string;
+  annual_fee: string;
+  metric: { type: string; label: string; text: string };
+  status: "ON_SALE" | "ENDED";
+  data_quality: "VERIFIED" | "UNVERIFIED";
+  synthetic: boolean;
+  rank?: number | null;
+  rank_factors?: string;
+  warnings?: string[];
+};
+
+export type ExcludedSummary = { reason: string; count: number };
+
+export type ProductListBlock = {
+  type: "product_list";
+  title: string;
+  items: ProductCard[];
+  excluded: ExcludedSummary[];
+  ranking_note: string;
+  disclaimer: string;
+};
+
+export type ProductDetail = ProductCard & {
+  investment_scope: string;
+  strategy: string;
+  redemption_settlement: string;
+  inception_date: string;
+  maturity_date: string | null;
+  fees: { label: string; value: string }[];
+  metrics: { label: string; text: string; basis: string | null }[];
+  eligible: boolean;
+  eligibility_messages: string[];
+};
+
+export type ProductDetailBlock = ProductDetail & { type: "product_detail" };
+
+export type ComparisonTableBlock = {
+  type: "comparison_table";
+  columns: { code: string; name: string }[];
+  rows: { label: string; values: string[]; metric?: boolean }[];
+  notes: string[];
+  disclaimer: string;
+};
+
+export type ProductListResponse = {
+  catalog_version: string;
+  rating: { code: string; name: string; max_product_risk: string };
+  items: ProductCard[];
+  excluded: ExcludedSummary[];
+  ranking_note: string;
+};
+
+export type UIBlock =
+  | CalculationResultBlock
+  | LineChartBlock
+  | AssessmentPromptBlock
+  | ProductListBlock
+  | ProductDetailBlock
+  | ComparisonTableBlock;
 
 export type ChatMessage =
   | { role: "user" | "assistant"; content: string; ui_blocks: UIBlock[] }

@@ -42,3 +42,6 @@ extend-exclude = ["migrations"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 ignore = ["B008"]  # FastAPI 的 Depends() 默认参数写法
+
+[tool.ruff.lint.per-file-ignores]
+"app/agent/prompts.py" = ["E501"]  # Prompt 是中文长句，按语义换行
