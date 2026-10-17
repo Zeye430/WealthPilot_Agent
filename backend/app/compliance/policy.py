@@ -13,7 +13,10 @@ from app.db.models import RiskAssessment
 RULE_VERSION = "2026-10-17.1"
 
 # 测评前允许 LLM 使用的工具。只放与具体产品无关的工具；收紧或放开只改这里。
-PRE_ASSESSMENT_ALLOWED_TOOLS = frozenset({"start_risk_assessment", "calculate_growth"})
+# search_documents 测评前只检索知识库（工具内部按权限限定范围），不涉及产品信息
+PRE_ASSESSMENT_ALLOWED_TOOLS = frozenset(
+    {"start_risk_assessment", "calculate_growth", "search_documents"}
+)
 
 
 class Permission(StrEnum):

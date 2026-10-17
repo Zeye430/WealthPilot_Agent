@@ -24,6 +24,11 @@ class Settings(BaseSettings):
 
     agent_max_tool_calls: int = 6
 
+    # 本地向量模型（fastembed）；更换模型若改变维度，需同步修改向量表迁移
+    embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    embedding_dim: int = 512
+    embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
+
     cors_origins: list[str] = ["http://localhost:3000"]
 
     # 演示身份：前端通过 X-Demo-User 请求头切换；demo_mode 允许一键清空演示数据

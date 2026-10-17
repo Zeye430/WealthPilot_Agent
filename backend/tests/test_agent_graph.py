@@ -189,9 +189,9 @@ def test_knowledge_before_assessment_gets_reminder():  # S02
         text="什么是业绩比较基准？",
         permission=Permission.ASSESSMENT_REQUIRED,
     )
-    assert result["ui_blocks"] == [
-        {**result["ui_blocks"][0], "type": "assessment_prompt", "variant": "reminder"}
-    ]
+    # 未检索资料的常识回答：标注「一般性说明」，并附测评提醒
+    assert block_types(result) == ["source_note", "assessment_prompt"]
+    assert result["ui_blocks"][1]["variant"] == "reminder"
 
 
 def test_general_calculation_allowed_before_assessment():  # S02b

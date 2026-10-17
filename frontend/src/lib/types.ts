@@ -85,7 +85,29 @@ export type ProductListResponse = {
   ranking_note: string;
 };
 
+export type SourceItem = {
+  id: string;
+  title: string;
+  section: string | null;
+  source_label: string;
+  version: string;
+  excerpt: string;
+  citations?: string[];
+  links?: { title: string; url: string }[];
+};
+
+export type SourcesBlock = {
+  type: "sources";
+  confident: boolean;
+  cited?: boolean;
+  items: SourceItem[];
+};
+
+export type SourceNoteBlock = { type: "source_note"; variant: "general"; text: string };
+
 export type UIBlock =
+  | SourcesBlock
+  | SourceNoteBlock
   | CalculationResultBlock
   | LineChartBlock
   | AssessmentPromptBlock

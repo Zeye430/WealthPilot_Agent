@@ -10,6 +10,7 @@
 """
 
 import operator
+import re
 from typing import Annotated
 
 from langchain_core.language_models import BaseChatModel
@@ -30,11 +31,15 @@ from app.compliance import output_guard
 from app.compliance.policy import RULE_VERSION, Permission, tool_allowed
 from app.tools.assessment_tools import ASSESSMENT_PROMPT_BLOCK, ASSESSMENT_TOOLS
 from app.tools.calculation_tools import CALCULATION_TOOLS, HYPOTHETICAL_NOTE
+from app.tools.document_tools import DOCUMENT_TOOLS
 from app.tools.product_tools import PRODUCT_TOOLS
 
-ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS, *PRODUCT_TOOLS]
+ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS, *PRODUCT_TOOLS, *DOCUMENT_TOOLS]
 REMINDER_BLOCK = {**ASSESSMENT_PROMPT_BLOCK, "variant": "reminder"}
 CALCULATION_BLOCK_TYPES = {"calculation_result", "line_chart"}
+EVIDENCE_BLOCK_TYPES = {"calculation_result", "product_list", "product_detail", "comparison_table"}
+GENERAL_NOTE = {"type": "source_note", "variant": "general", "text": "一般性说明，未引用资料"}
+CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 
 
 class AgentState(MessagesState):
@@ -141,7 +146,9 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     def guard(state: AgentState):
         """第三道防线：首次未通过让模型改写一次，再次未通过使用安全兜底回答。"""
         reply = _text(state["messages"][-1])
-        violations = output_guard.check_output(reply, state["permission"], _grounding(state))
+        violations = output_guard.check_output(
+            reply, state["permission"], _grounding(state), _retrieved_ids(state)
+        )
         if not violations:
             return {}
         attempts = state.get("guard_attempts", 0)
@@ -169,6 +176,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         has_calculation = any(b["type"] in CALCULATION_BLOCK_TYPES for b in blocks)
         if has_calculation and HYPOTHETICAL_NOTE not in reply:
             reply = f"{reply}\n\n> {HYPOTHETICAL_NOTE}"
+        blocks, evidence = _label_evidence(blocks, reply, state.get("intent"))
         needs_reminder = (
             state["permission"] is Permission.ASSESSMENT_REQUIRED
             and state.get("intent") != router.OUT_OF_SCOPE
@@ -176,7 +184,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         )
         if needs_reminder:
             blocks.append(REMINDER_BLOCK)
-        return {"reply": reply, "ui_blocks": blocks}
+        return {"reply": reply, "ui_blocks": blocks, "policy_decisions": [evidence]}
 
     graph = StateGraph(AgentState)
     graph.add_node("scope_router", scope_router)
@@ -200,6 +208,47 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     graph.add_conditional_edges("output_guard", route_after_guard, ["agent", "finalize"])
     graph.add_edge("finalize", END)
     return graph.compile()
+
+
+def _source_blocks(messages: list[BaseMessage]) -> list[dict]:
+    return [
+        b
+        for m in messages
+        if isinstance(m, ToolMessage) and m.status == "success" and m.artifact
+        for b in m.artifact
+        if b["type"] == "sources"
+    ]
+
+
+def _retrieved_ids(state: AgentState) -> set[str]:
+    """本轮检索到的资料编号：回答中的 [编号] 必须在其中，否则视为编造出处。"""
+    return {i["id"] for b in _source_blocks(current_turn(state["messages"])) for i in b["items"]}
+
+
+def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple[list[dict], dict]:
+    """标注回答依据：已引用的资料 / 检索到但未引用的参考资料 / 一般性说明。
+
+    同时生成审计记录：引用了哪些资料的哪个版本。
+    """
+    cited = set(CITATION_RE.findall(reply))
+    labelled, codes, decision = [], [], "GENERAL"
+    for b in blocks:
+        if b["type"] != "sources":
+            labelled.append(b)
+            continue
+        if not b["confident"] or not b["items"]:
+            continue  # 未找到资料：不展示空的出处块，由下方一般性说明标注
+        used = [i for i in b["items"] if i["id"] in cited]
+        items = used or b["items"]
+        labelled.append({**b, "items": items, "cited": bool(used)})
+        codes += [f"{i['id']}@{i['version']}" for i in items]
+        decision = "CITED" if used else "RETRIEVED_NOT_CITED"
+    has_evidence = codes or any(b["type"] in EVIDENCE_BLOCK_TYPES for b in labelled)
+    if not has_evidence and intent in (router.FINANCE_KNOWLEDGE, router.PRODUCT_OR_ADVICE):
+        labelled.append(GENERAL_NOTE)
+    if not codes and has_evidence:
+        decision = "TOOL_DATA"
+    return labelled, _decision("EVIDENCE", decision, codes)
 
 
 def _grounding(state: AgentState) -> str:

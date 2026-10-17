@@ -1,4 +1,4 @@
-# 金融知识库设计与维护机制（v0.1）
+# 金融知识库设计与维护机制（v1，已实现）
 
 > 决策来源：方案 C（产品负责人 2026-10-17 确定），即小型金融知识库 + 来源标注 + 定期维护。
 > 知识库内容见 [data/knowledge/knowledge_base.md](../data/knowledge/knowledge_base.md)；实现排在 P4。
@@ -112,7 +112,17 @@
 | 管理工具 | Markdown 文件 + Git 版本管理 | 知识库管理后台、权限控制 |
 | 检查频率 | 手动 / 每月自动 | 持续监控 + 定期审计 |
 
-## 6. 实现任务（P4）
+## 6. 实现情况（P4，2026-10-17）
+
+| 设计 | 实现 |
+|---|---|
+| 解析与校验 | `backend/app/knowledge/kb.py` |
+| 只检索已审核且未过期的条目 | `app/rag/corpus.py`（语料构建）+ `app/rag/service.py`（按日期重建） |
+| 来源标注与审计 | `app/tools/document_tools.py`、`app/agent/graph.py`（`EVIDENCE` 决策记录条目编号与版本） |
+| 编造出处拦截 | `app/compliance/output_guard.py`（`O-FAKE_CITATION`） |
+| 检查脚本 | `scripts/check_knowledge.py`：首次运行发现 4 条摘录与官方页面不一致，经人工核查均为格式差异（3 条全角/半角标点、1 条省略了列表编号），修正后 **52 条摘录全部在官方页面找到原文** |
+
+原实现任务清单：
 
 1. 解析器：读取 `knowledge_base.md`，校验元数据与出处格式。
 2. 检索过滤：只索引「已审核」且未过期的条目。

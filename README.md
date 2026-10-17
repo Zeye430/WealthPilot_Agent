@@ -10,6 +10,7 @@
 - **数字不靠 LLM**：所有金额由 `Decimal` 计算引擎算出；图表数据直接来自工具输出，不经过模型改写。
 - **话题路由控制成本**：与理财无关的问题用固定话术回复，不调用主模型。
 - **适当性是硬过滤**：超出评级、已到期、金额或期限不符的产品进不了候选；排序只看期限、流动性和费用，不按收益排序。客户评级由系统注入，模型无法改写。
+- **回答有出处**：金融常识以人工编写、法规原文已核对的知识库为依据，回答标注 [K17] 这类编号并可展开查看原文与官方链接；没有依据的回答标注「一般性说明」。知识库条目过期自动停止引用。
 - **人工交接是状态机**：客户同意、待接单、处理中等状态都来自真实工作流，界面不会把"待接单"说成"已接入"。
 
 ## 架构
@@ -71,6 +72,8 @@ npm run dev                    # http://localhost:3000
 ```bash
 cd backend && uv run pytest     # 计算、问卷计分、合规规则、Agent 流程（假模型）、API 集成（需数据库）
 cd backend && uv run python ../evaluations/run_router_eval.py   # 用真实 Kimi 评估话题路由
+cd backend && uv run python ../evaluations/run_rag_eval.py      # 检索命中率（不调用 LLM）
+cd backend && uv run python ../scripts/check_knowledge.py       # 知识库维护检查（核对法规原文）
 cd frontend && npm run lint && npm run build
 ```
 
@@ -97,5 +100,6 @@ docs/                 架构、合规、评估、路线图
 | P1 骨架 + 计算器链路 | ✅ 已用真实 Kimi（kimi-k2.6）端到端验证 |
 | P2 风险测评门禁 + 规则引擎 | ✅ 话题路由评估 24/24 |
 | P3 产品库与适当性 | ✅ 16 个虚构产品；132 个测试 |
-| P4 条款 RAG + 知识库 | 下一步 |
-| P5–P7 | 见 [docs/ROADMAP.md](docs/ROADMAP.md) |
+| P4 条款 RAG + 知识库 | ✅ 检索 Hit@1 96%；52 条法规摘录自动核对通过 |
+| P5 需求画像 + 配置情景 | 下一步 |
+| P6–P7 | 见 [docs/ROADMAP.md](docs/ROADMAP.md) |

@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { AssessmentPrompt } from "@/components/blocks/AssessmentPrompt";
 import { CalculationSlip } from "@/components/blocks/CalculationSlip";
 import { LineChartBlock } from "@/components/blocks/LineChartBlock";
+import { SourceNote, SourcesView } from "@/components/blocks/SourcesView";
 import { ComparisonTableView, ProductDetailCard, ProductListView } from "@/components/blocks/ProductBlocks";
 import { ApiError, sendChat } from "@/lib/api";
 import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
@@ -238,6 +239,10 @@ function Block({ block, onStartAssessment }: { block: UIBlock; onStartAssessment
       return <ProductDetailCard block={block} />;
     case "comparison_table":
       return <ComparisonTableView block={block} />;
+    case "sources":
+      return <SourcesView block={block} />;
+    case "source_note":
+      return <SourceNote text={block.text} />;
     default:
       return null;
   }

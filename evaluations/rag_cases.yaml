@@ -1,0 +1,37 @@
+# RAG 检索评估集：口语化问题 → 应命中的资料块（任一命中即算对）。
+# product：客户点名了产品时，检索范围限定在该产品说明书 + 知识库（与 search_documents 工具一致）。
+# 运行：cd backend && uv run python ../evaluations/run_rag_eval.py
+# 状态：Claude 起草（2026-10-17），产品负责人可抽查；负例用于校准「资料中未找到」阈值
+
+- { query: 银行倒闭了我的存款能赔多少, expected: [K17] }
+- { query: 买理财有存款保险吗, expected: [K18] }
+- { query: 理财会不会亏本金, expected: [K02, K01] }
+- { query: 业绩比较基准3%就一定能拿到3%吗, expected: [K11] }
+- { query: 七日年化是什么意思, expected: [K10] }
+- { query: 活钱理财当天最多能取出多少钱, expected: [K09] }
+- { query: 固收加是什么, expected: [K05] }
+- { query: 封闭期内能把钱取出来吗, expected: [K07] }
+- { query: 买理财要交哪些费用, expected: [K15] }
+- { query: 我是C2能买PR3的产品吗, expected: [K22] }
+- { query: 怎么查一个理财产品是不是正规的, expected: [K25] }
+- { query: 客户经理说这个保本，可以信吗, expected: [K26] }
+- { query: 结构性存款保本吗, expected: [K19] }
+- { query: 风险测评多久要重新做一次, expected: [K23] }
+- { query: 私募理财的门槛是多少, expected: [K06] }
+- { query: 产品净值里已经扣掉管理费了吗, expected: [K16] }
+- { query: 有没有风险低收益又高的理财, expected: [K29] }
+- { query: 托管费是多少, product: ZA-F03, expected: ["ZA-F03#四"] }
+- { query: 这个产品投资什么, product: ZA-C01, expected: ["ZA-C01#二"] }
+- { query: 为什么风险等级是PR3, product: HY-P01, expected: ["HY-P01#重要须知", "HY-P01#一"] }
+- { query: 持有多久赎回不收费, product: ZA-E01, expected: ["ZA-E01#四"] }
+- { query: 到期后多久能到账, product: ZA-F04, expected: ["ZA-F04#三"] }
+- { query: 有哪些风险, product: HY-F04, expected: ["HY-F04#七"] }
+- { query: 能投股票吗, product: ZA-P01, expected: ["ZA-P01#二"] }
+
+# 负例：知识库未覆盖的金融问题，应判定为「资料中未找到」（expected 为空）
+- { query: 个人所得税怎么申报, expected: [] }
+- { query: 美股怎么开户, expected: [] }
+- { query: 黄金ETF怎么买, expected: [] }
+- { query: 房贷利率现在是多少, expected: [] }
+- { query: 重疾险和医疗险有什么区别, expected: [] }
+- { query: 信用卡逾期了怎么办, expected: [] }

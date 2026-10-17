@@ -1,9 +1,14 @@
 import uuid
 from datetime import UTC, datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from app.core.config import get_settings
+
+EMBEDDING_DIM = get_settings().embedding_dim
 
 
 def _now() -> datetime:
@@ -93,3 +98,17 @@ class PolicyDecisionLog(Base):
     reason_codes: Mapped[list] = mapped_column(JSONB, default=list)
     rule_version: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class DocumentChunk(Base):
+    """检索语料的向量索引。语料本身来自知识库与说明书文件，本表只是可重建的派生索引。"""
+
+    __tablename__ = "document_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)  # K17 / ZA-F03#四
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    product_code: Mapped[str | None] = mapped_column(String(16), index=True)
+    content_hash: Mapped[str] = mapped_column(String(16))
+    embedding_model: Mapped[str] = mapped_column(String(64))
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

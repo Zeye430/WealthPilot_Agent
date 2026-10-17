@@ -21,6 +21,9 @@ until docker compose exec -T db pg_isready -U wealthpilot >/dev/null 2>&1; do sl
 
 echo "▶ 同步依赖与数据库迁移"
 (cd backend && uv sync -q && uv run alembic upgrade head)
+
+echo "▶ 同步检索索引（只重新计算有变化的内容）"
+(cd backend && uv run python -W ignore ../scripts/build_index.py)
 [ -d frontend/node_modules ] || (cd frontend && npm install)
 
 # 退出时结束本脚本启动的所有子进程

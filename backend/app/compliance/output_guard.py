@@ -4,6 +4,7 @@
 """
 
 import re
+from collections.abc import Collection
 
 from app.compliance.policy import Permission
 from app.products.catalog import load_catalog
@@ -92,11 +93,24 @@ def real_institutions(text: str) -> list[str]:
     return [name for name in REAL_INSTITUTIONS if name in text]
 
 
-def check_output(reply: str, permission: Permission, grounding: str = "") -> list[str]:
+CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
+
+
+def fake_citations(reply: str, retrieved: Collection[str]) -> list[str]:
+    return [cid for cid in CITATION_RE.findall(reply) if cid not in retrieved]
+
+
+def check_output(
+    reply: str,
+    permission: Permission,
+    grounding: str = "",
+    retrieved: Collection[str] = (),
+) -> list[str]:
     """返回违规代码列表；空列表表示通过。
 
     grounding 是本轮之前已出现的内容：测评前只含客户消息；测评后含客户消息、历史回答和工具结果。
     回答中提到的产品必须在其中出现过，防止模型凭空编造或测评前泄露产品信息。
+    retrieved 是本轮检索到的资料编号：回答中的 [编号] 必须在其中，否则视为编造出处。
     """
     violations = []
     if _affirmative_hits(reply, PROHIBITED_CLAIMS):
@@ -109,6 +123,8 @@ def check_output(reply: str, permission: Permission, grounding: str = "") -> lis
         violations.append("O-UNGROUNDED_PRODUCT")
     if real_institutions(reply):
         violations.append("O-REAL_INSTITUTION")
+    if fake_citations(reply, retrieved):
+        violations.append("O-FAKE_CITATION")
     return violations
 
 
@@ -124,6 +140,7 @@ def describe(violations: list[str], reply: str) -> str:
             if real_institutions(reply)
             else ""
         )
+        + ("引用了未检索到的资料编号。" if "O-FAKE_CITATION" in violations else "")
         + "请改写：不得承诺收益或保本；客户未完成风险测评时不得推荐或介绍任何产品；"
         "产品信息只能来自工具结果；不得提及真实机构的产品。只输出改写后的回答。"
     )
