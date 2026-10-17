@@ -241,3 +241,66 @@ def test_product_detail_over_rating_has_warning(client):  # S04b
     assert body["eligible"] is False
     assert "无权限购买" in body["eligibility_messages"][0]
     assert client.get("/api/v1/products/NOPE").status_code == 404
+
+
+# ---------- 客户画像（Phase 5） ----------
+
+
+def test_me_returns_base_profile_and_empty_needs(client):
+    profile = client.get("/api/v1/me").json()["profile"]
+    assert profile["base"]["display_name"] == "测试客户（虚构）"
+    assert all(row["value"] is None for row in profile["needs"])
+
+
+def test_questionnaire_prefills_age_from_bank_system(client):
+    assert client.get("/api/v1/assessment/questionnaire").json()["prefill"] == {"q1": "B"}  # 40 岁
+
+
+def test_needs_edit_validation_and_clear(client):
+    body = client.patch("/api/v1/needs", json={"investment_amount": 1000000}).json()
+    rows = {r["field"]: r for r in body["profile"]["needs"]}
+    assert rows["investment_amount"]["value"] == "100 万元"
+    assert rows["investment_amount"]["source"] == "客户修改"
+    bad = client.patch("/api/v1/needs", json={"liquidity_reserve": 2000000})
+    assert bad.status_code == 422
+    cleared = client.delete("/api/v1/needs").json()
+    assert all(r["value"] is None for r in cleared["profile"]["needs"])
+
+
+def test_needs_recorded_in_chat_narrow_product_search(client):
+    complete_assessment(client)
+    # 第 1 轮：模型记录客户说的「10 万元、12 个月」
+    use_models(
+        main=[
+            tool_call("update_needs", {"investment_amount": 100000, "horizon_months": 12}),
+            AIMessage("已记录您的需求。"),
+        ],
+        router=["SERVICE"],
+    )
+    first = client.post("/api/v1/chat", json={"message": "我有10万，一年内不用"}).json()
+    assert [b["type"] for b in first["reply"]["ui_blocks"]] == ["needs_update"]
+    needs = {r["field"]: r for r in first["state"]["profile"]["needs"]}
+    assert needs["investment_amount"]["source"] == "对话中提供"
+
+    # 第 2 轮：模型搜索时没传金额和期限，工具自动使用已记录的需求
+    use_models(
+        main=[tool_call("search_products", {}), AIMessage("以下是符合条件的产品。")],
+        router=["PRODUCT_OR_ADVICE"],
+    )
+    second = client.post(
+        "/api/v1/chat",
+        json={"conversation_id": first["conversation_id"], "message": "有哪些产品？"},
+    ).json()
+    block = next(b for b in second["reply"]["ui_blocks"] if b["type"] == "product_list")
+    codes = {i["code"] for i in block["items"]}
+    assert "HY-F03" not in codes  # 30 万元起购 > 10 万元
+    assert "HY-F02" not in codes  # 两年持有 > 12 个月
+    reasons = {e["reason"] for e in block["excluded"]}
+    assert {"起购金额高于计划投资金额", "持有或封闭期超过投资期限"} <= reasons
+
+
+def test_reset_clears_needs(client):
+    client.patch("/api/v1/needs", json={"investment_amount": 50000})
+    client.post("/api/v1/demo/reset")
+    rows = client.get("/api/v1/me").json()["profile"]["needs"]
+    assert all(r["value"] is None for r in rows)

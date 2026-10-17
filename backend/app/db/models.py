@@ -112,3 +112,14 @@ class DocumentChunk(Base):
     embedding_model: Mapped[str] = mapped_column(String(64))
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
     indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CustomerNeeds(Base):
+    """本次需求：客户在对话或页面中提供的投资需求，叠加在只读的基础画像之上。"""
+
+    __tablename__ = "customer_needs"
+
+    customer_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # {字段: {"value": ..., "source": "CONVERSATION" | "CUSTOMER_EDIT", "updated_at": ISO 时间}}
+    fields: Mapped[dict] = mapped_column(JSONB, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

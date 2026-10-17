@@ -8,6 +8,7 @@ import { AssessmentPrompt } from "@/components/blocks/AssessmentPrompt";
 import { CalculationSlip } from "@/components/blocks/CalculationSlip";
 import { LineChartBlock } from "@/components/blocks/LineChartBlock";
 import { SourceNote, SourcesView } from "@/components/blocks/SourcesView";
+import { AllocationView, NeedsUpdateNote } from "@/components/blocks/AllocationView";
 import { ComparisonTableView, ProductDetailCard, ProductListView } from "@/components/blocks/ProductBlocks";
 import { ApiError, sendChat } from "@/lib/api";
 import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
@@ -241,6 +242,10 @@ function Block({ block, onStartAssessment }: { block: UIBlock; onStartAssessment
       return <ComparisonTableView block={block} />;
     case "sources":
       return <SourcesView block={block} />;
+    case "needs_update":
+      return <NeedsUpdateNote block={block} />;
+    case "allocation":
+      return <AllocationView block={block} />;
     case "source_note":
       return <SourceNote text={block.text} />;
     default:

@@ -548,3 +548,74 @@
 - 知识库检查：52/52 条摘录核对通过。
 
 **提交**：待产品负责人执行。
+
+---
+
+## 2026-10-17 · 第 17 步：Phase 5 客户画像（基础画像 + 本次需求）与配置情景
+
+**产品负责人要求**：用户画像应在客户已有的基础画像之上叠加新的需求信息，而不是重新创建画像。大部分银行客户在系统里本来就有资料。
+
+**设计（ARCHITECTURE D20、D21）**
+- **两层画像**：
+  | 层 | 内容 | 来源 | AI 能否修改 |
+  |---|---|---|---|
+  | 基础画像 | 年龄、客户等级、在本行资产（存款、理财持仓）、专属理财经理 | 银行客户信息系统（演示用 YAML 模拟，经适配层读取） | 否，只读 |
+  | 本次需求 | 计划投资金额、期限、随时可能动用的金额、目标收益、可接受亏损、投资目的 | 客户在对话中提供（或页面修改），每个字段带来源 | 是 |
+- 基础画像带来的直接价值：已知信息不再追问；测评问卷预选年龄；配置模拟时提示客户在本行已有的可支取资产；P6 交接可直接使用专属理财经理信息。
+- **配置模拟不测算组合收益**：信披办法第八条禁止预测实际投资业绩。模拟只检查构成比例、流动性、风险等级、集中度和固定费用，并把目标收益与业绩比较基准上限做事实对比。
+
+**做了什么**
+- **基础画像**：`data/customers/base_profiles.yaml`，3 位虚构客户，只含理财服务需要的字段，不保存证件号、手机号；`app/customers/base.py` 提供只读适配层（生产环境可替换为 CRM 接口）。
+- **本次需求**：新增 `customer_needs` 表；校验金额非负、比率为小数、随时动用的金额不超过投资金额。
+- **客户上下文**：每条消息重新组装「基础画像 + 本次需求」并写入系统提示，同时附上使用规则：已知信息不追问；与系统记录冲突时以系统为准。
+- **两个新工具**：
+  - `update_needs`：测评前也可用，只记录需求；
+  - `simulate_allocation`：测评后可用，检查合计金额、每个产品的适当性（按配置金额与投资期限）、流动性、集中度（单一产品超过 50% 时提醒），估算固定费用，并对比目标收益与基准上限。
+- **产品搜索默认使用已记录的需求**：模型不传金额和期限时，自动使用客户说过的数值。
+- **API**：`/me` 返回两层画像；问卷返回预选项；`PATCH` / `DELETE /api/v1/needs` 供客户修改或清空需求；清空演示数据时一并清除需求。
+- **前端**：
+  - 右侧面板分为「本次需求」（标注「对话中提供」，可清空）和「客户资料（银行系统，只读）」；
+  - 对话中记录需求后显示一行确认；
+  - 配置模拟采用环形图 + 明细 + 约束检查，状态用文字标签加符号，不只靠颜色区分；
+  - 问卷预选年龄并提示客户可修改。
+
+**端到端测试（真实 Kimi，主场景 S14）中发现的合规问题**
+1. 模型对客户说「如果 5% 收益目标优先，需要承担 PR3 及以上风险，如需调整需重新测评」。这是**为达到收益目标诱导客户调高风险评级**，属于销售适当性中的典型违规。
+2. 模型使用了「建议配置现金管理类产品（如知岸活钱宝）」这类个性化推荐措辞。
+
+**处理**：只靠 Prompt 不可靠，因此由代码执行，新增两条输出审查规则：
+- `O-REASSESSMENT_STEERING`：同一句中出现「重新测评 / 调高评级」与「收益 / 更高风险 / PR3+」→ 改写。测评前后都适用；客户自身情况变化时提示重新测评不受影响（有测试覆盖）。
+- `O-PERSONALIZED_ADVICE`：测评后也拦截「适合您」「建议配置 / 推荐购买」，落实合规设计 §8 的默认做法。
+
+同时调整 Prompt，并对内容完全相同的 UI 块去重。复测：模型改为陈述事实——「若收益目标较为刚性，需考虑承担更高波动风险（PR3 及以上），但这超出当前风险等级」，审计记录中没有触发改写。
+
+**复测结果**：
+- 需求自动记录（100 万元、24 个月、20 万元、5%）；
+- 配置模拟：知岸活钱宝 20 万元、鸿屿睿远两年持有 50 万元、知岸稳享一年持有 30 万元，约束检查通过，年固定费用约 5930 元（人工核算：640 + 3400 + 1890）；
+- 提示目标收益与基准上限（3.50%）的差距，并指出客户在本行已有约 20 万元可随时支取的资产；
+- 陈女士（31 岁）测评时第 1 题预选「31–45 岁」。
+
+**遗留优化项**：模型在配置模拟后仍会附一个简短的检查汇总表，与界面内容部分重复（非合规问题，P7 打磨）。
+
+**文件**
+- 🆕 `data/customers/base_profiles.yaml`
+- 🆕 `backend/app/customers/base.py`、`needs.py`、`context.py`
+- 🆕 `backend/app/products/allocation.py`
+- 🆕 `backend/app/tools/profile_tools.py`、`backend/app/api/customers.py`
+- 🆕 `backend/migrations/versions/8066dbee0e76_customer_needs.py`
+- 🆕 `backend/tests/test_customers.py`（16 个）
+- ✏️ `backend/app/agent/graph.py`（客户上下文、绑定新工具、UI 块去重）、`prompts.py`
+- ✏️ `backend/app/api/chat.py`、`deps.py`、`assessment.py`（问卷预选、清空需求）、`backend/app/main.py`
+- ✏️ `backend/app/compliance/output_guard.py`（两条新规则）、`policy.py`（测评前允许 `update_needs`）
+- ✏️ `backend/app/tools/product_tools.py`（默认使用已记录的需求）
+- ✏️ `backend/app/db/models.py`（`CustomerNeeds`）、`backend/pyproject.toml`
+- ✏️ `backend/tests/test_compliance.py`、`test_api_chat.py`
+- 🆕 `frontend/src/components/blocks/AllocationView.tsx`
+- ✏️ `frontend/src/components/AppShell.tsx`、`AssessmentDialog.tsx`、`Chat.tsx`、`src/lib/api.ts`、`src/lib/types.ts`
+- ✏️ `CLAUDE.md`、`docs/ARCHITECTURE.md`（D20、D21）、`COMPLIANCE_DESIGN.md`、`EVALUATION_PLAN.md`、`ROADMAP.md`、`README.md`
+
+**验证**
+- 后端 174 个测试全部通过（新增 24 个）；lint 与格式检查通过；前端构建通过。
+- 主场景端到端（真实 Kimi）复测通过。
+
+**提交**：待产品负责人执行。

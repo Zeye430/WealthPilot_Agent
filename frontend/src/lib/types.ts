@@ -105,7 +105,47 @@ export type SourcesBlock = {
 
 export type SourceNoteBlock = { type: "source_note"; variant: "general"; text: string };
 
+export type NeedsRow = { field: string; label: string; value: string | null; source: string | null };
+
+export type NeedsUpdateBlock = { type: "needs_update"; items: NeedsRow[] };
+
+export type AllocationBlock = {
+  type: "allocation";
+  title: string;
+  passed: boolean;
+  slices: {
+    code: string;
+    name: string;
+    amount: number;
+    amount_text: string;
+    pct: number;
+    pct_text: string;
+    risk_level: string | null;
+    lockup: string;
+  }[];
+  checks: { status: "OK" | "WARN" | "FAIL"; label: string; message: string }[];
+  disclaimer: string;
+};
+
+export type BaseProfileSummary = {
+  display_name: string;
+  age: number;
+  customer_tier: string;
+  kyc_verified: boolean;
+  assigned_rm: string;
+  assets: {
+    demand_deposit: string;
+    time_deposit: string;
+    holdings: { code: string; name: string; amount: string }[];
+    liquid_total: string;
+    total: string;
+  };
+  source: string;
+};
+
 export type UIBlock =
+  | NeedsUpdateBlock
+  | AllocationBlock
   | SourcesBlock
   | SourceNoteBlock
   | CalculationResultBlock
@@ -134,6 +174,7 @@ export type CustomerState = {
   permission: "ASSESSMENT_REQUIRED" | "ASSESSED";
   gate_reasons: string[];
   assessment: AssessmentSummary | null;
+  profile: { base: BaseProfileSummary | null; needs: NeedsRow[] };
 };
 
 export type ChatResponse = {
@@ -143,6 +184,7 @@ export type ChatResponse = {
 };
 
 export type Questionnaire = {
+  prefill: Record<string, string>;
   version: string;
   title: string;
   disclaimer: string;

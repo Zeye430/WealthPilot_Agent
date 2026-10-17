@@ -9,7 +9,15 @@ from app.api.deps import CustomerState, customer_state, get_customer_id, get_now
 from app.assessment import service
 from app.assessment.scoring import AssessmentError, AssessmentResult, load_questionnaire
 from app.core.config import get_settings
-from app.db.models import Conversation, Message, PolicyDecisionLog, RiskAssessment, ToolCallLog
+from app.customers.base import age_option, get_customer_info_system
+from app.db.models import (
+    Conversation,
+    CustomerNeeds,
+    Message,
+    PolicyDecisionLog,
+    RiskAssessment,
+    ToolCallLog,
+)
 from app.db.session import get_session
 
 router = APIRouter(prefix="/api/v1", tags=["assessment"])
@@ -34,8 +42,12 @@ def me(
 
 
 @router.get("/assessment/questionnaire")
-def questionnaire():
-    return load_questionnaire().public_view()
+def questionnaire(customer_id: str = Depends(get_customer_id)):
+    """问卷 + 预选项：银行系统已有客户年龄，第 1 题预选，客户确认或修改即可。"""
+    view = load_questionnaire().public_view()
+    base = get_customer_info_system().get(customer_id)
+    view["prefill"] = {"q1": age_option(base.age)} if base else {}
+    return view
 
 
 @router.post("/assessment", response_model=SubmitResponse)
@@ -72,7 +84,7 @@ def confirm(
 
 @router.post("/demo/reset", status_code=204)
 def reset_demo(db: Session = Depends(get_session), customer_id: str = Depends(get_customer_id)):
-    """清空当前演示客户的测评与会话，便于反复演示「未测评 → 测评 → 已测评」流程。"""
+    """清空当前演示客户的测评、会话与本次需求（基础画像来自银行系统，不受影响）。"""
     if not get_settings().demo_mode:
         raise HTTPException(status_code=404)
     conversation_ids = select(Conversation.id).where(Conversation.customer_id == customer_id)
@@ -80,4 +92,5 @@ def reset_demo(db: Session = Depends(get_session), customer_id: str = Depends(ge
         db.execute(delete(model).where(model.conversation_id.in_(conversation_ids)))
     db.execute(delete(Conversation).where(Conversation.customer_id == customer_id))
     db.execute(delete(RiskAssessment).where(RiskAssessment.customer_id == customer_id))
+    db.execute(delete(CustomerNeeds).where(CustomerNeeds.customer_id == customer_id))
     db.commit()

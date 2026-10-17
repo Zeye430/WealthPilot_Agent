@@ -6,6 +6,7 @@ import { AssessmentDialog } from "@/components/AssessmentDialog";
 import { Chat, type ChatHandle } from "@/components/Chat";
 import { ProductBrowser } from "@/components/products/ProductBrowser";
 import {
+  clearNeeds,
   DEMO_USERS,
   formatDate,
   getMe,
@@ -155,7 +156,7 @@ export function AppShell() {
         </div>
       </main>
 
-      <ContextPanel state={state} onStartAssessment={startAssessment} />
+      <ContextPanel state={state} onStartAssessment={startAssessment} onStateChange={setState} />
 
       <AssessmentDialog
         open={assessing}
@@ -167,6 +168,15 @@ export function AppShell() {
           );
         }}
       />
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-ink-2">{label}</dt>
+      <dd className="figures text-right">{children}</dd>
     </div>
   );
 }
@@ -199,16 +209,20 @@ function RatingBadge({ state, onStart }: { state: CustomerState | null; onStart:
 function ContextPanel({
   state,
   onStartAssessment,
+  onStateChange,
 }: {
   state: CustomerState | null;
   onStartAssessment: () => void;
+  onStateChange: (state: CustomerState) => void;
 }) {
-  const profile = ["投资金额", "投资期限", "目标收益", "流动性储备"];
+  const base = state?.profile.base;
+  const needs = state?.profile.needs ?? [];
+  const hasNeeds = needs.some((n) => n.value);
   const assessment = state?.assessment;
   const expired = state?.gate_reasons.includes("ASSESSMENT_EXPIRED");
 
   return (
-    <aside className="hidden w-72 shrink-0 flex-col gap-6 border-l border-rule px-5 py-5 lg:flex" aria-label="我的情况">
+    <aside className="hidden w-72 shrink-0 flex-col gap-6 overflow-y-auto border-l border-rule px-5 py-5 lg:flex" aria-label="我的情况">
       <section>
         <h2 className="font-serif text-base font-bold">风险测评</h2>
         {assessment ? (
@@ -253,16 +267,51 @@ function ContextPanel({
       </section>
 
       <section>
-        <h2 className="font-serif text-base font-bold">我的情况</h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-serif text-base font-bold">本次需求</h2>
+          {hasNeeds && (
+            <button
+              type="button"
+              onClick={() => clearNeeds().then(onStateChange)}
+              className="text-xs text-ink-3 underline underline-offset-4 hover:text-ink"
+            >
+              清空
+            </button>
+          )}
+        </div>
+        <p className="mt-0.5 text-xs text-ink-3">在对话中告诉我，这里会自动记录</p>
         <dl className="mt-2 space-y-2 text-sm">
-          {profile.map((label) => (
-            <div key={label} className="flex justify-between">
-              <dt className="text-ink-2">{label}</dt>
-              <dd className="text-ink-3">未填写</dd>
+          {needs.map((n) => (
+            <div key={n.field} className="flex items-baseline justify-between gap-3">
+              <dt className="shrink-0 text-ink-2">{n.label}</dt>
+              <dd className={`figures text-right ${n.value ? "" : "text-ink-3"}`}>
+                {n.value ?? "未填写"}
+                {n.source && <span className="block text-[11px] text-ink-3">{n.source}</span>}
+              </dd>
             </div>
           ))}
         </dl>
       </section>
+
+      {base && (
+        <section>
+          <h2 className="font-serif text-base font-bold">客户资料</h2>
+          <p className="mt-0.5 text-xs text-ink-3">{base.source}，只读</p>
+          <dl className="mt-2 space-y-1.5 text-sm">
+            <Row label="客户">{`${base.display_name}，${base.age} 岁`}</Row>
+            <Row label="客户等级">{base.customer_tier}</Row>
+            <Row label="活期存款">{base.assets.demand_deposit}</Row>
+            <Row label="定期存款">{base.assets.time_deposit}</Row>
+            {base.assets.holdings.map((h) => (
+              <Row key={h.code} label={h.name}>
+                {h.amount}
+              </Row>
+            ))}
+            <Row label="可随时支取">{base.assets.liquid_total}</Row>
+            <Row label="专属理财经理">{base.assigned_rm}</Row>
+          </dl>
+        </section>
+      )}
 
       <p className="mt-auto text-xs leading-5 text-ink-3">
         本系统为作品集演示，使用虚构数据，不销售任何产品，不构成投资建议。

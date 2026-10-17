@@ -77,7 +77,8 @@ def test_negated_or_factual_statements_pass(text):
 def test_recommendation_blocked_before_assessment():  # S02e
     text = "我建议您购买一款固收类理财。"
     assert check_output(text, Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
-    assert check_output(text, Permission.ASSESSED) == []
+    # 测评后同样不输出个性化推荐结论（Phase 5 起）
+    assert check_output(text, Permission.ASSESSED) == ["O-PERSONALIZED_ADVICE"]
 
 
 def test_negated_recommendation_passes_before_assessment():
@@ -103,3 +104,30 @@ def test_product_mention_before_assessment_is_leak_unless_customer_named_it():
     reply = "关于知岸活钱宝，需要您先完成风险测评。"
     assert check_output(reply, Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
     assert check_output(reply, Permission.ASSESSMENT_REQUIRED, grounding="知岸活钱宝怎么样") == []
+
+
+# ---------- 诱导调高评级与个性化推荐（Phase 5 端到端测试中发现） ----------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "如果 5% 收益目标优先，可能需要承担更高波动（PR3 及以上），如需调整需重新测评。",
+        "想要更高收益的话，您可以重新评估风险承受能力。",
+    ],
+)
+def test_reassessment_steering_blocked(text):
+    for permission in Permission:
+        assert "O-REASSESSMENT_STEERING" in check_output(text, permission)
+
+
+def test_reassessment_allowed_when_circumstances_change():
+    text = "如果您的收入或资产情况发生了变化，可以重新测评。"
+    assert check_output(text, Permission.ASSESSED) == []
+
+
+def test_personalized_advice_blocked_after_assessment():
+    assert "O-PERSONALIZED_ADVICE" in check_output("建议配置现金管理类产品。", Permission.ASSESSED)
+    assert "O-PERSONALIZED_ADVICE" in check_output("这款很适合您。", Permission.ASSESSED)
+    neutral = "在您的风险等级范围内的产品包括现金管理类和固定收益类。"
+    assert check_output(neutral, Permission.ASSESSED) == []

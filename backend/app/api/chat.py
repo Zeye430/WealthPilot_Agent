@@ -13,6 +13,9 @@ from app.api.deps import CustomerState, customer_state, get_customer_id, get_now
 from app.assessment.service import latest_confirmed
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
+from app.customers.base import get_customer_info_system
+from app.customers.context import prompt_section
+from app.customers.needs import get_needs
 from app.db.models import Conversation, Message, PolicyDecisionLog, ToolCallLog
 from app.db.session import get_session
 from app.llm.client import LLMNotConfiguredError, get_chat_model
@@ -87,6 +90,11 @@ def chat(
         result = agent.invoke(
             {
                 "messages": [*history, HumanMessage(req.message)],
+                "customer_id": customer_id,
+                # 基础画像（银行系统，只读）+ 本次需求：每条消息重新组装
+                "customer_context": prompt_section(
+                    get_customer_info_system().get(customer_id), get_needs(db, customer_id)
+                ),
                 "permission": gate.permission,
                 "risk_rating": gate.risk_rating,
                 "gate_reasons": gate.reason_codes,

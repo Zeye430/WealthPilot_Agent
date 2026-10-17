@@ -23,6 +23,23 @@ from app.products.catalog import (
 )
 from app.products.service import SearchFilters, search
 
+
+def _recorded_needs(customer_id: str | None):
+    """读取已记录的本次需求；无客户身份或数据库不可用时返回 None（不影响查询）。"""
+    if not customer_id:
+        return None
+    try:
+        from sqlalchemy.orm import sessionmaker
+
+        from app.customers.needs import get_needs
+        from app.db.session import get_engine
+
+        with sessionmaker(bind=get_engine())() as db:
+            return get_needs(db, customer_id)
+    except Exception:
+        return None
+
+
 TYPE_HELP = (
     "产品类型，可多选：CASH_MANAGEMENT 现金管理类、FIXED_INCOME 固定收益类、"
     "FIXED_INCOME_PLUS 固收+、MIXED 混合类、EQUITY 权益类"
@@ -37,6 +54,12 @@ def _context(state: dict, amount: float | None = None, horizon_months: int | Non
     if not rating:
         # 理论上不会发生：未测评时这些工具不会绑定给 LLM。防御性检查。
         raise ToolException("客户尚未完成有效的风险测评，无法查询产品。")
+    if amount is None or horizon_months is None:
+        # 客户已在对话中提供过的需求，不必让模型重复传参
+        needs = _recorded_needs(state.get("customer_id"))
+        if needs:
+            amount = amount or (float(needs.investment_amount) if needs.investment_amount else None)
+            horizon_months = horizon_months or needs.horizon_months
     return CustomerContext(
         risk_rating=rating,
         investment_amount=Decimal(str(amount)) if amount else None,

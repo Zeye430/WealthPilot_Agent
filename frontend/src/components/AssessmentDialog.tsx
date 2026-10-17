@@ -34,14 +34,17 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
     if (open && !dialog.open) {
       dialog.showModal();
       getQuestionnaire()
-        .then(setQuestionnaire)
+        .then((q) => {
+          setQuestionnaire(q);
+          setAnswers(q.prefill); // 银行系统已有的信息（如年龄）预选，客户确认或修改
+        })
         .catch((e) => setError(e instanceof ApiError ? e.message : "问卷加载失败"));
     }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
   function reset() {
-    setAnswers({});
+    setAnswers(questionnaire?.prefill ?? {});
     setSubmitted(null);
     setError(null);
   }
@@ -88,6 +91,9 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
           {!submitted && questionnaire && (
             <>
               <p className="mt-1 text-xs leading-5 text-ink-3">{questionnaire.disclaimer}</p>
+              {Object.keys(questionnaire.prefill).length > 0 && (
+                <p className="mt-1 text-xs leading-5 text-ink-2">已根据您在本行登记的资料预选年龄，如有变化可直接修改。</p>
+              )}
               <div className="mt-3 flex items-center gap-3 text-xs text-ink-2">
                 <div className="h-1 flex-1 overflow-hidden rounded-full bg-rule" aria-hidden>
                   <div

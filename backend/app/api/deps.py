@@ -9,6 +9,7 @@ from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
+from app.customers.context import customer_profile
 
 
 def get_customer_id(
@@ -41,6 +42,7 @@ class CustomerState(BaseModel):
     permission: str
     gate_reasons: list[str]
     assessment: AssessmentSummary | None
+    profile: dict  # {"base": 银行系统基础画像（只读）, "needs": 本次需求}
 
 
 def customer_state(db: Session, customer_id: str, now: datetime) -> CustomerState:
@@ -62,4 +64,5 @@ def customer_state(db: Session, customer_id: str, now: datetime) -> CustomerStat
         permission=gate.permission,
         gate_reasons=gate.reason_codes,
         assessment=summary,
+        profile=customer_profile(db, customer_id),
     )

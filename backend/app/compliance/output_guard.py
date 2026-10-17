@@ -70,6 +70,22 @@ REAL_INSTITUTIONS = (
 )
 
 
+# 诱导调高风险评级：为达到收益目标而建议重新测评，是销售适当性中的典型违规（测评应反映客户真实情况）
+REASSESSMENT = re.compile(r"重新(测评|评估)|调(整|高).{0,4}(评级|风险等级)|提高.{0,4}风险承受")
+RISK_OR_RETURN = re.compile(r"收益|更高(的)?风险|高风险|PR[3-5]|波动")
+SENTENCE_SPLIT = re.compile(r"[。！？；\n]")
+# 个性化推荐结论：MVP 默认不输出（docs/COMPLIANCE_DESIGN.md §8）
+PERSONALIZED = [
+    re.compile(p) for p in (r"适合(您|你)", r"(推荐|建议)(您|你)?(购买|买入|配置|选择|入手)")
+]
+
+
+def steers_reassessment(text: str) -> bool:
+    return any(
+        REASSESSMENT.search(s) and RISK_OR_RETURN.search(s) for s in SENTENCE_SPLIT.split(text)
+    )
+
+
 def _negated(text: str, start: int) -> bool:
     window = text[max(0, start - NEGATION_WINDOW) : start]
     return any(n in window for n in NEGATIONS)
@@ -119,8 +135,13 @@ def check_output(
     if permission is Permission.ASSESSMENT_REQUIRED:
         if _affirmative_hits(reply, RECOMMENDATION) or ungrounded:
             violations.append("O-PERMISSION_LEAK")
-    elif ungrounded:
-        violations.append("O-UNGROUNDED_PRODUCT")
+    else:
+        if ungrounded:
+            violations.append("O-UNGROUNDED_PRODUCT")
+        if _affirmative_hits(reply, PERSONALIZED):
+            violations.append("O-PERSONALIZED_ADVICE")
+    if steers_reassessment(reply):
+        violations.append("O-REASSESSMENT_STEERING")
     if real_institutions(reply):
         violations.append("O-REAL_INSTITUTION")
     if fake_citations(reply, retrieved):
@@ -141,6 +162,16 @@ def describe(violations: list[str], reply: str) -> str:
             else ""
         )
         + ("引用了未检索到的资料编号。" if "O-FAKE_CITATION" in violations else "")
+        + (
+            "不得为达到收益目标建议客户重新测评或提高风险等级；只有客户自身情况变化时才可提示重新测评。"
+            if "O-REASSESSMENT_STEERING" in violations
+            else ""
+        )
+        + (
+            "不得使用「适合您」「建议配置/推荐购买」等个性化推荐措辞，可改为「在您的风险等级范围内的产品包括」。"
+            if "O-PERSONALIZED_ADVICE" in violations
+            else ""
+        )
         + "请改写：不得承诺收益或保本；客户未完成风险测评时不得推荐或介绍任何产品；"
         "产品信息只能来自工具结果；不得提及真实机构的产品。只输出改写后的回答。"
     )

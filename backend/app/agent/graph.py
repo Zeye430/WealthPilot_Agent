@@ -9,6 +9,7 @@
 合规三道防线：①按权限绑定工具（agent）②工具执行前再校验（tools）③输出审查（output_guard）。
 """
 
+import json
 import operator
 import re
 from typing import Annotated
@@ -33,16 +34,25 @@ from app.tools.assessment_tools import ASSESSMENT_PROMPT_BLOCK, ASSESSMENT_TOOLS
 from app.tools.calculation_tools import CALCULATION_TOOLS, HYPOTHETICAL_NOTE
 from app.tools.document_tools import DOCUMENT_TOOLS
 from app.tools.product_tools import PRODUCT_TOOLS
+from app.tools.profile_tools import PROFILE_TOOLS
 
-ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS, *PRODUCT_TOOLS, *DOCUMENT_TOOLS]
+ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS, *PRODUCT_TOOLS, *DOCUMENT_TOOLS, *PROFILE_TOOLS]
 REMINDER_BLOCK = {**ASSESSMENT_PROMPT_BLOCK, "variant": "reminder"}
 CALCULATION_BLOCK_TYPES = {"calculation_result", "line_chart"}
-EVIDENCE_BLOCK_TYPES = {"calculation_result", "product_list", "product_detail", "comparison_table"}
+EVIDENCE_BLOCK_TYPES = {
+    "calculation_result",
+    "product_list",
+    "product_detail",
+    "comparison_table",
+    "allocation",
+}
 GENERAL_NOTE = {"type": "source_note", "variant": "general", "text": "一般性说明，未引用资料"}
 CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 
 
 class AgentState(MessagesState):
+    customer_id: str
+    customer_context: str  # 基础画像 + 本次需求，由 API 层每条消息重新组装
     permission: Permission
     risk_rating: str | None
     gate_reasons: list[str]
@@ -105,7 +115,9 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         }
 
     def agent(state: AgentState):
-        prompt = system_prompt(state["permission"], state.get("risk_rating"))
+        prompt = system_prompt(
+            state["permission"], state.get("risk_rating"), state.get("customer_context", "")
+        )
         response = bound[state["permission"]].invoke([SystemMessage(prompt), *state["messages"]])
         return {"messages": [response]}
 
@@ -176,6 +188,10 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         has_calculation = any(b["type"] in CALCULATION_BLOCK_TYPES for b in blocks)
         if has_calculation and HYPOTHETICAL_NOTE not in reply:
             reply = f"{reply}\n\n> {HYPOTHETICAL_NOTE}"
+        # 模型可能重复调用同一工具，界面上去掉内容完全相同的块
+        blocks = list(
+            {json.dumps(b, sort_keys=True, ensure_ascii=False): b for b in blocks}.values()
+        )
         blocks, evidence = _label_evidence(blocks, reply, state.get("intent"))
         needs_reminder = (
             state["permission"] is Permission.ASSESSMENT_REQUIRED

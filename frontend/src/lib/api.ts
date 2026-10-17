@@ -68,6 +68,8 @@ export const confirmAssessment = (assessmentId: string) =>
 
 export const resetDemo = () => request<void>("/api/v1/demo/reset", { method: "POST" });
 
+export const clearNeeds = () => request<CustomerState>("/api/v1/needs", { method: "DELETE" });
+
 export const getProducts = (productType?: string) =>
   request<ProductListResponse>(
     `/api/v1/products${productType ? `?product_type=${productType}` : ""}`,

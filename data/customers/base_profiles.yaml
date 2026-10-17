@@ -1,0 +1,47 @@
+# 模拟「知岸银行客户信息系统」中的客户基础画像（虚构客户，仅供演示）。
+# 真实环境中这部分数据来自银行核心系统 / CRM，由 app/customers/base.py 的适配层读取；
+# WealthPilot 对基础画像只读，客户在对话中提供的新需求另存为「本次需求」，不会改写基础画像。
+#
+# 数据最小化：只保存理财服务需要的字段，不保存证件号、手机号、地址等敏感信息。
+
+as_of: 2026-10-16
+customers:
+  demo_customer_1:
+    display_name: 王先生（虚构）
+    age: 52
+    customer_tier: 财富客户
+    occupation: 企业职员
+    customer_since: 2015-06-18
+    kyc_verified: true
+    assigned_rm: { id: RM001, name: 李经理（虚构） }
+    assets_at_bank:
+      demand_deposit: 150000
+      time_deposit: 300000
+      wealth_products:
+        - { code: ZA-C01, amount: 50000 }
+
+  demo_customer_2:
+    display_name: 陈女士（虚构）
+    age: 31
+    customer_tier: 普通客户
+    occupation: 设计师
+    customer_since: 2021-03-02
+    kyc_verified: true
+    assigned_rm: { id: RM002, name: 周经理（虚构） }
+    assets_at_bank:
+      demand_deposit: 80000
+      time_deposit: 0
+      wealth_products: []
+
+  pytest_customer:
+    display_name: 测试客户（虚构）
+    age: 40
+    customer_tier: 普通客户
+    occupation: 测试
+    customer_since: 2024-01-01
+    kyc_verified: true
+    assigned_rm: { id: RM001, name: 李经理（虚构） }
+    assets_at_bank:
+      demand_deposit: 50000
+      time_deposit: 0
+      wealth_products: []
