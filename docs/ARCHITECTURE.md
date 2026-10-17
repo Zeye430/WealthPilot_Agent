@@ -40,6 +40,9 @@ flowchart LR
 | D9 | Embedding 用本地 `BAAI/bge-small-zh-v1.5`（fastembed/ONNX） | 中文效果好、免费、512 维、镜像轻；Kimi 不以 embedding 为主打 | bge-m3（更强但大 4 倍）、第三方 embedding API |
 | D10 | 中文关键词检索：Python 侧 jieba + BM25（内存） | 语料仅几十份文档，内存足够；避免给 Postgres 装中文分词扩展 | `zhparser`/`pg_jieba`：生产更合适，MVP 不必要 |
 | D11 | 非流式响应 + 加载状态（流式为可选增强） | 先保证工具调用与合规审查后再输出；流式会让「先输出后审查」难处理 | SSE 流式：体验好，但输出审查需要缓冲设计 |
+| D12 | 主 Agent 前加轻量**话题路由**（小 Prompt、单标签输出） | 产品负责人要求不能成为通用问答机器：超范围问题用固定话术回复，不调用主模型，节省 token；同时为交接指标提供意图标签 | 只靠主 Agent Prompt 拒答：每个无关问题都消耗一次完整调用；关键词规则：中文表达太多样 |
+
+> **D12 与 D3/D4 的分工**：话题路由负责**成本与范围**，可能分错；合规门禁负责**安全**，不依赖路由结果。即使路由把「推荐产品」误判成「金融常识」，未测评状态下 LLM 依然没有产品工具。
 
 > **面试要点（D3+D4）**：合规的三道防线 = ①流程层门禁（图节点）②工具层自检（工具内部再查一次）③输出层审查（回答发出前）。任何一道失效，另两道兜底。
 
@@ -87,7 +90,10 @@ flowchart TD
     L --> H{交接进行中?}
     H -->|ACCEPTED / IN_PROGRESS| RMQ[转发给理财经理<br/>AI 不回复] --> E([END])
     H -->|否| GATE[policy_gate<br/>计算权限级别]
-    GATE --> A[agent<br/>LLM + 按权限绑定的工具]
+    GATE --> R{scope_router<br/>话题分类}
+    R -->|OUT_OF_SCOPE| TPL[固定话术<br/>不调用主模型] --> PS
+    R -->|PRODUCT_OR_ADVICE 且未测评| ASK[固定话术 + 测评问卷] --> PS
+    R -->|其他| A[agent<br/>LLM + 按权限绑定的工具]
     A -->|有工具调用| T[tools<br/>校验入参 → 工具内二次合规检查 → 执行 → 审计]
     T -->|未超上限| A
     T -->|超过 6 次| F[graceful_fail]
@@ -103,12 +109,25 @@ flowchart TD
 
 | 权限级别 | 条件 | LLM 可用工具 |
 |---|---|---|
-| `ASSESSMENT_REQUIRED` | 无测评 / 测评过期 | `start_risk_assessment`、`request_handoff` |
+| `ASSESSMENT_REQUIRED` | 无测评 / 测评过期 | `start_risk_assessment`、`request_handoff`、`calculate_growth`（通用复利/通胀计算，不涉及产品） |
 | `ASSESSED` | 有效测评（C1–C5） | 全部工具；产品类工具内部按评级过滤 |
 
-未测评时 LLM 仍可以礼貌对话、解释「为什么要先测评」，但**无法取得任何产品数据**。这符合产品负责人的决定：国内理财销售场景须先完成风险测评。允许测评前使用的工具列表放在规则配置里（`pre_assessment_allowed_tools`），默认最严格。
+未测评时 LLM 可以回答**金融常识**（如「什么是七日年化」「固收理财会亏本吗」），每条回答由代码追加「完成风险测评后可为您筛选产品」的提醒和测评入口；但**无法取得任何产品数据**。客户要求推荐产品时，由路由直接返回测评引导。测评前允许的工具列表放在规则配置里（`pre_assessment_allowed_tools`）。
 
-### 4.3 Graph State
+### 4.3 话题范围（scope_router）
+
+| 标签 | 示例 | 处理 |
+|---|---|---|
+| `FINANCE_KNOWLEDGE` | 理财概念、风险、费用口径、监管常识 | 主 Agent |
+| `CALCULATION` | 复利、通胀、费用测算 | 主 Agent |
+| `PRODUCT_OR_ADVICE` | 推荐、筛选、比较、配置 | 未测评 → 测评引导；已测评 → 主 Agent |
+| `HANDOFF` | 找理财经理 | 主 Agent（交接工具） |
+| `SERVICE` | 问候、怎么用、测评相关 | 主 Agent |
+| `OUT_OF_SCOPE` | 天文地理、写代码、娱乐 | 固定话术，不调用主模型 |
+
+路由只看最近一条用户消息 + 简短上下文，`max_tokens` 很小，温度 0。
+
+### 4.4 Graph State
 
 ```python
 class AgentState(TypedDict):
@@ -127,7 +146,7 @@ class AgentState(TypedDict):
 
 **原则**：`risk_rating`、`permission`、交接状态只能由确定性代码从数据库写入，LLM 只读。
 
-### 4.4 工具清单（LLM 可见）
+### 4.5 工具清单（LLM 可见）
 
 | 工具 | 作用 | 返回 UI 块 |
 |---|---|---|
@@ -144,7 +163,7 @@ class AgentState(TypedDict):
 
 工具只做「参数校验 + 调用业务模块 + 组装结果」，所有工具输出都是 Pydantic 模型。
 
-### 4.5 输出审查（output_guard）
+### 4.6 输出审查（output_guard）
 
 确定性检查，不调用 LLM（控制延迟和成本）：
 
@@ -153,7 +172,7 @@ class AgentState(TypedDict):
 3. **权限一致性**：`ASSESSMENT_REQUIRED` 状态下回答不得出现产品名称或收益数字。
 4. **免责声明**：涉及产品或收益数字时，由代码追加标准提示，而不是依赖 LLM 自己写。
 
-### 4.6 失败与回退
+### 4.7 失败与回退
 
 | 故障 | 处理 |
 |---|---|
