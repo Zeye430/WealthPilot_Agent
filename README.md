@@ -44,12 +44,6 @@ cp .env.example .env          # 填写 LLM_API_KEY
 ./scripts/dev.sh              # 一键启动数据库、后端、前端 → http://localhost:3000
 ```
 
-真实公开产品文件（PDF）不入库，需要时从官方来源下载并校验：
-
-```bash
-cd backend && uv run python ../scripts/fetch_documents.py
-```
-
 也可以分步手动启动：
 
 ```bash

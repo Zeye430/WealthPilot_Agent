@@ -9,5 +9,5 @@ node_modules/
 .pytest_cache/
 data/raw_private/
 
-# 真实公开产品文件只在本地保存，不提交（见 data/documents/manifest.yaml）
-data/documents/public/*.pdf
+# 真实机构的公开文件仅作本地设计参考，不进入产品、不提交
+data/reference/

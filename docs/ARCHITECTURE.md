@@ -71,7 +71,7 @@ wealthpilot/
 │   │   └── core/             # 配置、日志、审计
 │   └── tests/
 ├── data/
-│   ├── products/             # 产品 YAML（真实公开 / 合成，均带来源）
+│   ├── products/             # 虚构产品要素 YAML（单一数据源，说明书由此生成）
 │   └── documents/            # 说明书 PDF / 合成文档
 ├── evaluations/              # 黄金用例与评估脚本
 ├── scripts/                  # seed、ingest
@@ -219,7 +219,7 @@ erDiagram
 ```
 用 jsonb 而不是每字段一列：画像字段会迭代，每个字段都要带来源（用户提供 / 系统推断 / 正式验证）。
 
-**products**：`id`, `code`, `name`, `issuer`, `distributor`, `product_type`(现金管理/固收/混合/权益…), `risk_level`, `risk_level_scheme`, `investment_scope`, `minimum_investment`, `term_days`, `open_frequency`, `subscription_rules`, `redemption_rules`, `product_status`, `data_origin`(PUBLIC_REAL / SYNTHETIC), `data_quality_status`(VERIFIED / PARTIAL / UNVERIFIED), `last_verified_at`, `field_sources`(jsonb)
+**products**：`id`, `code`, `name`, `issuer`, `distributor`, `product_type`(现金管理/固收/混合/权益…), `issuer_risk_level`(PR), `distributor_risk_level`(R), `effective_risk_level`(取高), `investment_scope`, `minimum_investment`, `term_days`, `open_frequency`, `subscription_rules`, `redemption_rules`, `product_status`, `data_origin`(SYNTHETIC), `data_quality_status`(VERIFIED / PARTIAL / UNVERIFIED), `last_verified_at`, `field_sources`(jsonb)
 - `field_sources` 记录每个字段来自哪份文档的哪一页：`{"risk_level": {"document_id": "...", "page": 3, "quote": "本产品风险等级为PR2"}}`
 
 **product_fees**：`product_id`, `fee_type`(SUBSCRIPTION/REDEMPTION/MANAGEMENT/CUSTODY/SALES/PERFORMANCE), `rate`, `basis`(年化/一次性), `condition`(如「持有<7天」), `source`(jsonb)
@@ -288,6 +288,6 @@ stateDiagram-v2
 |---|---|---|
 | Kimi 的工具调用稳定性 | 参数格式偶有偏差 | 强 Pydantic 校验 + 错误回传修正；Phase 1 先做冒烟测试 |
 | 说明书表格解析 | 费率表结构丢失 | pdfplumber 抽表 → 人工核对 → 写入 YAML，标记 VERIFIED |
-| 真实产品数据量 | 两周内人工整理有限 | 目标 8–10 个真实公开产品 + 15 个合成产品 |
+| 产品数据真实感 | 全部虚构，可能与市场脱节 | 结构参考公开说明书；费率与基准由产品负责人审核（见 PRODUCT_CATALOG.md） |
 | 输出审查误杀 | 正则误判合法表述 | 用评估集持续调规则；首次失败让 LLM 重写，而非直接拒绝 |
 | 中文 BM25 质量 | jieba 对金融术语分词不准 | 加自定义词典（业绩比较基准、七日年化等） |
