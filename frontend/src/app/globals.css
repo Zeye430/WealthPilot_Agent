@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --paper: #f5f7f7;
+  --surface: #ffffff;
+  --ink: #16212a;
+  --ink-2: #5a6670;
+  --ink-3: #87929a;
+  --rule: #d8dfe2;
+  --brand: #1d4f5c;
+  --brand-soft: #e3eef0;
+  --notice: #9a6412;
+  --notice-soft: #fbf3e4;
+  --danger: #b4312c;
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #121c22;
+    --surface: #17242b;
+    --ink: #e8eef0;
+    --ink-2: #a9b6bd;
+    --ink-3: #7c8a92;
+    --rule: #2a3a42;
+    --brand: #7fb8c4;
+    --brand-soft: #1e333b;
+    --notice: #e2b25c;
+    --notice-soft: #2e2817;
+    --danger: #e66767;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #121c22;
+  --surface: #17242b;
+  --ink: #e8eef0;
+  --ink-2: #a9b6bd;
+  --ink-3: #7c8a92;
+  --rule: #2a3a42;
+  --brand: #7fb8c4;
+  --brand-soft: #1e333b;
+  --notice: #e2b25c;
+  --notice-soft: #2e2817;
+  --danger: #e66767;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-notice: var(--notice);
+  --color-notice-soft: var(--notice-soft);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-noto-sans), "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-serif: var(--font-noto-serif), "Songti SC", serif;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.figures {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* 凭证的齿孔分隔线 */
+.perforation {
+  height: 12px;
+  background:
+    radial-gradient(circle at 6px 6px, var(--paper) 4px, transparent 4.5px) 0 0 / 14px 12px repeat-x;
+  margin-inline: -1px;
+}
+
+/* 金额行的点线引导 */
+.leader {
+  flex: 1;
+  border-bottom: 1px dotted var(--ink-3);
+  transform: translateY(-5px);
+  min-width: 1rem;
+}
+
+/* 自带聚焦样式的元素用 data-focus-ring="off" 排除（如输入框由外层容器显示聚焦边框） */
+:focus-visible:not([data-focus-ring="off"]) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
