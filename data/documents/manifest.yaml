@@ -1,0 +1,102 @@
+# 真实公开产品文件清单。PDF 不入库（版权），运行 scripts/fetch_documents.py 从官方来源重新下载并校验。
+# 字段均摘自文件首页，标注「待核对」的需产品负责人核对后再用于产品库。
+
+- file: cmbwm_zhaoying_kaixinbao_8288.pdf
+  issuer: 招银理财
+  product_name: "招赢开鑫宝现金管理类理财计划（8288）"
+  risk_level: PR1  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/916416/20221226/d0272f69976845b79cd65dfeca9c4d1f.pdf
+  retrieved_at: 2026-10-17
+  sha256: bb1b9da70306323005a46eaa7e78ea53d810f2afceef8dc84b9aa8e40669625d
+  note: 现金管理类；七日年化口径
+
+- file: huahua_hengli_1m_hold.pdf
+  issuer: 汇华理财
+  product_name: "汇华衡利纯债一个月持有开放式固定收益类理财产品"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20231229/54ee832b364d46d49b4ea0b95a30f70d.pdf
+  retrieved_at: 2026-10-17
+  sha256: c6e7b893409efa7b4c4b775107e8fffc7fffcd0b6925edb03cd3fbb16e8573ba
+  note: 开放式，最短持有 1 个月
+
+- file: huahua_shijian_pengyou_2407.pdf
+  issuer: 汇华理财
+  product_name: "汇华理财-时间朋友每日开放固收类理财产品2407期"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20240905/3410e4f970944cb8bc2cf1d0453e78bd.pdf
+  retrieved_at: 2026-10-17
+  sha256: 9f506a1a087ab45c469ccf7fe198a19b95362e38c6397663bb8eb5bc4eed0f81
+  note: 每日开放，流动性高
+
+- file: huahua_qushi_2m_hold_035.pdf
+  issuer: 汇华理财
+  product_name: "汇华理财-趋势指南两个月最短持有固收类理财产品035期"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20250902/e0b399c4d01042478a458c24ebee606b.pdf
+  retrieved_at: 2026-10-17
+  sha256: b8a4d43a21d7013bac0c3ada1cf939ea6a1dbafbeb2dd3eb8df1ff49d78f0653
+  note: 固收增强，最短持有 2 个月
+
+- file: huahua_huihe_esg_2y_hold.pdf
+  issuer: 汇华理财
+  product_name: "汇华理财-汇和责任投资两年持有开放式固定收益类理财产品"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20230828/464c596b75b542988840727b76dad9aa.pdf
+  retrieved_at: 2026-10-17
+  sha256: da9a8aff7f8ebbab1bfd7a48de12017b38e5699c296567884213d0770f5c9ca8
+  note: 持有 2 年；用于期限不匹配测试
+
+- file: huahua_qushi_closed_25229.pdf
+  issuer: 汇华理财
+  product_name: "汇华理财-趋势指南封闭式固定收益类理财产品25229期"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20250926/dff7036f8d7c4d7ca0346de7c33cb9f7.pdf
+  retrieved_at: 2026-10-17
+  sha256: 3f775407bd45d865bed39778364a246162caaabec14a42d44bfbd782f785442b
+  note: 封闭式
+
+- file: huahua_huili_closed_2024_030.pdf
+  issuer: 汇华理财
+  product_name: "汇华理财-汇理封闭式固定收益类理财产品2024年030期"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20240603/f95b838c902b43d8b2341b312a62f7bf.pdf
+  retrieved_at: 2026-10-17
+  sha256: bae49c2b58d4147e6f735a1dd88c797b8fcf3c24c8d7f6e24518dafefc919cd0
+  note: 封闭式
+
+- file: cmbwm_zhaorui_anxin_closed_6.pdf
+  issuer: 招银理财
+  product_name: "招睿金鼎（安鑫）封闭6号固定收益类理财计划"
+  risk_level: PR2  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/89968496/20240514/d9445c8a2a9c4439ab3520c73e5e1ca3.pdf
+  retrieved_at: 2026-10-17
+  sha256: e9c6d94af08a084eab8206822d9d35350fe2b5ca02b7dea688c3ebd428612101
+  note: 封闭式
+
+- file: icbcwm_xindeli_quant_2018_4.pdf
+  issuer: 工银理财
+  product_name: "工银理财·“鑫得利”量化策略联动固定收益类理财产品（2018年第4期）"
+  risk_level: PR3  # 首页标注，待核对
+  doc_type: 风险揭示书
+  source_url: https://www.njcb.com.cn/njcb/2025-11/17/cc9ebb978e1946a9a2cdd63081ea68b5/2025111716541046650.pdf
+  retrieved_at: 2026-10-17
+  sha256: 35aa72b891db313c92af0d5d8f7438f7117d2f3f05e926a13cd385d9d7e9fc5e
+  note: 仅风险揭示书，无完整说明书；每年开放一次
+
+- file: huahua_huize_wenjin_mixed.pdf
+  issuer: 汇华理财
+  product_name: "汇华理财-汇泽稳进开放式混合类理财产品"
+  risk_level: PR4  # 首页标注，待核对
+  doc_type: 产品说明书
+  source_url: https://e.boc.cn/cmsimage/ezcms/public/916416/20221205/e99b310424a640a3a8b23d5f4c2903ea.pdf
+  retrieved_at: 2026-10-17
+  sha256: 372d8a2cd76e08fc680867cf095d567eb7cff09ff309db14b1af525acea0c1df
+  note: 混合类，开放式

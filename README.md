@@ -41,7 +41,18 @@ flowchart LR
 
 ```bash
 cp .env.example .env          # 填写 LLM_API_KEY
+./scripts/dev.sh              # 一键启动数据库、后端、前端 → http://localhost:3000
+```
 
+真实公开产品文件（PDF）不入库，需要时从官方来源下载并校验：
+
+```bash
+cd backend && uv run python ../scripts/fetch_documents.py
+```
+
+也可以分步手动启动：
+
+```bash
 # 1. 数据库
 docker compose up -d db
 
@@ -63,7 +74,8 @@ npm run dev                    # http://localhost:3000
 ## 测试
 
 ```bash
-cd backend && uv run pytest     # 计算基准、Agent 流程（假模型）、API 集成（需数据库）
+cd backend && uv run pytest     # 计算、问卷计分、合规规则、Agent 流程（假模型）、API 集成（需数据库）
+cd backend && uv run python ../evaluations/run_router_eval.py   # 用真实 Kimi 评估话题路由
 cd frontend && npm run lint && npm run build
 ```
 
@@ -88,5 +100,6 @@ docs/                 架构、合规、评估、路线图
 |---|---|
 | P0 设计文档 | ✅ |
 | P1 骨架 + 计算器链路 | ✅ 已用真实 Kimi（kimi-k2.6）端到端验证 |
-| P2 风险测评门禁 + 规则引擎 | 下一步 |
-| P3–P7 | 见 [docs/ROADMAP.md](docs/ROADMAP.md) |
+| P2 风险测评门禁 + 规则引擎 | ✅ 话题路由评估 24/24 |
+| P3 产品库 | 下一步 |
+| P4–P7 | 见 [docs/ROADMAP.md](docs/ROADMAP.md) |

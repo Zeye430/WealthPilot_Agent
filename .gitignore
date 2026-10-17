@@ -8,3 +8,6 @@ node_modules/
 .DS_Store
 .pytest_cache/
 data/raw_private/
+
+# 真实公开产品文件只在本地保存，不提交（见 data/documents/manifest.yaml）
+data/documents/public/*.pdf
