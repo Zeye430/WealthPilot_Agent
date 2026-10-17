@@ -16,7 +16,7 @@ import {
 } from "@/lib/api";
 import type { CustomerState } from "@/lib/types";
 
-const COMING_SOON = ["我的理财目标", "联系理财经理"];
+const COMING_SOON = ["我的理财目标"];
 const VIEWS = [
   { id: "chat", label: "对话与测算" },
   { id: "products", label: "产品浏览" },
@@ -81,6 +81,18 @@ export function AppShell() {
               </button>
             </li>
           ))}
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                setView("chat");
+                chatRef.current?.send("我想联系理财经理");
+              }}
+              className="w-full rounded-sm px-3 py-2 text-left hover:bg-brand-soft/50"
+            >
+              联系理财经理
+            </button>
+          </li>
           {COMING_SOON.map((item) => (
             <li key={item} className="flex items-center justify-between px-3 py-2 text-ink-3">
               {item}
@@ -90,6 +102,9 @@ export function AppShell() {
         </ul>
 
         <section className="mt-auto space-y-2 border-t border-rule pt-4 text-xs text-ink-2">
+          <a href="/rm" target="_blank" rel="noreferrer" className="block text-brand underline underline-offset-4">
+            打开理财经理看板（演示）
+          </a>
           <label htmlFor="demo-user" className="block">
             演示身份
           </label>

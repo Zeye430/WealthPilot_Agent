@@ -31,6 +31,15 @@ SYSTEM_PROMPT = """你是 WealthPilot AI，一个面向中国银行理财客户�
     资料中未找到时，可以给出简短的一般性说明，不要编造具体规定；界面会自动标注「一般性说明」，正文中不要自己写这类标记。
 """
 
+HANDOFF_RULES = """
+## 人工服务（理财经理）
+13. 以下情况调用 request_handoff：客户要求人工或理财经理（USER_REQUEST）；需要退休、税务、房产等综合规划
+    （HIGH_COMPLEXITY）；要求正式投资方案或交易（REGULATED_ADVISORY_REQUEST）；客户坚持购买超出风险等级的
+    产品（SUITABILITY_CONFLICT，转人工不会解除风险等级限制）。先简要说明你能提供哪些帮助，再生成请求。
+14. 生成请求后，客户需要在界面卡片中确认分享的信息，确认前不会提交。只能如实描述状态：
+    「已生成请求，待您确认」或「已提交，等待理财经理接单」；绝不能说已接通、已转接或理财经理已接入。
+"""
+
 PRE_ASSESSMENT_STATUS = """
 ## 客户当前状态
 客户尚未完成风险承受能力测评（或测评已过期）。
@@ -73,7 +82,7 @@ def system_prompt(
         )
     else:
         status = PRE_ASSESSMENT_STATUS
-    return SYSTEM_PROMPT + status + customer_context
+    return SYSTEM_PROMPT + HANDOFF_RULES + status + customer_context
 
 
 OUT_OF_SCOPE_REPLY = (

@@ -143,7 +143,41 @@ export type BaseProfileSummary = {
   source: string;
 };
 
+export type HandoffStatus =
+  | "AWAITING_CONSENT"
+  | "PENDING"
+  | "ACCEPTED"
+  | "IN_PROGRESS"
+  | "RESOLVED"
+  | "CANCELLED";
+
+export type HandoffView = {
+  id: string;
+  status: HandoffStatus;
+  status_label: string;
+  rm_name: string;
+  reason: string;
+  ai_paused: boolean;
+};
+
+export type HandoffConsentBlock = HandoffView & {
+  type: "handoff_consent";
+  scope: string[];
+  preview: {
+    assessment: string;
+    needs: string[];
+    products_discussed: string[];
+    open_questions: string[];
+  };
+};
+
+export type HandoffStatusBlock = HandoffView & { type: "handoff_status" };
+export type HandoffRelayBlock = { type: "handoff_relay"; rm_name: string };
+
 export type UIBlock =
+  | HandoffConsentBlock
+  | HandoffStatusBlock
+  | HandoffRelayBlock
   | NeedsUpdateBlock
   | AllocationBlock
   | SourcesBlock
@@ -156,7 +190,7 @@ export type UIBlock =
   | ComparisonTableBlock;
 
 export type ChatMessage =
-  | { role: "user" | "assistant"; content: string; ui_blocks: UIBlock[] }
+  | { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }
   // 仅前端展示的系统提示（如「测评已完成」），不发送给后端
   | { role: "notice"; content: string; ui_blocks: [] };
 
@@ -181,6 +215,13 @@ export type ChatResponse = {
   conversation_id: string;
   reply: { content: string; ui_blocks: UIBlock[] };
   state: CustomerState;
+  handoff: HandoffView | null;
+};
+
+export type MessagesSince = {
+  messages: { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }[];
+  total: number;
+  handoff: HandoffView | null;
 };
 
 export type Questionnaire = {

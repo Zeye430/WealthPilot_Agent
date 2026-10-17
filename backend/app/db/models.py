@@ -123,3 +123,35 @@ class CustomerNeeds(Base):
     # {字段: {"value": ..., "source": "CONVERSATION" | "CUSTOMER_EDIT", "updated_at": ISO 时间}}
     fields: Mapped[dict] = mapped_column(JSONB, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Handoff(Base):
+    """人工交接。状态只能由真实操作推进：客户点击同意、理财经理接单 / 回复 / 结束。"""
+
+    __tablename__ = "handoffs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    customer_id: Mapped[str] = mapped_column(String(64), index=True)
+    reason: Mapped[str] = mapped_column(String(48))
+    status: Mapped[str] = mapped_column(String(24), index=True)
+    summary: Mapped[dict] = mapped_column(JSONB)
+    consent_scope: Mapped[list] = mapped_column(JSONB, default=list)
+    assigned_rm_id: Mapped[str] = mapped_column(String(32), index=True)
+    assigned_rm_name: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class HandoffEvent(Base):
+    """交接状态变更留痕：谁、何时、从什么状态到什么状态。"""
+
+    __tablename__ = "handoff_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    handoff_id: Mapped[str] = mapped_column(ForeignKey("handoffs.id"), index=True)
+    from_status: Mapped[str | None] = mapped_column(String(24))
+    to_status: Mapped[str] = mapped_column(String(24))
+    actor: Mapped[str] = mapped_column(String(64))  # 客户 / 理财经理 ID / AI
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

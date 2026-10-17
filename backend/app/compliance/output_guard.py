@@ -80,6 +80,17 @@ PERSONALIZED = [
 ]
 
 
+# 宣称已接通人工：AI 只在理财经理未接手时回复，此时任何「已接入」都不属实
+FALSE_HANDOFF = [
+    re.compile(p)
+    for p in (
+        r"(已|已经)(为您|帮您)?(接通|转接|连线|联系上)",
+        r"(已|已经)(为您|帮您)?(联系|通知)(了)?.{0,8}(理财经理|经理|人工|客服)",
+        r"(理财经理|经理|人工客服).{0,6}(已|已经|正在)(接入|接单|上线|在线|为您服务|处理您)",
+    )
+]
+
+
 def steers_reassessment(text: str) -> bool:
     return any(
         REASSESSMENT.search(s) and RISK_OR_RETURN.search(s) for s in SENTENCE_SPLIT.split(text)
@@ -142,6 +153,8 @@ def check_output(
             violations.append("O-PERSONALIZED_ADVICE")
     if steers_reassessment(reply):
         violations.append("O-REASSESSMENT_STEERING")
+    if _affirmative_hits(reply, FALSE_HANDOFF):
+        violations.append("O-FALSE_HANDOFF_CLAIM")
     if real_institutions(reply):
         violations.append("O-REAL_INSTITUTION")
     if fake_citations(reply, retrieved):
@@ -162,6 +175,11 @@ def describe(violations: list[str], reply: str) -> str:
             else ""
         )
         + ("引用了未检索到的资料编号。" if "O-FAKE_CITATION" in violations else "")
+        + (
+            "人工服务尚未接入，只能说「已生成请求，待您确认」或「已提交，等待理财经理接单」。"
+            if "O-FALSE_HANDOFF_CLAIM" in violations
+            else ""
+        )
         + (
             "不得为达到收益目标建议客户重新测评或提高风险等级；只有客户自身情况变化时才可提示重新测评。"
             if "O-REASSESSMENT_STEERING" in violations

@@ -2,6 +2,8 @@ import type {
   AssessmentResult,
   ChatResponse,
   CustomerState,
+  HandoffView,
+  MessagesSince,
   ProductDetail,
   ProductListResponse,
   Questionnaire,
@@ -21,12 +23,12 @@ export function setDemoUser(id: string) {
   demoUser = id;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, user = demoUser): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
       ...init,
-      headers: { "Content-Type": "application/json", "X-Demo-User": demoUser, ...init.headers },
+      headers: { "Content-Type": "application/json", "X-Demo-User": user, ...init.headers },
     });
   } catch {
     throw new ApiError("无法连接服务器，请确认后端已启动。");
@@ -68,6 +70,15 @@ export const confirmAssessment = (assessmentId: string) =>
 
 export const resetDemo = () => request<void>("/api/v1/demo/reset", { method: "POST" });
 
+export const consentHandoff = (id: string) =>
+  request<HandoffView>(`/api/v1/handoffs/${id}/consent`, { method: "POST" });
+
+export const cancelHandoff = (id: string) =>
+  request<HandoffView>(`/api/v1/handoffs/${id}/cancel`, { method: "POST" });
+
+export const getMessagesSince = (conversationId: string, after: number) =>
+  request<MessagesSince>(`/api/v1/conversations/${conversationId}/messages?after=${after}`);
+
 export const clearNeeds = () => request<CustomerState>("/api/v1/needs", { method: "DELETE" });
 
 export const getProducts = (productType?: string) =>
@@ -103,3 +114,51 @@ export function formatDate(iso: string): string {
 export function productRiskRange(maxRisk: string): string {
   return maxRisk === "PR1" ? "PR1" : `PR1–${maxRisk}`;
 }
+
+// ---------- 理财经理看板（演示身份独立于客户） ----------
+
+export const DEMO_RMS = [
+  { id: "rm_li", label: "李经理（虚构）" },
+  { id: "rm_zhou", label: "周经理（虚构）" },
+];
+
+export const rmApi = {
+  list: (rm: string) => request<RmHandoffRow[]>("/api/v1/rm/handoffs", {}, rm),
+  detail: (rm: string, id: string) => request<RmHandoffDetail>(`/api/v1/rm/handoffs/${id}`, {}, rm),
+  accept: (rm: string, id: string) =>
+    request<HandoffView>(`/api/v1/rm/handoffs/${id}/accept`, { method: "POST" }, rm),
+  reply: (rm: string, id: string, text: string) =>
+    request<HandoffView>(
+      `/api/v1/rm/handoffs/${id}/messages`,
+      { method: "POST", body: JSON.stringify({ text }) },
+      rm,
+    ),
+  resolve: (rm: string, id: string) =>
+    request<HandoffView>(`/api/v1/rm/handoffs/${id}/resolve`, { method: "POST" }, rm),
+};
+
+export type RmHandoffRow = HandoffView & {
+  customer_name: string;
+  consented_at: string | null;
+  updated_at: string;
+};
+
+export type RmHandoffDetail = HandoffView & {
+  summary: {
+    reason: string;
+    customer: {
+      display_name: string;
+      age: number;
+      customer_tier: string;
+      assets: { demand_deposit: string; time_deposit: string; liquid_total: string; holdings: { name: string; amount: string }[] };
+    } | null;
+    assessment: string;
+    needs: { label: string; value: string }[];
+    products_discussed: string[];
+    open_questions: string[];
+    recent_customer_messages: string[];
+  };
+  consent_scope: string[];
+  messages: { role: "user" | "assistant" | "rm"; content: string }[];
+  events: { to: string; actor: string; at: string }[];
+};

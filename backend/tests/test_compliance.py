@@ -131,3 +131,26 @@ def test_personalized_advice_blocked_after_assessment():
     assert "O-PERSONALIZED_ADVICE" in check_output("这款很适合您。", Permission.ASSESSED)
     neutral = "在您的风险等级范围内的产品包括现金管理类和固定收益类。"
     assert check_output(neutral, Permission.ASSESSED) == []
+
+
+# ---------- 虚构真人接入（Phase 6） ----------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["已为您接通理财经理。", "已为您联系了李经理，请稍候。", "理财经理已接入，正在为您服务。"],
+)
+def test_false_handoff_claim_blocked(text):
+    assert "O-FALSE_HANDOFF_CLAIM" in check_output(text, Permission.ASSESSED)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "已生成转人工请求，请在下方确认分享的信息。",
+        "已提交，等待理财经理接单。",
+        "理财经理尚未接单。",
+    ],
+)
+def test_accurate_handoff_status_passes(text):
+    assert check_output(text, Permission.ASSESSED) == []

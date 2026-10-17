@@ -304,3 +304,168 @@ def test_reset_clears_needs(client):
     client.post("/api/v1/demo/reset")
     rows = client.get("/api/v1/me").json()["profile"]["needs"]
     assert all(r["value"] is None for r in rows)
+
+
+# ---------- 人工交接（Phase 6，用例编号对应 EVALUATION_PLAN §5） ----------
+
+RM_HEADERS = {"X-Demo-User": "rm_li"}  # pytest_customer 的专属理财经理是 RM001（李经理）
+
+
+def request_handoff_in_chat(client, reason="USER_REQUEST", questions=("确认可接受的最大亏损",)):
+    use_models(
+        main=[
+            tool_call("request_handoff", {"reason": reason, "open_questions": list(questions)}),
+            AIMessage("已为您生成转人工请求，请在下方确认分享的信息。"),
+        ],
+        router=["HANDOFF"],
+    )
+    body = client.post("/api/v1/chat", json={"message": "我要找理财经理"}).json()
+    card = next(b for b in body["reply"]["ui_blocks"] if b["type"] == "handoff_consent")
+    return body, card
+
+
+def rm_list(client):
+    """只看测试客户的交接：同一理财经理名下可能还有演示客户的数据。"""
+    rows = client.get("/api/v1/rm/handoffs", headers=RM_HEADERS).json()
+    return [r for r in rows if r["customer_name"] == "测试客户（虚构）"]
+
+
+def test_handoff_requires_consent_before_rm_sees_it(client):  # H01
+    body, card = request_handoff_in_chat(client)
+    assert card["status"] == "AWAITING_CONSENT"
+    assert card["rm_name"] == "李经理（虚构）"  # 来自基础画像的专属理财经理
+    assert "本次对话记录" in card["scope"]
+    assert body["handoff"]["status"] == "AWAITING_CONSENT"
+    assert rm_list(client) == []  # 客户同意前，理财经理看不到
+
+
+def test_declined_handoff_never_reaches_rm(client):  # H02
+    _, card = request_handoff_in_chat(client)
+    assert client.post(f"/api/v1/handoffs/{card['id']}/cancel").json()["status"] == "CANCELLED"
+    assert rm_list(client) == []
+    assert client.post(f"/api/v1/handoffs/{card['id']}/consent").status_code == 409
+
+
+def test_full_handoff_lifecycle(client):  # H03 + H04
+    body, card = request_handoff_in_chat(client)
+    conv = body["conversation_id"]
+    assert client.post(f"/api/v1/handoffs/{card['id']}/consent").json()["status"] == "PENDING"
+    assert [h["id"] for h in rm_list(client)] == [card["id"]]
+
+    # 待接单期间 AI 仍可回复，且只能描述为「等待接单」
+    use_models(main=[AIMessage("已提交，等待李经理接单。")], router=["SERVICE"])
+    waiting = client.post(
+        "/api/v1/chat", json={"conversation_id": conv, "message": "好了吗"}
+    ).json()
+    assert waiting["handoff"]["status"] == "PENDING"
+
+    # 理财经理接单后 AI 暂停：模型若被调用会抛错
+    assert (
+        client.post(f"/api/v1/rm/handoffs/{card['id']}/accept", headers=RM_HEADERS).json()["status"]
+        == "ACCEPTED"
+    )
+    use_models(main=[], router=[])
+    relayed = client.post(
+        "/api/v1/chat", json={"conversation_id": conv, "message": "李经理您好"}
+    ).json()
+    assert relayed["reply"]["ui_blocks"] == [{"type": "handoff_relay", "rm_name": "李经理（虚构）"}]
+    assert relayed["handoff"]["ai_paused"] is True
+
+    # 理财经理首次回复 → 服务中；客户端增量拉取能拿到回复
+    total = client.get(f"/api/v1/conversations/{conv}/messages").json()["total"]
+    reply = client.post(
+        f"/api/v1/rm/handoffs/{card['id']}/messages",
+        headers=RM_HEADERS,
+        json={"text": "您好，我是李经理"},
+    )
+    assert reply.json()["status"] == "IN_PROGRESS"
+    since = client.get(f"/api/v1/conversations/{conv}/messages", params={"after": total}).json()
+    assert [(m["role"], m["content"]) for m in since["messages"]] == [("rm", "您好，我是李经理")]
+
+    # 结束后 AI 恢复回复
+    assert (
+        client.post(f"/api/v1/rm/handoffs/{card['id']}/resolve", headers=RM_HEADERS).json()[
+            "status"
+        ]
+        == "RESOLVED"
+    )
+    use_models(main=[AIMessage("欢迎回来，还有什么可以帮您？")], router=["SERVICE"])
+    back = client.post("/api/v1/chat", json={"conversation_id": conv, "message": "谢谢"}).json()
+    assert back["reply"]["content"] == "欢迎回来，还有什么可以帮您？"
+
+    detail = client.get(f"/api/v1/rm/handoffs/{card['id']}", headers=RM_HEADERS).json()
+    assert [e["to"] for e in detail["events"]] == [
+        "待客户确认",
+        "已提交，等待理财经理接单",
+        "理财经理已接单",
+        "理财经理服务中",
+        "已结束",
+    ]
+
+
+def test_summary_is_built_from_structured_data(client):  # H05
+    complete_assessment(client)
+    client.patch("/api/v1/needs", json={"investment_amount": 1000000, "horizon_months": 24})
+    _, card = request_handoff_in_chat(
+        client, reason="HIGH_COMPLEXITY", questions=["退休后现金流规划"]
+    )
+    client.post(f"/api/v1/handoffs/{card['id']}/consent")
+    summary = client.get(f"/api/v1/rm/handoffs/{card['id']}", headers=RM_HEADERS).json()["summary"]
+    assert summary["reason"].startswith("专业复杂度高")
+    assert summary["assessment"].startswith("C2 稳健型")
+    assert {n["label"] for n in summary["needs"]} == {"计划投资金额", "投资期限"}
+    assert summary["open_questions"] == ["退休后现金流规划"]
+
+
+def test_suitability_conflict_handoff_keeps_limits(client):  # H06
+    complete_assessment(client)
+    _, card = request_handoff_in_chat(client, reason="SUITABILITY_CONFLICT")
+    assert card["reason"] == "客户诉求与风险等级存在冲突"
+    client.post(f"/api/v1/handoffs/{card['id']}/consent")
+    # 转人工不会解除限制：产品接口仍按 C2 过滤
+    levels = {i["risk_level"] for i in client.get("/api/v1/products").json()["items"]}
+    assert levels <= {"PR1", "PR2"}
+
+
+def test_handoff_allowed_before_assessment(client):  # H07
+    _, card = request_handoff_in_chat(client)
+    assert card["preview"]["assessment"] == "尚未完成风险测评"
+
+
+def test_ordinary_question_creates_no_handoff(client):  # H08
+    use_models(
+        main=[AIMessage("七日年化是现金管理类产品的收益口径。")], router=["FINANCE_KNOWLEDGE"]
+    )
+    body = client.post("/api/v1/chat", json={"message": "什么是七日年化"}).json()
+    assert body["handoff"] is None
+
+
+def test_duplicate_request_returns_existing_handoff(client):
+    body, card = request_handoff_in_chat(client)
+    use_models(
+        main=[
+            tool_call("request_handoff", {"reason": "USER_REQUEST"}),
+            AIMessage("已有请求，待您确认。"),
+        ],
+        router=["HANDOFF"],
+    )
+    again = client.post(
+        "/api/v1/chat", json={"conversation_id": body["conversation_id"], "message": "再转一次"}
+    ).json()
+    # 仍待确认的请求：再次展示同一张确认卡片，不重复创建
+    shown = next(b for b in again["reply"]["ui_blocks"] if b["type"] == "handoff_consent")
+    assert shown["id"] == card["id"]
+
+
+def test_rm_access_control(client):
+    _, card = request_handoff_in_chat(client)
+    client.post(f"/api/v1/handoffs/{card['id']}/consent")
+    other = {"X-Demo-User": "rm_zhou"}  # 不是该客户的专属理财经理
+    assert client.get(f"/api/v1/rm/handoffs/{card['id']}", headers=other).status_code == 404
+    assert client.get("/api/v1/rm/handoffs").status_code == 403  # 客户身份不能访问看板
+    assert (
+        client.post(
+            f"/api/v1/rm/handoffs/{card['id']}/messages", headers=RM_HEADERS, json={"text": "hi"}
+        ).status_code
+        == 409
+    )  # 未接单不能回复

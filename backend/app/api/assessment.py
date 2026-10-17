@@ -13,6 +13,8 @@ from app.customers.base import age_option, get_customer_info_system
 from app.db.models import (
     Conversation,
     CustomerNeeds,
+    Handoff,
+    HandoffEvent,
     Message,
     PolicyDecisionLog,
     RiskAssessment,
@@ -88,6 +90,9 @@ def reset_demo(db: Session = Depends(get_session), customer_id: str = Depends(ge
     if not get_settings().demo_mode:
         raise HTTPException(status_code=404)
     conversation_ids = select(Conversation.id).where(Conversation.customer_id == customer_id)
+    handoff_ids = select(Handoff.id).where(Handoff.customer_id == customer_id)
+    db.execute(delete(HandoffEvent).where(HandoffEvent.handoff_id.in_(handoff_ids)))
+    db.execute(delete(Handoff).where(Handoff.customer_id == customer_id))
     for model in (PolicyDecisionLog, ToolCallLog, Message):
         db.execute(delete(model).where(model.conversation_id.in_(conversation_ids)))
     db.execute(delete(Conversation).where(Conversation.customer_id == customer_id))

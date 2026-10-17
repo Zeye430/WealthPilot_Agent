@@ -18,6 +18,13 @@ from app.customers.context import prompt_section
 from app.customers.needs import get_needs
 from app.db.models import Conversation, Message, PolicyDecisionLog, ToolCallLog
 from app.db.session import get_session
+from app.handoff.service import (
+    AI_PAUSED,
+    STATUS_LABELS,
+    active_handoff,
+    handoff_view,
+    latest_handoff,
+)
 from app.llm.client import LLMNotConfiguredError, get_chat_model
 
 logger = logging.getLogger(__name__)
@@ -41,6 +48,7 @@ class ChatResponse(BaseModel):
     conversation_id: str
     reply: ChatReply
     state: CustomerState
+    handoff: dict | None = None
 
 
 class MessageOut(BaseModel):
@@ -53,6 +61,13 @@ class ConversationOut(BaseModel):
     id: str
     title: str | None
     messages: list[MessageOut]
+    handoff: dict | None = None
+
+
+class MessagesSince(BaseModel):
+    messages: list[MessageOut]
+    total: int
+    handoff: dict | None
 
 
 @lru_cache
@@ -82,7 +97,31 @@ def chat(
     agent=Depends(get_agent),
 ):
     conversation = _get_or_create_conversation(db, customer_id, req.conversation_id, req.message)
+    # 先提交会话：工具（如生成交接请求）在独立事务中写入，需要会话已存在
+    db.commit()
+
+    handoff = active_handoff(db, conversation.id)
+    if handoff is not None and handoff.status in AI_PAUSED:
+        # 理财经理已接手：AI 暂停回复，客户消息直接转给理财经理
+        db.add(Message(conversation_id=conversation.id, role="user", content=req.message))
+        db.commit()
+        relay = {"type": "handoff_relay", "rm_name": handoff.assigned_rm_name}
+        return ChatResponse(
+            conversation_id=conversation.id,
+            reply=ChatReply(content="", ui_blocks=[relay]),
+            state=customer_state(db, customer_id, now),
+            handoff=handoff_view(handoff),
+        )
+
     history = _load_history(db, conversation.id)
+    customer_context = prompt_section(
+        get_customer_info_system().get(customer_id), get_needs(db, customer_id)
+    )
+    if handoff is not None:
+        customer_context += (
+            f"\n\n## 当前人工服务状态\n- {STATUS_LABELS[handoff.status]}"
+            f"（{handoff.assigned_rm_name}）。如实描述该状态，不要重复生成请求。"
+        )
     # 门禁：每条消息都从数据库重新判断，LLM 无法修改
     gate = evaluate_gate(latest_confirmed(db, customer_id), now)
 
@@ -91,10 +130,9 @@ def chat(
             {
                 "messages": [*history, HumanMessage(req.message)],
                 "customer_id": customer_id,
-                # 基础画像（银行系统，只读）+ 本次需求：每条消息重新组装
-                "customer_context": prompt_section(
-                    get_customer_info_system().get(customer_id), get_needs(db, customer_id)
-                ),
+                "conversation_id": conversation.id,
+                # 基础画像（银行系统，只读）+ 本次需求 + 人工服务状态：每条消息重新组装
+                "customer_context": customer_context,
                 "permission": gate.permission,
                 "risk_rating": gate.risk_rating,
                 "gate_reasons": gate.reason_codes,
@@ -130,6 +168,7 @@ def chat(
         conversation_id=conversation.id,
         reply=ChatReply(content=result["reply"], ui_blocks=result["ui_blocks"]),
         state=customer_state(db, customer_id, now),
+        handoff=handoff_view(latest_handoff(db, conversation.id)),
     )
 
 
@@ -139,17 +178,41 @@ def get_conversation(
     db: Session = Depends(get_session),
     customer_id: str = Depends(get_customer_id),
 ):
-    conversation = db.get(Conversation, conversation_id)
-    if conversation is None or conversation.customer_id != customer_id:
-        raise HTTPException(status_code=404, detail="会话不存在")
+    conversation = _owned_conversation(db, conversation_id, customer_id)
     return ConversationOut(
         id=conversation.id,
         title=conversation.title,
-        messages=[
-            MessageOut(role=m.role, content=m.content, ui_blocks=m.ui_blocks)
-            for m in conversation.messages
-        ],
+        messages=[_message_out(m) for m in conversation.messages],
+        handoff=handoff_view(latest_handoff(db, conversation.id)),
     )
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=MessagesSince)
+def messages_since(
+    conversation_id: str,
+    after: int = 0,
+    db: Session = Depends(get_session),
+    customer_id: str = Depends(get_customer_id),
+):
+    """增量拉取：前端在人工服务进行中轮询，获取理财经理的新回复与最新交接状态。"""
+    conversation = _owned_conversation(db, conversation_id, customer_id)
+    messages = conversation.messages
+    return MessagesSince(
+        messages=[_message_out(m) for m in messages[after:]],
+        total=len(messages),
+        handoff=handoff_view(latest_handoff(db, conversation.id)),
+    )
+
+
+def _owned_conversation(db: Session, conversation_id: str, customer_id: str) -> Conversation:
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is None or conversation.customer_id != customer_id:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return conversation
+
+
+def _message_out(m: Message) -> MessageOut:
+    return MessageOut(role=m.role, content=m.content, ui_blocks=m.ui_blocks or [])
 
 
 def _get_or_create_conversation(
@@ -175,7 +238,9 @@ def _load_history(db: Session, conversation_id: str) -> list[BaseMessage]:
         .limit(HISTORY_LIMIT)
     ).all()
     return [
-        HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
+        HumanMessage(m.content)
+        if m.role == "user"
+        else AIMessage(f"（理财经理回复）{m.content}" if m.role == "rm" else m.content)
         for m in reversed(rows)
     ]
 

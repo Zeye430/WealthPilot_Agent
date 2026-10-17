@@ -33,10 +33,18 @@ from app.compliance.policy import RULE_VERSION, Permission, tool_allowed
 from app.tools.assessment_tools import ASSESSMENT_PROMPT_BLOCK, ASSESSMENT_TOOLS
 from app.tools.calculation_tools import CALCULATION_TOOLS, HYPOTHETICAL_NOTE
 from app.tools.document_tools import DOCUMENT_TOOLS
+from app.tools.handoff_tools import HANDOFF_TOOLS
 from app.tools.product_tools import PRODUCT_TOOLS
 from app.tools.profile_tools import PROFILE_TOOLS
 
-ALL_TOOLS = [*ASSESSMENT_TOOLS, *CALCULATION_TOOLS, *PRODUCT_TOOLS, *DOCUMENT_TOOLS, *PROFILE_TOOLS]
+ALL_TOOLS = [
+    *ASSESSMENT_TOOLS,
+    *CALCULATION_TOOLS,
+    *PRODUCT_TOOLS,
+    *DOCUMENT_TOOLS,
+    *PROFILE_TOOLS,
+    *HANDOFF_TOOLS,
+]
 REMINDER_BLOCK = {**ASSESSMENT_PROMPT_BLOCK, "variant": "reminder"}
 CALCULATION_BLOCK_TYPES = {"calculation_result", "line_chart"}
 EVIDENCE_BLOCK_TYPES = {
@@ -46,12 +54,15 @@ EVIDENCE_BLOCK_TYPES = {
     "comparison_table",
     "allocation",
 }
+# 流程性结果（转人工、测评入口、记录需求）不含事实陈述，不需要标注「一般性说明」
+PROCEDURAL_BLOCK_TYPES = {"handoff_consent", "handoff_status", "assessment_prompt", "needs_update"}
 GENERAL_NOTE = {"type": "source_note", "variant": "general", "text": "一般性说明，未引用资料"}
 CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 
 
 class AgentState(MessagesState):
     customer_id: str
+    conversation_id: str
     customer_context: str  # 基础画像 + 本次需求，由 API 层每条消息重新组装
     permission: Permission
     risk_rating: str | None
@@ -260,7 +271,12 @@ def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple
         codes += [f"{i['id']}@{i['version']}" for i in items]
         decision = "CITED" if used else "RETRIEVED_NOT_CITED"
     has_evidence = codes or any(b["type"] in EVIDENCE_BLOCK_TYPES for b in labelled)
-    if not has_evidence and intent in (router.FINANCE_KNOWLEDGE, router.PRODUCT_OR_ADVICE):
+    procedural = any(b["type"] in PROCEDURAL_BLOCK_TYPES for b in labelled)
+    if (
+        not has_evidence
+        and not procedural
+        and intent in (router.FINANCE_KNOWLEDGE, router.PRODUCT_OR_ADVICE)
+    ):
         labelled.append(GENERAL_NOTE)
     if not codes and has_evidence:
         decision = "TOOL_DATA"

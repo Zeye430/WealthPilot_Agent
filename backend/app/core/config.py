@@ -33,6 +33,8 @@ class Settings(BaseSettings):
 
     # 演示身份：前端通过 X-Demo-User 请求头切换；demo_mode 允许一键清空演示数据
     demo_users: list[str] = ["demo_customer_1", "demo_customer_2"]
+    # 演示用理财经理账号 → 理财经理编号（与客户基础画像中的 assigned_rm 对应）
+    demo_rms: dict[str, str] = {"rm_li": "RM001", "rm_zhou": "RM002"}
     demo_mode: bool = True
 
 

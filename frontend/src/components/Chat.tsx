@@ -10,8 +10,12 @@ import { LineChartBlock } from "@/components/blocks/LineChartBlock";
 import { SourceNote, SourcesView } from "@/components/blocks/SourcesView";
 import { AllocationView, NeedsUpdateNote } from "@/components/blocks/AllocationView";
 import { ComparisonTableView, ProductDetailCard, ProductListView } from "@/components/blocks/ProductBlocks";
-import { ApiError, sendChat } from "@/lib/api";
-import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
+import { HandoffBanner, HandoffConsentCard, HandoffRelayNote, HandoffStatusNote } from "@/components/blocks/HandoffBlocks";
+import { ApiError, getMessagesSince, sendChat } from "@/lib/api";
+import type { ChatMessage, CustomerState, HandoffView, UIBlock } from "@/lib/types";
+
+const POLL_MS = 3000;
+const POLLING_STATUSES = ["PENDING", "ACCEPTED", "IN_PROGRESS"];
 
 const SUGGESTIONS = [
   "100万按每年5%复利10年是多少？",
@@ -20,7 +24,7 @@ const SUGGESTIONS = [
   "100万在2%、3%、4%三种年化下，10年后分别是多少？",
 ];
 
-export type ChatHandle = { addNotice: (text: string) => void };
+export type ChatHandle = { addNotice: (text: string) => void; send: (text: string) => void };
 
 type Props = {
   ref?: Ref<ChatHandle>;
@@ -34,11 +38,31 @@ export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<HandoffView | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // 服务端已保存的消息条数：用于增量拉取理财经理的新回复
+  const syncedRef = useRef(0);
 
   useImperativeHandle(ref, () => ({
     addNotice: (text) => setMessages((m) => [...m, { role: "notice", content: text, ui_blocks: [] }]),
+    send: (text) => submit(text),
   }));
+
+  // 人工服务进行中：定时拉取理财经理回复与最新状态（演示用轮询，生产可换 WebSocket）
+  useEffect(() => {
+    if (!conversationId || !handoff || !POLLING_STATUSES.includes(handoff.status)) return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await getMessagesSince(conversationId, syncedRef.current);
+        syncedRef.current = res.total;
+        if (res.messages.length) setMessages((m) => [...m, ...res.messages]);
+        setHandoff(res.handoff);
+      } catch {
+        // 轮询失败时静默重试
+      }
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [conversationId, handoff]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -54,7 +78,11 @@ export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
     try {
       const res = await sendChat(message, conversationId);
       setConversationId(res.conversation_id);
+      const relayed = res.reply.ui_blocks.some((b) => b.type === "handoff_relay");
+      // 转给理财经理时服务端只保存客户消息；否则保存客户消息与 AI 回复两条
+      syncedRef.current += relayed ? 1 : 2;
       setMessages((m) => [...m, { role: "assistant", ...res.reply }]);
+      setHandoff(res.handoff);
       onStateChange(res.state);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "出现未知错误，请重试。");
@@ -75,6 +103,7 @@ export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <HandoffBanner handoff={handoff} />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-8 sm:px-8">
           {messages.length === 0 ? (
@@ -85,8 +114,9 @@ export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
                 <li key={i}>
                   {m.role === "user" && <UserMessage text={m.content} />}
                   {m.role === "assistant" && (
-                    <AssistantMessage message={m} onStartAssessment={onStartAssessment} />
+                    <AssistantMessage message={m} onStartAssessment={onStartAssessment} onHandoff={setHandoff} />
                   )}
+                  {m.role === "rm" && <RmMessage text={m.content} name={handoff?.rm_name ?? "理财经理"} />}
                   {m.role === "notice" && <Notice text={m.content} />}
                 </li>
               ))}
@@ -186,15 +216,29 @@ function Notice({ text }: { text: string }) {
   );
 }
 
+function RmMessage({ text, name }: { text: string; name: string }) {
+  return (
+    <div className="max-w-prose">
+      <p className="text-xs font-medium text-brand">理财经理 {name}</p>
+      <p className="mt-1 rounded-sm border-l-2 border-brand bg-brand-soft/50 px-4 py-2.5 leading-7 whitespace-pre-wrap">
+        {text}
+      </p>
+    </div>
+  );
+}
+
 function AssistantMessage({
   message,
   onStartAssessment,
+  onHandoff,
 }: {
   message: ChatMessage;
   onStartAssessment: () => void;
+  onHandoff: (view: HandoffView) => void;
 }) {
   return (
     <div className="space-y-4">
+      {message.content && (
       <div className="max-w-prose leading-7">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -219,14 +263,23 @@ function AssistantMessage({
           {message.content}
         </ReactMarkdown>
       </div>
+      )}
       {message.ui_blocks.map((block, i) => (
-        <Block key={i} block={block} onStartAssessment={onStartAssessment} />
+        <Block key={i} block={block} onStartAssessment={onStartAssessment} onHandoff={onHandoff} />
       ))}
     </div>
   );
 }
 
-function Block({ block, onStartAssessment }: { block: UIBlock; onStartAssessment: () => void }) {
+function Block({
+  block,
+  onStartAssessment,
+  onHandoff,
+}: {
+  block: UIBlock;
+  onStartAssessment: () => void;
+  onHandoff: (view: HandoffView) => void;
+}) {
   switch (block.type) {
     case "calculation_result":
       return <CalculationSlip block={block} />;
@@ -242,6 +295,12 @@ function Block({ block, onStartAssessment }: { block: UIBlock; onStartAssessment
       return <ComparisonTableView block={block} />;
     case "sources":
       return <SourcesView block={block} />;
+    case "handoff_consent":
+      return <HandoffConsentCard block={block} onChange={onHandoff} />;
+    case "handoff_status":
+      return <HandoffStatusNote block={block} />;
+    case "handoff_relay":
+      return <HandoffRelayNote block={block} />;
     case "needs_update":
       return <NeedsUpdateNote block={block} />;
     case "allocation":
