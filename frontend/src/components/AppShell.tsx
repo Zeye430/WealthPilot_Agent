@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AssessmentDialog } from "@/components/AssessmentDialog";
 import { Chat, type ChatHandle } from "@/components/Chat";
+import { ProductActionsProvider } from "@/components/products/ProductActions";
 import { ProductBrowser } from "@/components/products/ProductBrowser";
 import {
   listConversations,
@@ -20,7 +21,7 @@ import type { ConversationSummary, CustomerState } from "@/lib/types";
 const COMING_SOON = ["我的理财目标"];
 const VIEWS = [
   { id: "chat", label: "对话与测算" },
-  { id: "products", label: "产品浏览" },
+  { id: "products", label: "理财产品" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
@@ -74,158 +75,160 @@ export function AppShell() {
   const startAssessment = () => setAssessing(true);
 
   return (
-    <div className="flex h-full">
-      <nav className="hidden w-56 shrink-0 flex-col border-r border-rule px-4 py-5 md:flex" aria-label="主导航">
-        <Brand />
-        <button
-          type="button"
-          onClick={newChat}
-          className="mt-8 rounded-sm border border-brand px-3 py-2 text-left text-sm font-medium text-brand hover:bg-brand-soft"
-        >
-          新对话
-        </button>
-        <ul className="mt-6 space-y-1 text-sm">
-          {VIEWS.map((v) => (
-            <li key={v.id}>
+    <ProductActionsProvider onStartAssessment={startAssessment}>
+      <div className="flex h-full">
+        <nav className="hidden w-56 shrink-0 flex-col border-r border-rule px-4 py-5 md:flex" aria-label="主导航">
+          <Brand />
+          <button
+            type="button"
+            onClick={newChat}
+            className="mt-8 rounded-sm border border-brand px-3 py-2 text-left text-sm font-medium text-brand hover:bg-brand-soft"
+          >
+            新对话
+          </button>
+          <ul className="mt-6 space-y-1 text-sm">
+            {VIEWS.map((v) => (
+              <li key={v.id}>
+                <button
+                  type="button"
+                  onClick={() => setView(v.id)}
+                  aria-current={view === v.id ? "page" : undefined}
+                  className={`w-full rounded-sm px-3 py-2 text-left ${
+                    view === v.id ? "bg-brand-soft font-medium" : "hover:bg-brand-soft/50"
+                  }`}
+                >
+                  {v.label}
+                </button>
+              </li>
+            ))}
+            <li>
               <button
                 type="button"
+                onClick={() => {
+                  setView("chat");
+                  chatRef.current?.send("我想联系理财经理");
+                }}
+                className="w-full rounded-sm px-3 py-2 text-left hover:bg-brand-soft/50"
+              >
+                联系理财经理
+              </button>
+            </li>
+            {COMING_SOON.map((item) => (
+              <li key={item} className="flex items-center justify-between px-3 py-2 text-ink-3">
+                {item}
+                <span className="text-xs">即将开放</span>
+              </li>
+            ))}
+          </ul>
+
+          {history.length > 0 && (
+            <section className="mt-6 min-h-0 overflow-y-auto" aria-label="最近对话">
+              <p className="px-3 text-xs text-ink-3">最近对话</p>
+              <ul className="mt-1 space-y-0.5 text-sm">
+                {history.slice(0, 8).map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => openHistory(c.id)}
+                      className={`w-full truncate rounded-sm px-3 py-1.5 text-left ${
+                        openConversation === c.id ? "bg-brand-soft" : "text-ink-2 hover:bg-brand-soft/50"
+                      }`}
+                      title={c.title ?? ""}
+                    >
+                      {c.title || "未命名对话"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="mt-auto space-y-2 border-t border-rule pt-4 text-xs text-ink-2">
+            <a href="/rm" target="_blank" rel="noreferrer" className="block text-brand underline underline-offset-4">
+              打开理财经理看板（演示）
+            </a>
+            <label htmlFor="demo-user" className="block">
+              演示身份
+            </label>
+            <select
+              id="demo-user"
+              value={demoUser}
+              onChange={(e) => {
+                setDemoUser(e.target.value);
+                newChat();
+              }}
+              className="w-full rounded-sm border border-rule bg-surface px-2 py-1.5 text-sm text-ink"
+            >
+              {DEMO_USERS.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={reset} className="text-ink-2 underline underline-offset-4 hover:text-ink">
+              清空该客户的测评和对话
+            </button>
+          </section>
+        </nav>
+
+        <main className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center justify-between border-b border-rule px-4 py-3 md:hidden">
+            <Brand />
+            <div className="flex items-center gap-2">
+              <RatingBadge state={state} onStart={startAssessment} />
+              <button
+                type="button"
+                onClick={newChat}
+                className="rounded-sm border border-brand px-3 py-1.5 text-sm text-brand"
+              >
+                新对话
+              </button>
+            </div>
+          </header>
+          <nav className="flex border-b border-rule md:hidden" aria-label="页面切换">
+            {VIEWS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
                 onClick={() => setView(v.id)}
-                aria-current={view === v.id ? "page" : undefined}
-                className={`w-full rounded-sm px-3 py-2 text-left ${
-                  view === v.id ? "bg-brand-soft font-medium" : "hover:bg-brand-soft/50"
-                }`}
+                className={`flex-1 py-2 text-sm ${view === v.id ? "border-b-2 border-brand font-medium text-brand" : "text-ink-2"}`}
               >
                 {v.label}
               </button>
-            </li>
-          ))}
-          <li>
-            <button
-              type="button"
-              onClick={() => {
-                setView("chat");
-                chatRef.current?.send("我想联系理财经理");
-              }}
-              className="w-full rounded-sm px-3 py-2 text-left hover:bg-brand-soft/50"
-            >
-              联系理财经理
-            </button>
-          </li>
-          {COMING_SOON.map((item) => (
-            <li key={item} className="flex items-center justify-between px-3 py-2 text-ink-3">
-              {item}
-              <span className="text-xs">即将开放</span>
-            </li>
-          ))}
-        </ul>
-
-        {history.length > 0 && (
-          <section className="mt-6 min-h-0 overflow-y-auto" aria-label="最近对话">
-            <p className="px-3 text-xs text-ink-3">最近对话</p>
-            <ul className="mt-1 space-y-0.5 text-sm">
-              {history.slice(0, 8).map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => openHistory(c.id)}
-                    className={`w-full truncate rounded-sm px-3 py-1.5 text-left ${
-                      openConversation === c.id ? "bg-brand-soft" : "text-ink-2 hover:bg-brand-soft/50"
-                    }`}
-                    title={c.title ?? ""}
-                  >
-                    {c.title || "未命名对话"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section className="mt-auto space-y-2 border-t border-rule pt-4 text-xs text-ink-2">
-          <a href="/rm" target="_blank" rel="noreferrer" className="block text-brand underline underline-offset-4">
-            打开理财经理看板（演示）
-          </a>
-          <label htmlFor="demo-user" className="block">
-            演示身份
-          </label>
-          <select
-            id="demo-user"
-            value={demoUser}
-            onChange={(e) => {
-              setDemoUser(e.target.value);
-              newChat();
-            }}
-            className="w-full rounded-sm border border-rule bg-surface px-2 py-1.5 text-sm text-ink"
-          >
-            {DEMO_USERS.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.label}
-              </option>
             ))}
-          </select>
-          <button type="button" onClick={reset} className="text-ink-2 underline underline-offset-4 hover:text-ink">
-            清空该客户的测评和对话
-          </button>
-        </section>
-      </nav>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-rule px-4 py-3 md:hidden">
-          <Brand />
-          <div className="flex items-center gap-2">
-            <RatingBadge state={state} onStart={startAssessment} />
-            <button
-              type="button"
-              onClick={newChat}
-              className="rounded-sm border border-brand px-3 py-1.5 text-sm text-brand"
-            >
-              新对话
-            </button>
+          </nav>
+          {view === "products" && (
+            <div className="min-h-0 flex-1">
+              <ProductBrowser state={state} onStartAssessment={startAssessment} />
+            </div>
+          )}
+          {/* 对话保持挂载，切换到产品页时只隐藏，避免丢失对话内容 */}
+          <div className={`min-h-0 flex-1 ${view === "chat" ? "" : "hidden"}`}>
+            <Chat
+              key={`${demoUser}-${chatKey}`}
+              ref={chatRef}
+              initialConversationId={openConversation}
+              onActivity={refreshHistory}
+              onStartAssessment={startAssessment}
+              onStateChange={setState}
+            />
           </div>
-        </header>
-        <nav className="flex border-b border-rule md:hidden" aria-label="页面切换">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setView(v.id)}
-              className={`flex-1 py-2 text-sm ${view === v.id ? "border-b-2 border-brand font-medium text-brand" : "text-ink-2"}`}
-            >
-              {v.label}
-            </button>
-          ))}
-        </nav>
-        {view === "products" && (
-          <div className="min-h-0 flex-1">
-            <ProductBrowser state={state} onStartAssessment={startAssessment} />
-          </div>
-        )}
-        {/* 对话保持挂载，切换到产品页时只隐藏，避免丢失对话内容 */}
-        <div className={`min-h-0 flex-1 ${view === "chat" ? "" : "hidden"}`}>
-          <Chat
-            key={`${demoUser}-${chatKey}`}
-            ref={chatRef}
-            initialConversationId={openConversation}
-            onActivity={refreshHistory}
-            onStartAssessment={startAssessment}
-            onStateChange={setState}
-          />
-        </div>
-      </main>
+        </main>
 
-      <ContextPanel state={state} onStartAssessment={startAssessment} onStateChange={setState} />
+        <ContextPanel state={state} onStartAssessment={startAssessment} onStateChange={setState} />
 
-      <AssessmentDialog
-        open={assessing}
-        onClose={() => setAssessing(false)}
-        onConfirmed={(next, result) => {
-          setState(next);
-          chatRef.current?.addNotice(
-            `风险测评已完成：${result.rating} ${result.rating_name}，可购买 ${productRiskRange(result.max_product_risk)} 产品。`,
-          );
-        }}
-      />
-    </div>
+        <AssessmentDialog
+          open={assessing}
+          onClose={() => setAssessing(false)}
+          onConfirmed={(next, result) => {
+            setState(next);
+            chatRef.current?.addNotice(
+              `风险测评已完成：${result.rating} ${result.rating_name}，可购买 ${productRiskRange(result.max_product_risk)} 产品。`,
+            );
+          }}
+        />
+      </div>
+    </ProductActionsProvider>
   );
 }
 
@@ -310,7 +313,7 @@ function ContextPanel({
           <div className="mt-2 rounded-sm border border-notice/40 bg-notice-soft px-3 py-2.5 text-sm">
             <p className="font-medium text-notice">{expired ? "测评已过期" : "尚未完成"}</p>
             <p className="mt-1 text-xs leading-5 text-ink-2">
-              完成风险承受能力测评后，才能为您筛选和比较理财产品。约 3 分钟，共 10 道题。
+              完成风险承受能力测评后，即可按您的需求匹配和买入产品。约 3 分钟，共 10 道题。
             </p>
             <button
               type="button"
@@ -371,7 +374,7 @@ function ContextPanel({
       )}
 
       <p className="mt-auto text-xs leading-5 text-ink-3">
-        本系统为作品集演示，使用虚构数据，不销售任何产品，不构成投资建议。
+        本系统为作品集演示，使用虚构机构与产品；买入流程只到确认页，不会真实下单。
       </p>
     </aside>
   );

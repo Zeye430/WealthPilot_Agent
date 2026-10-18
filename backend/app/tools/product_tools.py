@@ -44,8 +44,9 @@ TYPE_HELP = (
     "产品类型，可多选：CASH_MANAGEMENT 现金管理类、FIXED_INCOME 固定收益类、"
     "FIXED_INCOME_PLUS 固收+、MIXED 混合类、EQUITY 权益类"
 )
-NOT_ADVICE = (
-    "以下为您风险等级范围内的产品信息，不构成投资建议；业绩比较基准不是预期收益率，不代表实际收益。"
+PRODUCT_DISCLAIMER = (
+    "理财非存款、产品有风险、投资须谨慎。匹配依据为您的风险等级、期限和流动性需求，不构成收益承诺；"
+    "业绩比较基准不是预期收益率，不代表实际收益。"
 )
 
 
@@ -91,7 +92,7 @@ def search_products(
     ] = None,
     keyword: Annotated[str | None, Field(description="名称或投资范围关键词，如「纯债」")] = None,
 ) -> tuple[str, list[dict]]:
-    """在客户风险等级范围内搜索理财产品，并按期限匹配、流动性、费用排序。
+    """在客户风险等级范围内，按需求（期限、流动性、费用）匹配理财产品。
 
     超出客户风险等级、已到期、起购金额或期限不符的产品会被自动排除。
     客户想了解有哪些产品、要求筛选或推荐时使用。
@@ -105,9 +106,18 @@ def search_products(
         ),
     )
     items = [
-        {**presenter.card(r.product), "rank": i + 1, "rank_factors": r.explanation()}
+        {
+            **presenter.card(r.product),
+            "rank": i + 1,
+            "rank_factors": r.explanation(),
+            "highlights": r.highlights(),
+            "purchasable": True,
+        }
         for i, r in enumerate(result.ranked)
-    ] + [{**presenter.card(p), "rank": None, "warnings": e.messages} for p, e in result.unranked]
+    ] + [
+        {**presenter.card(p), "rank": None, "warnings": e.messages, "purchasable": True}
+        for p, e in result.unranked
+    ]
     excluded = [{"reason": REASON_LABELS[code], "count": n} for code, n in result.excluded.items()]
     band = load_questionnaire().band(ctx.risk_rating)
     content = {
@@ -117,20 +127,22 @@ def search_products(
             | {
                 "metric": f"{item['metric']['label']} {item['metric']['text']}",
                 "rank": item["rank"],
+                "highlights": item.get("highlights", []),
             }
             for item in items
         ],
         "excluded": excluded,
-        "rules": "只能介绍列表中的产品；不要说「适合您」「推荐购买」，"
-        "可以说「在您的风险等级范围内」；排序依据是期限匹配、流动性和费用，不是收益。",
+        "rules": "只能介绍列表中的产品。从排序靠前的产品中挑选 1–3 款，结合客户需求说明匹配点"
+        "（期限、流动性、费用、起购金额）；不得以收益高低为理由，不得承诺收益或制造紧迫感。"
+        "排序依据是期限匹配、流动性和费用，不是收益。",
     }
     artifact = {
         "type": "product_list",
-        "title": f"您的风险等级范围内的产品（{band.max_product_risk} 及以下）",
+        "title": f"为您匹配的产品（{band.max_product_risk} 及以下）",
         "items": items,
         "excluded": excluded,
         "ranking_note": "排序依据：期限匹配、流动性、费用；不按收益排序。",
-        "disclaimer": NOT_ADVICE,
+        "disclaimer": PRODUCT_DISCLAIMER,
     }
     return _dump(content), [artifact]
 
@@ -174,8 +186,10 @@ def get_product_details(
         },
         "eligible_for_customer": eligibility.eligible,
         "eligibility_messages": eligibility.messages,
-        "rules": "如实转述条款；eligible_for_customer 为 false 时必须说明原因，不得推荐。",
+        "rules": "如实转述条款；eligible_for_customer 为 false 时必须说明原因，"
+        "不得推荐，客户也无法买入；为 true 时可以结合客户需求说明匹配点，并提示可在卡片中买入。",
     }
+    detail["purchasable"] = eligibility.eligible
     return _dump(content), [{"type": "product_detail", **detail}]
 
 
@@ -248,7 +262,7 @@ def compare_products(
         "columns": [{"code": p.code, "name": p.name} for p in found],
         "rows": rows,
         "notes": notes,
-        "disclaimer": NOT_ADVICE,
+        "disclaimer": PRODUCT_DISCLAIMER,
     }
     content = {
         "columns": [p.name for p in found],

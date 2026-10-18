@@ -1,5 +1,7 @@
 """客户上下文：只读的基础画像 + 本次需求。每条消息都重新组装，保证 LLM 看到的是最新状态。"""
 
+import re
+
 from sqlalchemy.orm import Session
 
 from app.assessment.scoring import load_questionnaire
@@ -67,3 +69,22 @@ def prompt_section(
         "- 基础资料只读：客户所说与银行系统记录不一致时（如年龄），以系统记录为准，并提示可到网点更新资料。",
     ]
     return "\n".join(lines)
+
+
+SELF_REPORTED_AGE = re.compile(r"我(今年|现在|已经)?\s*(\d{2})\s*(周)?岁")
+
+
+def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str | None:
+    """客户自称的年龄与银行登记不一致、而回答没有说明时，由代码补充（P7 场景评估 M02 发现）。
+
+    年龄影响适当性判断，以银行登记（KYC）为准；对话不能改写基础画像。
+    """
+    match = SELF_REPORTED_AGE.search(message)
+    if base is None or match is None or int(match.group(2)) == base.age:
+        return None
+    if f"{base.age}" in reply:  # 回答已经提到登记年龄
+        return None
+    return (
+        f"根据银行登记信息，您的年龄为 {base.age} 岁，产品匹配以登记信息和风险测评结果为准；"
+        "如信息有变化，可携带有效证件到网点更新。"
+    )

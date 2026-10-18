@@ -54,6 +54,18 @@ class AssetsAtBank(BaseModel):
 class RelationshipManager(BaseModel):
     id: str
     name: str
+    title: str = "理财经理"
+    # 联系方式来自银行员工系统；演示数据为空，界面点击时提示「演示环境」，不拨打真实号码
+    phone: str | None = None
+    wecom_url: str | None = None
+
+    def contact_card(self) -> dict:
+        return {
+            "rm_name": self.name,
+            "rm_title": self.title,
+            "phone": self.phone,
+            "wecom_url": self.wecom_url,
+        }
 
 
 class BaseProfile(BaseModel):

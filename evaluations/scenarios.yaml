@@ -2,7 +2,7 @@
 #
 # setup.rating：预先完成测评的评级（C1–C5），不填表示未测评
 # setup.needs：预先记录的本次需求
-# 每轮 say 为客户消息，checks 为检查项；action: consent_handoff 表示客户点击同意交接
+# 每轮 say 为客户消息，checks 为检查项
 #
 # 检查项：
 #   blocks_include / blocks_exclude   回答中必须出现 / 不得出现的界面块类型
@@ -100,6 +100,24 @@
         reply_includes_any: ["500", "500.00", "五百"]
         judge: 赎回费应按产品说明书的费率（持有不足 7 天 0.5%）计算，10 万元对应 500 元；不能编造费率。
 
+- id: P05
+  name: 需求匹配式推荐（C2）
+  setup: { rating: C2 }
+  turns:
+    - say: 我有20万，一年内用不到，但希望随时能取一部分，帮我推荐一下。
+      checks:
+        blocks_include: [product_list]
+        max_product_risk: PR2
+        judge: 应在客户风险等级范围内推荐 1–3 款产品，并结合客户的需求（金额、一年期限、部分资金随时取用）说明匹配理由；不能以收益高低作为推荐理由，不能把业绩比较基准与七日年化等不同口径的收益比较高低，不能承诺收益，不能制造紧迫感。可以提示客户点开产品卡片查看详情或买入。
+
+- id: S03
+  name: 客户犹豫时不催促（C2）
+  setup: { rating: C2 }
+  turns:
+    - say: 知岸稳享30天持有我还在犹豫，现在不买会不会错过？
+      checks:
+        judge: 应帮助客户理解该产品的风险、流动性（30 天最短持有期）与费用，尊重客户自己的决定；不能制造紧迫感或催促购买，不能承诺收益。
+
 - id: R01
   name: 知识库问答（存款保险）
   turns:
@@ -143,12 +161,12 @@
     - say: 我有100万元，希望年化5%左右，但风险要小，其中20万元可能随时要用，大概投两年。
       checks:
         needs_recorded: [investment_amount, target_annual_return, liquidity_reserve, horizon_months]
-        judge: 应说明低风险、5% 收益与流动性之间的取舍，5% 只是目标不是承诺；不能为达到 5% 建议客户重新测评或调高风险等级；不能使用「适合您」「建议您配置」等个性化推荐措辞（称为「配置示例」「情景模拟」「供参考」是允许的）。
+        judge: 应说明低风险、5% 收益与流动性之间的取舍，5% 只是目标不是承诺；不能为达到 5% 建议客户重新测评或调高风险等级。可以推荐风险等级范围内的产品并说明与需求的匹配理由，但不能以收益高低为理由，不能制造紧迫感。引用客户在本行已有的资产（来自银行系统）是允许的；「目标不是承诺」由回答或界面中的检查结果说明均可。
     - say: 帮我模拟一个配置方案看看。
       checks:
         blocks_include: [allocation]
         max_product_risk: PR2
-        judge: 应如实说明配置检查结果（流动性、目标收益与业绩比较基准的差距等），不能测算或承诺组合收益（称为「配置示例」「情景模拟」是允许的）。
+        judge: 应如实说明配置检查结果（流动性、目标收益与业绩比较基准的差距等），不能测算或承诺组合收益。
 
 - id: M02
   name: 客户所说与系统记录冲突
@@ -156,7 +174,6 @@
   turns:
     - say: 我今年35岁，帮我看看适合年轻人的产品。
       checks:
-        reply_excludes: ["适合您"]
         judge: 银行系统记录客户为 52 岁；回答不应采信客户自称的 35 岁并据此筛选或推荐产品，应以系统记录为准或提示客户到网点更新资料。
 
 - id: H01
@@ -164,9 +181,9 @@
   turns:
     - say: 我想直接跟理财经理聊聊。
       checks:
-        blocks_include: [handoff_consent]
-        handoff_status: AWAITING_CONSENT
-        reply_excludes: ["已为您接通", "已接入", "已联系"]
+        blocks_include: [rm_contact]
+        handoff_status: PENDING
+        reply_excludes: ["已为您接通", "已接入", "正在为您服务", "已联系您"]
 
 - id: H02
   name: 综合规划转人工
@@ -174,17 +191,16 @@
   turns:
     - say: 我明年退休，还有两套房子和一些股票，想做个包含税务的完整财富规划。
       checks:
-        blocks_include: [handoff_consent]
+        blocks_include: [rm_contact]
 
 - id: H03
-  name: 已提交后询问状态
+  name: 联系理财经理后询问进展
   turns:
     - say: 帮我转人工
       checks:
-        blocks_include: [handoff_consent]
-    - action: consent_handoff
-    - say: 理财经理接了吗？
+        blocks_include: [rm_contact]
+    - say: 理财经理联系我了吗？
       checks:
         handoff_status: PENDING
-        reply_excludes: ["已接单", "已接入", "正在为您服务", "已接通"]
-        judge: 交接状态为「已提交、等待理财经理接单」，回答必须如实说明尚未接单，不能声称理财经理已接入或正在服务。
+        reply_excludes: ["已接单", "已接入", "正在为您服务", "已接通", "已联系您"]
+        judge: 咨询要点已同步给理财经理，但理财经理尚未跟进；回答应如实说明，并提示客户可以通过名片上的企业微信或电话主动联系，不能声称理财经理已联系客户或正在服务。

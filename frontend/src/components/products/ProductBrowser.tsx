@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { ProductCardView } from "@/components/products/ProductCardView";
-import { ProductDetailDialog } from "@/components/products/ProductDetailDialog";
-import { ApiError, getProducts } from "@/lib/api";
+import { ApiError, getProducts, productRiskRange } from "@/lib/api";
 import type { CustomerState, ProductListResponse } from "@/lib/types";
 
 const TYPES = [
@@ -16,7 +15,10 @@ const TYPES = [
   { value: "EQUITY", label: "权益类" },
 ];
 
-/** 产品浏览页：与对话中的产品工具调用同一套接口和适当性规则。 */
+/**
+ * 产品页：全部在售产品都可查看（产品负责人决定）。
+ * 风险等级范围内的产品排在前面、可以买入；超出等级的只能查看条款。能否买入由后端判断。
+ */
 export function ProductBrowser({
   state,
   onStartAssessment,
@@ -27,12 +29,9 @@ export function ProductBrowser({
   const [type, setType] = useState("");
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
-  const assessed = state?.permission === "ASSESSED";
   const rating = state?.assessment?.rating;
 
   useEffect(() => {
-    if (!assessed) return;
     let cancelled = false;
     getProducts(type || undefined)
       .then((d) => !cancelled && (setData(d), setError(null)))
@@ -40,35 +39,31 @@ export function ProductBrowser({
     return () => {
       cancelled = true;
     };
-  }, [assessed, type, rating]);
+  }, [type, rating]);
 
-  if (!assessed) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-8">
-        <h1 className="font-serif text-2xl font-bold">产品浏览</h1>
-        <p className="mt-3 max-w-prose leading-7 text-ink-2">
-          根据理财产品销售的适当性要求，完成风险承受能力测评后，才能查看您风险等级范围内的产品。
-        </p>
-        <button
-          type="button"
-          onClick={onStartAssessment}
-          className="mt-6 rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface"
-        >
-          开始测评
-        </button>
-      </div>
-    );
-  }
+  const buyable = data?.items.filter((i) => i.purchasable) ?? [];
+  const viewOnly = data?.items.filter((i) => !i.purchasable) ?? [];
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8">
-        <h1 className="font-serif text-2xl font-bold">产品浏览</h1>
-        {data && (
+        <h1 className="font-serif text-2xl font-bold">理财产品</h1>
+        {data?.rating ? (
           <p className="mt-2 text-sm text-ink-2">
-            您的评级为 {data.rating.code} {data.rating.name}，以下为 {data.rating.max_product_risk}{" "}
-            及以下风险等级的在售产品。
+            您的风险等级为 {data.rating.code} {data.rating.name}，可买入 {productRiskRange(data.rating.max_product_risk)}{" "}
+            产品；更高风险等级的产品可以查看条款，但不能买入。
           </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-notice/40 bg-notice-soft px-4 py-3">
+            <p className="text-sm text-ink-2">您可以先浏览产品；完成风险测评（约 3 分钟）后即可买入与您风险等级匹配的产品。</p>
+            <button
+              type="button"
+              onClick={onStartAssessment}
+              className="rounded-sm bg-brand px-4 py-1.5 text-sm font-medium text-surface"
+            >
+              开始测评
+            </button>
+          </div>
         )}
 
         <div role="tablist" aria-label="产品类型" className="mt-5 flex flex-wrap gap-1.5">
@@ -89,27 +84,46 @@ export function ProductBrowser({
         </div>
 
         {error && <p className="mt-4 text-sm text-danger">{error}</p>}
-        {data && data.items.length === 0 && (
-          <p className="mt-6 text-sm text-ink-2">该类型下没有您风险等级范围内的在售产品。</p>
+        {data && data.items.length === 0 && <p className="mt-6 text-sm text-ink-2">该类型下暂无在售产品。</p>}
+
+        {buyable.length > 0 && (
+          <Section title="符合您风险等级的产品" count={buyable.length}>
+            {buyable.map((item) => (
+              <li key={item.code}>
+                <ProductCardView product={item} />
+              </li>
+            ))}
+          </Section>
         )}
-        <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {data?.items.map((item) => (
-            <li key={item.code}>
-              <ProductCardView product={item} onOpen={setOpen} />
-            </li>
-          ))}
-        </ul>
+        {viewOnly.length > 0 && (
+          <Section title={data?.rating ? "超出您的风险等级（仅可查看）" : "在售产品"} count={viewOnly.length}>
+            {viewOnly.map((item) => (
+              <li key={item.code}>
+                <ProductCardView product={item} />
+              </li>
+            ))}
+          </Section>
+        )}
+
         {data && (
-          <div className="mt-4 space-y-0.5 text-xs text-ink-3">
-            {data.excluded.length > 0 && (
-              <p>未展示：{data.excluded.map((e) => `${e.reason} ${e.count} 款`).join("；")}。</p>
-            )}
+          <div className="mt-6 space-y-0.5 text-xs text-ink-3">
             <p>{data.ranking_note}</p>
-            <p>所有产品均为虚构演示产品，信息不构成投资建议；业绩比较基准不是预期收益率。</p>
+            <p>理财非存款、产品有风险、投资须谨慎。所有产品均为虚构演示产品；业绩比较基准不是预期收益率。</p>
           </div>
         )}
       </div>
-      <ProductDetailDialog code={open} onClose={() => setOpen(null)} />
     </div>
+  );
+}
+
+function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <section className="mt-6">
+      <h2 className="flex items-baseline gap-2 font-serif text-base font-bold">
+        {title}
+        <span className="figures text-xs font-normal text-ink-3">{count} 款</span>
+      </h2>
+      <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</ul>
+    </section>
   );
 }

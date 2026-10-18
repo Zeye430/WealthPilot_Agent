@@ -24,7 +24,7 @@ from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from app.agent.prompts import SAFE_FALLBACK_REPLY  # noqa: E402
-from app.compliance.output_guard import check_output  # noqa: E402
+from app.compliance.output_guard import _negated, check_output  # noqa: E402
 from app.compliance.policy import Permission  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.db.models import PolicyDecisionLog  # noqa: E402
@@ -57,10 +57,22 @@ def product_codes(blocks: list[dict]) -> list[str]:
     return codes
 
 
+def shown_text(blocks: list[dict]) -> str:
+    """界面块中客户能看到的说明文字（检查结果、提示、免责声明等），供评审参考。"""
+    lines = []
+    for b in blocks:
+        parts = [b.get("title", ""), b.get("notice", "")]
+        parts += [f"{c['label']}：{c['message']}" for c in b.get("checks", [])]
+        parts += b.get("notes", []) + [b.get("disclaimer", "")]
+        text = "；".join(p for p in parts if p)
+        lines.append(f"- {b['type']}{'：' + text if text else ''}")
+    return "\n".join(lines)[:1500]
+
+
 def judge(question: str, reply: str, blocks: list[dict], rubric: str) -> tuple[bool, str]:
-    shown = [b["type"] for b in blocks]
     content = (
-        f"客户问题：{question}\n\n助手回答：{reply}\n\n界面同时展示的内容类型：{shown}\n\n评审标准：{rubric}"
+        f"客户问题：{question}\n\n助手回答：{reply}\n\n界面同时展示的内容：\n{shown_text(blocks)}"
+        f"\n\n评审标准：{rubric}"
     )
     output = get_chat_model(thinking=False, max_tokens=300).invoke(
         [SystemMessage(JUDGE_PROMPT), HumanMessage(content)]
@@ -70,6 +82,10 @@ def judge(question: str, reply: str, blocks: list[dict], rubric: str) -> tuple[b
         verdict = json.loads(match.group()) if match else {}
         return bool(verdict.get("pass")), str(verdict.get("reason", ""))
     except json.JSONDecodeError:
+        # 评审理由中常出现未转义的引号，JSON 解析失败时直接提取 pass 字段
+        flag = re.search(r'"pass"\s*:\s*(true|false)', str(output))
+        if flag:
+            return flag.group(1) == "true", str(output)
         return False, f"评审输出无法解析：{output!r}"
 
 
@@ -84,7 +100,8 @@ def run_checks(turn: dict, question: str, body: dict, permission: Permission) ->
         results.append({"check": name, "pass": bool(ok), "detail": detail})
 
     retrieved = [i["id"] for b in blocks if b["type"] == "sources" for i in b["items"]]
-    violations = check_output(reply, permission, reply, retrieved)
+    rating = (body["state"].get("assessment") or {}).get("rating")
+    violations = check_output(reply, permission, reply, retrieved, rating)
     add("通过输出审查", not violations, "、".join(violations))
     add("未退化为兜底回答", reply != SAFE_FALLBACK_REPLY)
     for t in checks.get("blocks_include", []):
@@ -99,8 +116,9 @@ def run_checks(turn: dict, question: str, body: dict, permission: Permission) ->
         shown = reply + json.dumps(blocks, ensure_ascii=False)
         add(f"界面展示其一 {any_of}", any(re.search(p, shown) for p in any_of))
     for pattern in checks.get("reply_excludes", []):
-        hit = re.search(pattern, reply)
-        add(f"回答不含「{pattern}」", not hit, hit.group() if hit else "")
+        # 否定句不算（「没有显示理财经理已联系您」是如实陈述），与输出审查的否定判断一致
+        hits = [m for m in re.finditer(pattern, reply) if not _negated(reply, m.start())]
+        add(f"回答不含「{pattern}」", not hits, hits[0].group() if hits else "")
     if limit := checks.get("max_product_risk"):
         catalog = load_catalog()
         over = [c for c in product_codes(blocks) if catalog.get(c).effective_risk_level > limit]
@@ -149,11 +167,8 @@ def run_scenario(client: TestClient, scenario: dict) -> dict:
         client.patch("/api/v1/needs", json=needs)
     permission = Permission.ASSESSED if setup.get("rating") else Permission.ASSESSMENT_REQUIRED
 
-    conversation_id, turns, last_handoff = None, [], None
+    conversation_id, turns = None, []
     for turn in scenario["turns"]:
-        if turn.get("action") == "consent_handoff":
-            client.post(f"/api/v1/handoffs/{last_handoff}/consent")
-            continue
         start = time.perf_counter()
         resp = client.post("/api/v1/chat", json={"conversation_id": conversation_id, "message": turn["say"]})
         latency = time.perf_counter() - start
@@ -162,8 +177,6 @@ def run_scenario(client: TestClient, scenario: dict) -> dict:
             continue
         body = resp.json()
         conversation_id = body["conversation_id"]
-        if body.get("handoff"):
-            last_handoff = body["handoff"]["id"]
         turns.append(
             {
                 "say": turn["say"],

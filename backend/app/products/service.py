@@ -5,7 +5,7 @@ from collections import Counter
 from pydantic import BaseModel
 
 from app.compliance.suitability import CustomerContext, Eligibility, evaluate
-from app.products.catalog import Catalog, Product, ProductType
+from app.products.catalog import Catalog, DataQuality, Product, ProductStatus, ProductType
 from app.products.ranking import RankedProduct, rank
 
 
@@ -31,6 +31,37 @@ def _matches(product: Product, filters: SearchFilters) -> bool:
         if filters.keyword not in haystack:
             return False
     return True
+
+
+class BrowseResult(BaseModel):
+    ranked: list[RankedProduct]  # 可买入：评级范围内、在售且已核实，按排序
+    other: list[tuple[Product, list[str]]]  # 仅可查看：附原因（超出评级、未测评、未核实等）
+
+
+def browse(catalog: Catalog, rating: str | None, filters: SearchFilters) -> BrowseResult:
+    """产品浏览页：展示全部在售产品（产品负责人决定，2026-10-18）。
+
+    评级范围内的产品排在前面并参与排序；超出评级或未测评时只能查看条款，不能买入。
+    与对话中的 search_products 不同：对话推荐只在评级范围内进行。
+    """
+    candidates, other = [], []
+    for product in catalog.products:
+        if product.status is not ProductStatus.ON_SALE or not _matches(product, filters):
+            continue
+        if rating is None:
+            other.append((product, ["完成风险承受能力测评后可买入。"]))
+            continue
+        result = evaluate(product, CustomerContext(risk_rating=rating))
+        if result.rankable:
+            candidates.append(product)
+        else:
+            other.append((product, result.messages))
+    if rating is None:
+        # 未测评：按流动性和费用排序展示，不区分能否买入
+        verified = [p for p, _ in other if p.data_quality is DataQuality.VERIFIED]
+        order = {r.product.code: i for i, r in enumerate(rank(verified))}
+        other.sort(key=lambda item: order.get(item[0].code, len(order)))
+    return BrowseResult(ranked=rank(candidates), other=other)
 
 
 def search(catalog: Catalog, ctx: CustomerContext, filters: SearchFilters) -> SearchResult:

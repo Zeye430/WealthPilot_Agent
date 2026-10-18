@@ -173,7 +173,7 @@ def simulate(
                     label="目标收益",
                     message=f"所选产品的收益指标上限最高为 {format_rate(max(ceilings))}，"
                     f"低于您的目标 {format_rate(needs.target_annual_return)}。"
-                    "业绩比较基准不是预期收益率，"
+                    "目标收益只是您的期望，不是承诺；业绩比较基准不是预期收益率，"
                     "在您的风险等级内，较低风险与较高收益通常难以兼得",
                 )
             )

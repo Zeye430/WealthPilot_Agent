@@ -13,6 +13,7 @@ from app.products.catalog import Product
 # 权重可配置；未提供投资期限时，期限匹配度不参与，其余权重按比例放大
 WEIGHTS = {"horizon_fit": Decimal("0.4"), "liquidity": Decimal("0.3"), "cost": Decimal("0.3")}
 FACTOR_LABELS = {"horizon_fit": "期限匹配", "liquidity": "流动性", "cost": "费用"}
+HIGHLIGHT_THRESHOLD = Decimal("0.8")
 
 
 class RankedProduct(BaseModel):
@@ -23,6 +24,17 @@ class RankedProduct(BaseModel):
     def explanation(self) -> str:
         parts = [f"{FACTOR_LABELS[k]} {v:.2f}" for k, v in self.factors.items()]
         return "，".join(parts)
+
+    def highlights(self) -> list[str]:
+        """给客户看的匹配理由：只来自排序因素（期限、流动性、费用），不涉及收益。"""
+        tags = []
+        if self.product.lockup_days == 0:
+            tags.append("随时可取")
+        if self.factors.get("horizon_fit", Decimal(0)) >= HIGHLIGHT_THRESHOLD:
+            tags.append("期限与您的计划匹配")
+        if self.factors["cost"] >= HIGHLIGHT_THRESHOLD:
+            tags.append("候选中费用较低")
+        return tags
 
 
 def _scale_inverse(value: Decimal, low: Decimal, high: Decimal) -> Decimal:

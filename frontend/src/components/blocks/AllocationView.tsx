@@ -2,6 +2,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
+import { useProductActions } from "@/components/products/ProductActions";
 import type { AllocationBlock, NeedsUpdateBlock } from "@/lib/types";
 
 const COLORS = [1, 2, 3, 4, 5].map((i) => `var(--series-${i})`);
@@ -22,6 +23,7 @@ export function NeedsUpdateNote({ block }: { block: NeedsUpdateBlock }) {
 
 /** 配置情景：构成环形图 + 明细 + 约束检查。不展示任何收益测算。 */
 export function AllocationView({ block }: { block: AllocationBlock }) {
+  const { open } = useProductActions();
   // 超过 5 项时，图中合并为「其他」（配色只有 5 种已验证的色盲可分辨颜色）；明细表仍列全部
   const chart =
     block.slices.length <= COLORS.length
@@ -81,7 +83,18 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
                     style={{ background: COLORS[Math.min(i, COLORS.length - 1)] }}
                     aria-hidden
                   />
-                  {s.name}
+                  {/* 理财产品可点开查看详情与买入；活期存款没有风险等级，不可点 */}
+                  {s.risk_level ? (
+                    <button
+                      type="button"
+                      onClick={() => open(s.code)}
+                      className="text-left text-brand underline decoration-rule underline-offset-4 hover:decoration-brand"
+                    >
+                      {s.name}
+                    </button>
+                  ) : (
+                    s.name
+                  )}
                   <span className="ml-1.5 text-xs text-ink-3">
                     {s.risk_level ? `${s.risk_level}，` : ""}
                     {s.lockup}
@@ -111,7 +124,7 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
           );
         })}
       </ul>
-      <p className="mt-2 text-xs text-ink-3">{block.disclaimer}</p>
+      <p className="mt-2 text-xs text-ink-3">点击产品名称可查看详情或买入。{block.disclaimer}</p>
     </figure>
   );
 }

@@ -5,9 +5,10 @@ import type {
   ConversationSummary,
   CustomerState,
   HandoffView,
-  MessagesSince,
   ProductDetail,
   ProductListResponse,
+  PurchasePreview,
+  PurchaseResult,
   Questionnaire,
 } from "./types";
 
@@ -77,15 +78,6 @@ export const listConversations = () => request<ConversationSummary[]>("/api/v1/c
 export const getConversation = (id: string) =>
   request<ConversationDetail>(`/api/v1/conversations/${id}`);
 
-export const consentHandoff = (id: string) =>
-  request<HandoffView>(`/api/v1/handoffs/${id}/consent`, { method: "POST" });
-
-export const cancelHandoff = (id: string) =>
-  request<HandoffView>(`/api/v1/handoffs/${id}/cancel`, { method: "POST" });
-
-export const getMessagesSince = (conversationId: string, after: number) =>
-  request<MessagesSince>(`/api/v1/conversations/${conversationId}/messages?after=${after}`);
-
 export const clearNeeds = () => request<CustomerState>("/api/v1/needs", { method: "DELETE" });
 
 export const getProducts = (productType?: string) =>
@@ -95,6 +87,18 @@ export const getProducts = (productType?: string) =>
 
 export const getProduct = (code: string) =>
   request<ProductDetail>(`/api/v1/products/${encodeURIComponent(code)}`);
+
+export const previewPurchase = (productCode: string, amount: number) =>
+  request<PurchasePreview>("/api/v1/purchases/preview", {
+    method: "POST",
+    body: JSON.stringify({ product_code: productCode, amount }),
+  });
+
+export const confirmPurchase = (productCode: string, amount: number, acknowledged: string[]) =>
+  request<PurchaseResult>("/api/v1/purchases/confirm", {
+    method: "POST",
+    body: JSON.stringify({ product_code: productCode, amount, acknowledged }),
+  });
 
 const yuan = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
@@ -134,19 +138,13 @@ export const rmApi = {
   detail: (rm: string, id: string) => request<RmHandoffDetail>(`/api/v1/rm/handoffs/${id}`, {}, rm),
   accept: (rm: string, id: string) =>
     request<HandoffView>(`/api/v1/rm/handoffs/${id}/accept`, { method: "POST" }, rm),
-  reply: (rm: string, id: string, text: string) =>
-    request<HandoffView>(
-      `/api/v1/rm/handoffs/${id}/messages`,
-      { method: "POST", body: JSON.stringify({ text }) },
-      rm,
-    ),
   resolve: (rm: string, id: string) =>
     request<HandoffView>(`/api/v1/rm/handoffs/${id}/resolve`, { method: "POST" }, rm),
 };
 
 export type RmHandoffRow = HandoffView & {
   customer_name: string;
-  consented_at: string | null;
+  synced_at: string;
   updated_at: string;
 };
 
@@ -165,7 +163,7 @@ export type RmHandoffDetail = HandoffView & {
     open_questions: string[];
     recent_customer_messages: string[];
   };
-  consent_scope: string[];
+  sync_scope: string[];
   messages: { role: "user" | "assistant" | "rm"; content: string }[];
   events: { to: string; actor: string; at: string }[];
 };

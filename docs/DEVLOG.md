@@ -753,7 +753,7 @@
 
 **验证**
 - 后端 208 个测试全部通过；ruff 检查通过；前端 lint 与构建通过。
-- 各轮报告保存在 `evaluations/reports/`（`-round2`、`-round3` 为中间轮次，无后缀为最终一轮）。
+- 各轮报告保存在 `evaluations/reports/`（`-round2`、`-round3` 为中间轮次，`-quality-final` 为本步最终一轮）。
 
 **遇到的问题 / 限制**
 - 场景评估本身有随机性：同一版本两次全量运行可能相差 2 次失败。因此每轮都重复 3 次，并逐条阅读失败回答原文，区分「产品问题」「检查项问题」「随机波动」后再改。
@@ -773,5 +773,66 @@
 **其他提示（无需处理）**：GitHub 提示官方 actions 使用的 Node.js 20 已弃用、ubuntu-latest 将升级版本，均为平台通知，不影响结果。
 
 **文件**：✏️ `backend/tests/test_api_chat.py`
+
+**提交**：待产品负责人执行。
+
+## 2026-10-18 · 第 21 步：产品负责人试用反馈（一）——销售能力、产品可见性、买入确认、理财经理名片
+
+**反馈**（产品负责人试用后提出）
+1. 风险等级不够的客户也应能看到全部产品。
+2. 推荐理财时回答中要有产品链接，点进去可以买入。
+3. 转理财经理时客户界面不需要展示客户资料，只展示理财经理信息，提供企业微信 / 电话链接。
+4. 界面要对客户友好；agent 的作用是理财规划、理财答疑，并要有销售功能：不明显推销，但通过设计让客户在交流中完成购买，这是 agent 的商业价值。
+
+**决策**（与产品负责人确认）
+- 全部在售产品可看，超评级不能买；未测评也可浏览，买入时引导测评。
+- 需求匹配式推荐：AI 可在评级范围内推荐 1–3 款并说明匹配理由。
+- 买入只做到确认页（演示，不下单、不记录持仓）。
+- 名片 + 要点同步看板；去掉客户确认卡片和应用内人工沟通。
+- 第 4 条中的界面整体改版放到下一轮，先把功能和规则改到位，避免返工。
+
+**哪些可以放开、哪些守住**：之前「不说适合您」是 MVP 的保守默认（COMPLIANCE §8 待确认事项），不是监管硬性要求；适当性管理本身要求向客户推荐与其风险等级匹配的产品。守住的红线全部写成代码：超评级不能买（服务端校验）、不承诺收益、不诱导调高评级，以及新增的三条输出审查规则。
+
+**实现**
+- **推荐规则（output_guard）**：取消 `O-PERSONALIZED_ADVICE`，新增 `O-UNSUITABLE_RECOMMENDATION`（推荐超评级产品）、`O-PRESSURE_SALES`（限时、抢购、错过就…、赶紧；否定句不算）、`O-RETURN_PITCH`（以收益为推荐理由）。输出审查新增客户评级参数。
+- **Prompt**：职责改为理财规划 + 答疑 + 需求匹配推荐；需求不清时先追问关键一两项；推荐理由只用期限、流动性、费用、起购金额，不跨口径比较收益；自然提示「点开卡片可查看详情或买入」。
+- **排序理由**：`RankedProduct.highlights()` 生成「随时可取」「期限与您的计划匹配」「候选中费用较低」，代替原来的数字分数展示给客户。
+- **产品浏览**：`/api/v1/products` 不再要求测评，返回全部在售产品与 `purchasable`；详情返回 `purchase.allowed / reasons`。
+- **买入确认**：新增 `app/purchases/service.py` 与 `/api/v1/purchases/preview`、`/confirm`。校验测评、评级、在售、费率已核实、起购金额、可用活期余额；确认时必须勾选三份文件；返回 `DEMO_NOT_PLACED`。
+- **理财经理名片**：基础画像的理财经理增加职务、电话、企业微信字段（演示数据留空）；交接直接进入「已同步」状态；新增 `rm_contact` 界面块；看板操作改为「标记跟进中 / 结束跟进」；移除客户确认接口、应用内回复、AI 暂停与轮询接口。
+- **前端**：全局产品弹窗（详情 → 买入金额 → 确认页 → 演示结果）；对话中产品列表先展示 3 款、其余折叠；产品卡片显示匹配理由与「查看详情 / 买入」或「仅可查看」；配置图中的产品名可点开买入；产品页分「符合您风险等级」与「超出您的风险等级（仅可查看）」两组；名片卡片中，无真实联系方式时点击提示「演示环境」。
+
+**测试**：后端 220 个测试通过（新增推荐规则、买入校验、名片流程等用例，改写交接用例）；`LLM_API_KEY=` 无 Key 模式同样通过；前端类型检查、lint、构建通过。场景评估新增 P05（需求匹配推荐）、S03（犹豫时不催促），H01–H03 按新流程改写，共 21 个场景。
+
+**场景评估中发现**
+- P05 首次运行时，模型说「固收产品业绩比较基准略高于现金管理类」，把业绩比较基准与七日年化放在一起比较，属于跨口径比较。已在 Prompt 中补充规则，评审标准同步加入。
+- S03 中模型回答「这款产品没有限时或额度紧张的提示」，这是很好的回答，但简单关键词检查误判为违规。已去掉该检查，改由支持否定判断的输出审查和 LLM 评审把关。
+- **第一次全量 3 次：58/63**。主场景 M01 0/3，是销售定位带来的副作用：模型更积极地「帮客户达到 5%」，在说明「5% 需要 PR3 以上」之后，紧接着另起一句「情况变化可以重新测评」（分句检查漏拦），或建议「联系理财经理探讨调整策略」。修复如下：
+  - 诱导检查扩展到段落级：同一段落中「重新测评」与「收益 / 更高风险」同时出现即拦截，删句时只删该段中提到重新测评的句子。
+  - Prompt 明确：目标达不到时，只提供等级范围内的选择（降低目标、延长期限、调整备用金），不用「找理财经理调整策略」暗示可以突破等级。
+  - 「目标收益只是期望，不是承诺」写入配置检查结果（代码生成、必定展示）。
+- M02 1/3：模型直接推荐、忽略「自称 35 岁、登记 52 岁」的冲突。改为代码补充：客户自称年龄与登记不一致、回答又没有说明时，追加「以银行登记为准，可到网点更新」（`age_conflict_note`）。
+- H03 1/3：回答「目前没有显示李经理已联系您的记录」是如实陈述，关键词检查误判。评估脚本的禁止片段检查改为与输出审查一致的否定判断。
+- 评审改进：评审能看到界面块中的文字（检查结果、提示、免责声明），而不只是块的类型，评的是客户实际看到的内容。
+- **第二次全量 3 次：59/63**。M01 已稳定（3/3）。P05 1/3：模型仍写「业绩比较基准高于现金管理类产品」作为推荐理由，Prompt 约束不可靠，改为代码规则 `O-METRIC_MIXING`（同句出现业绩比较基准、现金管理类 / 七日年化和比较用语即拦截，说明「口径不同」的除外）。M02：一次是评审 JSON 中有未转义引号导致解析失败（实际判定通过，已修复解析），一次是年龄说明放在末尾被认为太弱，改为放在回答开头。
+
+**评估结果**：第三次全量 3 次 **63/63，21/21 场景全部通过，检查项 315/315**；改写 5 次均一次通过，无兜底；中位延迟 5.0 秒。报告：`evaluations/reports/scenarios-2026-10-17.md`（`-sales-round1/2` 为中间轮次）。
+
+**文件**
+- 🆕 `backend/app/purchases/service.py`、`backend/app/api/purchases.py`
+- 🆕 `frontend/src/components/products/ProductActions.tsx`、`PurchaseFlow.tsx`
+- ✏️ `backend/app/compliance/output_guard.py`、`backend/app/agent/graph.py`、`prompts.py`
+- ✏️ `backend/app/products/service.py`、`ranking.py`、`backend/app/api/products.py`、`backend/app/tools/product_tools.py`
+- ✏️ `backend/app/handoff/service.py`、`backend/app/tools/handoff_tools.py`、`backend/app/api/handoffs.py`、`backend/app/api/chat.py`、`backend/app/customers/base.py`、`backend/app/main.py`
+- ✏️ `data/customers/base_profiles.yaml`
+- ✏️ `backend/tests/test_compliance.py`、`test_agent_graph.py`、`test_api_chat.py`
+- ✏️ `frontend/src/components/AppShell.tsx`、`Chat.tsx`、`blocks/HandoffBlocks.tsx`、`blocks/ProductBlocks.tsx`、`blocks/AllocationView.tsx`、`products/*`、`rm/RmDashboard.tsx`、`src/lib/api.ts`、`src/lib/types.ts`
+- ✏️ `evaluations/scenarios.yaml`、`evaluations/run_scenarios.py`
+- ✏️ `CLAUDE.md`、`docs/ARCHITECTURE.md`（D24–D27）、`COMPLIANCE_DESIGN.md`（§3.3、输出规则）、`EVALUATION_PLAN.md`、`ROADMAP.md`、`README.md`
+
+**限制**
+- 演示没有真实的企业微信 / 电话，点击时只提示「演示环境」。
+- 不记录持仓：AI 不知道客户刚「买」了什么（产品负责人选择只做到确认页）。
+- 界面视觉尚未改版（下一轮）。
 
 **提交**：待产品负责人执行。

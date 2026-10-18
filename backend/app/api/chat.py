@@ -14,12 +14,11 @@ from app.assessment.service import latest_confirmed
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
 from app.customers.base import get_customer_info_system
-from app.customers.context import assessed_loss_tolerance, prompt_section
+from app.customers.context import age_conflict_note, assessed_loss_tolerance, prompt_section
 from app.customers.needs import get_needs
 from app.db.models import Conversation, Message, PolicyDecisionLog, ToolCallLog
 from app.db.session import get_session
 from app.handoff.service import (
-    AI_PAUSED,
     STATUS_LABELS,
     active_handoff,
     handoff_view,
@@ -71,12 +70,6 @@ class ConversationSummary(BaseModel):
     message_count: int
 
 
-class MessagesSince(BaseModel):
-    messages: list[MessageOut]
-    total: int
-    handoff: dict | None
-
-
 @lru_cache
 def _build_agent():
     settings = get_settings()
@@ -108,22 +101,10 @@ def chat(
     db.commit()
 
     handoff = active_handoff(db, conversation.id)
-    if handoff is not None and handoff.status in AI_PAUSED:
-        # 理财经理已接手：AI 暂停回复，客户消息直接转给理财经理
-        db.add(Message(conversation_id=conversation.id, role="user", content=req.message))
-        conversation.updated_at = now
-        db.commit()
-        relay = {"type": "handoff_relay", "rm_name": handoff.assigned_rm_name}
-        return ChatResponse(
-            conversation_id=conversation.id,
-            reply=ChatReply(content="", ui_blocks=[relay]),
-            state=customer_state(db, customer_id, now),
-            handoff=handoff_view(handoff),
-        )
-
     history = _load_history(db, conversation.id)
+    base = get_customer_info_system().get(customer_id)
     customer_context = prompt_section(
-        get_customer_info_system().get(customer_id),
+        base,
         get_needs(db, customer_id),
         assessed_loss_tolerance(db, customer_id),
     )
@@ -159,6 +140,9 @@ def chat(
     except Exception as exc:
         logger.exception("agent failed", extra={"conversation_id": conversation.id})
         raise HTTPException(status_code=502, detail="AI 服务暂时不可用，请稍后再试") from exc
+    if note := age_conflict_note(req.message, result["reply"], base):
+        # 放在回答开头：年龄影响适当性判断，客户应先看到以登记为准
+        result["reply"] = f"> {note}\n\n{result['reply']}"
 
     db.add(Message(conversation_id=conversation.id, role="user", content=req.message))
     db.add(
@@ -213,23 +197,6 @@ def get_conversation(
         id=conversation.id,
         title=conversation.title,
         messages=[_message_out(m) for m in conversation.messages],
-        handoff=handoff_view(latest_handoff(db, conversation.id)),
-    )
-
-
-@router.get("/conversations/{conversation_id}/messages", response_model=MessagesSince)
-def messages_since(
-    conversation_id: str,
-    after: int = 0,
-    db: Session = Depends(get_session),
-    customer_id: str = Depends(get_customer_id),
-):
-    """增量拉取：前端在人工服务进行中轮询，获取理财经理的新回复与最新交接状态。"""
-    conversation = _owned_conversation(db, conversation_id, customer_id)
-    messages = conversation.messages
-    return MessagesSince(
-        messages=[_message_out(m) for m in messages[after:]],
-        total=len(messages),
         handoff=handoff_view(latest_handoff(db, conversation.id)),
     )
 

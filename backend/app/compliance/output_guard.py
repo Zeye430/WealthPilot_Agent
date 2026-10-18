@@ -6,6 +6,7 @@
 import re
 from collections.abc import Collection
 
+from app.assessment.scoring import rating_allows
 from app.compliance.policy import Permission
 from app.products.catalog import load_catalog
 
@@ -102,9 +103,35 @@ SUGGESTION = re.compile(r"建议|可以|可|考虑|评估|是否需要|如需|�
 # 同一句明确说明了限制（与风险等级不匹配、超出评级），是在解释取舍，而不是建议调高评级
 LIMITATION = re.compile(r"不匹配|超出|不符合|无法购买|不能购买|无权")
 SENTENCE_SPLIT = re.compile(r"[。！？；\n]")
-# 个性化推荐结论：MVP 默认不输出（docs/COMPLIANCE_DESIGN.md §8）
-PERSONALIZED = [
-    re.compile(p) for p in (r"适合(您|你)", r"(推荐|建议)(您|你)?(购买|买入|配置|选择|入手)")
+# 需求匹配式推荐（产品负责人决定，2026-10-18）：允许在评级范围内推荐，以下三类仍然禁止
+RECOMMEND_WORDS = re.compile(r"推荐|建议|适合|匹配|首选|可以考虑|值得|不妨")
+NOT_RECOMMENDING = re.compile(r"不(作|做)?(推荐|建议)|无法推荐|不能推荐|不适合")
+# 1. 推荐超出客户评级的产品
+# 2. 制造紧迫感的销售话术
+PRESSURE_SALES = [
+    re.compile(p)
+    for p in (
+        r"限时",
+        r"抢购",
+        r"(名额|额度)(有限|紧张)",
+        r"仅剩",
+        r"售完即止",
+        r"错过(就|再|将|了)",
+        r"最后(的)?(机会|一天|几天)",
+        r"赶紧|赶快",
+        r"抓紧(时间)?(购买|买入|下单|入手)",
+        r"马上(购买|下单|买入|抢)",
+        r"手慢无",
+        r"再不买",
+    )
+]
+# 3. 以收益高低作为推荐理由
+RETURN_PITCH = [
+    re.compile(p)
+    for p in (
+        r"(推荐|首选|建议|值得|不妨).{0,12}收益(最高|更高|最好)",
+        r"收益(最高|更高|最好).{0,12}(推荐|首选|值得|建议)",
+    )
 ]
 
 
@@ -119,11 +146,61 @@ FALSE_HANDOFF = [
 ]
 
 
-def steers_reassessment(text: str) -> bool:
-    return any(
+# 跨口径比较收益：业绩比较基准与七日年化（现金管理类）口径不同，不能比较高低。
+# 对比表由工具分列口径；这条规则拦截回答文字中的比较（P7 场景评估 P05 发现，Prompt 约束不可靠）
+BENCHMARK = re.compile(r"业绩比较基准")
+CASH_METRIC = re.compile(r"七日年化|万份收益|现金管理类|活钱宝|日日盈")
+COMPARISON = re.compile(r"高于|低于|更高|更低|略高|略低|稍高|稍低|高一些|低一些|超过|不如|高出")
+METRIC_CAVEAT = re.compile(r"口径不同|不同口径|(不能|不可|无法|不宜)直接比较")
+
+
+def metric_mixing(text: str) -> list[str]:
+    return [
+        s.strip()[:40]
+        for s in SENTENCE_SPLIT.split(text)
+        if BENCHMARK.search(s)
+        and CASH_METRIC.search(s)
+        and COMPARISON.search(s)
+        and not METRIC_CAVEAT.search(s)
+    ]
+
+
+def unsuitable_recommendations(text: str, risk_rating: str | None) -> list[str]:
+    """推荐了超出客户评级的产品的句子（同句说明「超出 / 不推荐」等限制的不算）。"""
+    if not risk_rating:
+        return []
+    catalog = load_catalog()
+    hits = []
+    for s in SENTENCE_SPLIT.split(text):
+        if not RECOMMEND_WORDS.search(s) or LIMITATION.search(s) or NOT_RECOMMENDING.search(s):
+            continue
+        for code in mentioned_products(s):
+            product = catalog.get(code)
+            if product and not rating_allows(risk_rating, product.effective_risk_level):
+                hits.append(s.strip()[:40])
+                break
+    return hits
+
+
+PARAGRAPH_SPLIT = re.compile(r"\n\s*\n")
+
+
+def _sentence_steers(s: str) -> bool:
+    return bool(
         (REASSESSMENT.search(s) and RISK_OR_RETURN.search(s))
         or (RISK_UPGRADE.search(s) and SUGGESTION.search(s) and not LIMITATION.search(s))
-        for s in SENTENCE_SPLIT.split(text)
+    )
+
+
+def _paragraph_steers(p: str) -> bool:
+    # 同一段先讲「5% 需要 PR3 以上」，下一句再说「情况变化可以重新测评」，连起来读就是诱导
+    # （P7 场景评估 M01 发现）。讨论收益或更高风险时，不主动提重新测评。
+    return bool(REASSESSMENT.search(p) and RISK_OR_RETURN.search(p))
+
+
+def steers_reassessment(text: str) -> bool:
+    return any(_sentence_steers(s) for s in SENTENCE_SPLIT.split(text)) or any(
+        _paragraph_steers(p) for p in PARAGRAPH_SPLIT.split(text)
     )
 
 
@@ -142,14 +219,26 @@ def needs_no_guarantee_note(question: str, reply: str) -> bool:
 
 
 def remove_steering(reply: str) -> str:
-    """删去诱导调高评级的句子。这类句子是附加建议，删去后回答的其余内容仍然完整。"""
-    parts = re.split(f"({SENTENCE_SPLIT.pattern})", reply)
-    kept = "".join(
-        s + d
-        for s, d in zip(parts[::2], [*parts[1::2], ""], strict=True)
-        if not steers_reassessment(s)
-    )
-    return re.sub(r"\n{3,}", "\n\n", kept).strip()
+    """删去诱导调高评级的句子。这类句子是附加建议，删去后回答的其余内容仍然完整。
+
+    段落级诱导只删去该段中提到重新测评的句子，保留对收益与风险取舍的说明。
+    """
+    paragraphs = re.split(f"({PARAGRAPH_SPLIT.pattern})", reply)
+    out = []
+    for i, para in enumerate(paragraphs):
+        if i % 2:  # 段落分隔符
+            out.append(para)
+            continue
+        drop_reassessment = _paragraph_steers(para)
+        parts = re.split(f"({SENTENCE_SPLIT.pattern})", para)
+        out.append(
+            "".join(
+                s + d
+                for s, d in zip(parts[::2], [*parts[1::2], ""], strict=True)
+                if not _sentence_steers(s) and not (drop_reassessment and REASSESSMENT.search(s))
+            )
+        )
+    return re.sub(r"\n{3,}", "\n\n", "".join(out)).strip()
 
 
 def _negated(text: str, start: int) -> bool:
@@ -211,12 +300,14 @@ def check_output(
     permission: Permission,
     grounding: str = "",
     retrieved: Collection[str] = (),
+    risk_rating: str | None = None,
 ) -> list[str]:
     """返回违规代码列表；空列表表示通过。
 
     grounding 是本轮之前已出现的内容：测评前只含客户消息；测评后含客户消息、历史回答和工具结果。
     回答中提到的产品必须在其中出现过，防止模型凭空编造或测评前泄露产品信息。
     retrieved 是本轮检索到的资料编号：回答中的 [编号] 必须在其中，否则视为编造出处。
+    risk_rating 是客户的有效评级：用于检查是否推荐了超出评级的产品。
     """
     violations = []
     if _affirmative_hits(reply, PROHIBITED_CLAIMS):
@@ -228,8 +319,14 @@ def check_output(
     else:
         if ungrounded:
             violations.append("O-UNGROUNDED_PRODUCT")
-        if _affirmative_hits(reply, PERSONALIZED):
-            violations.append("O-PERSONALIZED_ADVICE")
+        if unsuitable_recommendations(reply, risk_rating):
+            violations.append("O-UNSUITABLE_RECOMMENDATION")
+    if _affirmative_hits(reply, PRESSURE_SALES):
+        violations.append("O-PRESSURE_SALES")
+    if _affirmative_hits(reply, RETURN_PITCH):
+        violations.append("O-RETURN_PITCH")
+    if metric_mixing(reply):
+        violations.append("O-METRIC_MIXING")
     if steers_reassessment(reply):
         violations.append("O-REASSESSMENT_STEERING")
     if _affirmative_hits(reply, FALSE_HANDOFF):
@@ -241,18 +338,29 @@ def check_output(
     return violations
 
 
-def offending_snippets(reply: str) -> list[str]:
+def offending_snippets(reply: str, risk_rating: str | None = None) -> list[str]:
     """违规片段（写入审计记录，便于事后定位模型反复触发的表述）。"""
-    hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, PERSONALIZED)
-    hits += _affirmative_hits(reply, FALSE_HANDOFF)
-    hits += [s.strip()[:40] for s in SENTENCE_SPLIT.split(reply) if steers_reassessment(s)]
+    hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, PRESSURE_SALES)
+    hits += _affirmative_hits(reply, RETURN_PITCH) + _affirmative_hits(reply, FALSE_HANDOFF)
+    hits += metric_mixing(reply)
+    # 测评前任何推荐都是违规；测评后只有推荐超评级产品才是
+    hits += unsuitable_recommendations(reply, risk_rating) if risk_rating else []
+    hits += _affirmative_hits(reply, RECOMMENDATION) if not risk_rating else []
+    hits += [s.strip()[:40] for s in SENTENCE_SPLIT.split(reply) if _sentence_steers(s)]
+    hits += [
+        s.strip()[:40]
+        for p in PARAGRAPH_SPLIT.split(reply)
+        if _paragraph_steers(p)
+        for s in SENTENCE_SPLIT.split(p)
+        if REASSESSMENT.search(s)
+    ]
     return list(dict.fromkeys(hits))[:5]
 
 
-def describe(violations: list[str], reply: str) -> str:
+def describe(violations: list[str], reply: str, risk_rating: str | None = None) -> str:
     """给 LLM 的改写反馈。"""
     hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, RECOMMENDATION)
-    hits += offending_snippets(reply)
+    hits += offending_snippets(reply, risk_rating)
     return (
         "你的上一条回答未通过合规审查（"
         + "、".join(violations)
@@ -264,7 +372,7 @@ def describe(violations: list[str], reply: str) -> str:
         )
         + ("引用了未检索到的资料编号。" if "O-FAKE_CITATION" in violations else "")
         + (
-            "人工服务尚未接入，只能说「已生成请求，待您确认」或「已提交，等待理财经理接单」。"
+            "理财经理尚未接入，只能说「已将您的咨询要点同步给理财经理，您可以通过名片直接联系」。"
             if "O-FALSE_HANDOFF_CLAIM" in violations
             else ""
         )
@@ -275,8 +383,24 @@ def describe(violations: list[str], reply: str) -> str:
             else ""
         )
         + (
-            "不得使用「适合您」「建议配置/推荐购买」等个性化推荐措辞，可改为「在您的风险等级范围内的产品包括」。"
-            if "O-PERSONALIZED_ADVICE" in violations
+            "不得推荐超出客户风险等级的产品；如提到这类产品，必须说明超出风险等级、无法购买。"
+            if "O-UNSUITABLE_RECOMMENDATION" in violations
+            else ""
+        )
+        + (
+            "不得使用「限时」「错过就没了」「赶紧买」等制造紧迫感的话术，尊重客户自己的决定。"
+            if "O-PRESSURE_SALES" in violations
+            else ""
+        )
+        + (
+            "推荐理由只能是期限、流动性、费用、起购金额等与客户需求的匹配点，不能以收益高低作为理由。"
+            if "O-RETURN_PITCH" in violations
+            else ""
+        )
+        + (
+            "业绩比较基准与七日年化（现金管理类）口径不同，不能比较高低；"
+            "请删去比较，用期限、流动性、费用说明区别。"
+            if "O-METRIC_MIXING" in violations
             else ""
         )
         + "请改写：不得承诺收益或保本；客户未完成风险测评时不得推荐或介绍任何产品；"

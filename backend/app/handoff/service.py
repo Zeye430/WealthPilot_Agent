@@ -1,9 +1,12 @@
 """人工交接状态机与交接摘要。
 
+客户通过理财经理名片（企业微信 / 电话）直接联系；系统同时把咨询要点同步到理财经理看板。
 状态只能由真实操作推进，且每一步都校验「谁」有权推进：
-    AWAITING_CONSENT ─客户同意→ PENDING ─接单→ ACCEPTED ─首次回复→ IN_PROGRESS ─结束→ RESOLVED
-    AWAITING_CONSENT / PENDING ─客户拒绝或取消→ CANCELLED；ACCEPTED 也可直接结束 → RESOLVED
+    PENDING（已同步，待跟进）─理财经理跟进→ ACCEPTED ─结束→ RESOLVED；PENDING 也可直接结束
 交接摘要由代码根据结构化数据生成（不由 LLM 撰写），避免摘要中出现与事实不符的内容。
+
+产品负责人决定（2026-10-18）：客户界面不展示资料确认卡片，只展示理财经理名片并告知「咨询要点已同步」；
+不再在应用内与理财经理文字沟通，因此 AI 始终可以回复。
 """
 
 from datetime import datetime
@@ -19,34 +22,31 @@ from app.customers.needs import get_needs
 from app.db.models import Handoff, HandoffEvent, Message
 from app.products.catalog import load_catalog
 
-AWAITING_CONSENT = "AWAITING_CONSENT"
 PENDING = "PENDING"
 ACCEPTED = "ACCEPTED"
-IN_PROGRESS = "IN_PROGRESS"
 RESOLVED = "RESOLVED"
 CANCELLED = "CANCELLED"
-ACTIVE = (AWAITING_CONSENT, PENDING, ACCEPTED, IN_PROGRESS)
-RM_VISIBLE = (PENDING, ACCEPTED, IN_PROGRESS, RESOLVED)  # 客户同意之前，理财经理看不到
-AI_PAUSED = (ACCEPTED, IN_PROGRESS)  # 理财经理接手后 AI 停止回复
+# 旧流程的状态（客户确认、应用内服务），只为兼容历史数据保留标签
+AWAITING_CONSENT = "AWAITING_CONSENT"
+IN_PROGRESS = "IN_PROGRESS"
+ACTIVE = (PENDING, ACCEPTED)
+RM_VISIBLE = (PENDING, ACCEPTED, IN_PROGRESS, RESOLVED)
 
 STATUS_LABELS = {
-    AWAITING_CONSENT: "待客户确认",
-    PENDING: "已提交，等待理财经理接单",
-    ACCEPTED: "理财经理已接单",
-    IN_PROGRESS: "理财经理服务中",
+    PENDING: "咨询要点已同步，等待理财经理跟进",
+    ACCEPTED: "理财经理跟进中",
     RESOLVED: "已结束",
     CANCELLED: "已取消",
+    AWAITING_CONSENT: "待客户确认（旧流程）",
+    IN_PROGRESS: "理财经理服务中（旧流程）",
 }
 
 # 角色 → 允许的状态变更
 TRANSITIONS = {
-    (AWAITING_CONSENT, PENDING): "customer",
-    (AWAITING_CONSENT, CANCELLED): "customer",
-    (PENDING, CANCELLED): "customer",
     (PENDING, ACCEPTED): "rm",
-    (ACCEPTED, IN_PROGRESS): "rm",
+    (PENDING, RESOLVED): "rm",
     (ACCEPTED, RESOLVED): "rm",
-    (IN_PROGRESS, RESOLVED): "rm",
+    (PENDING, CANCELLED): "customer",
 }
 
 REASON_LABELS = {
@@ -61,7 +61,8 @@ REASON_LABELS = {
     "HUMAN_AUTHORIZATION_REQUIRED": "需要人工授权或审批",
 }
 
-CONSENT_SCOPE = [
+# 同步给理财经理的内容（看板展示；客户界面以一句话告知）
+SYNC_SCOPE = [
     "基础资料（客户等级、在本行资产）",
     "本次需求（金额、期限、流动性、目标收益等）",
     "风险测评结果",
@@ -114,8 +115,6 @@ def transition(db: Session, handoff: Handoff, to: str, role: str, actor: str, no
     previous = handoff.status
     handoff.status = to
     handoff.updated_at = now
-    if to == PENDING:
-        handoff.consented_at = now
     _record(db, handoff, previous, actor, now)
     db.flush()
     return handoff
@@ -182,7 +181,7 @@ def _product_codes(block: dict) -> list[str]:
     return []
 
 
-def create_draft(
+def create_request(
     db: Session,
     conversation_id: str,
     customer_id: str,
@@ -190,7 +189,7 @@ def create_draft(
     open_questions: list[str],
     now: datetime,
 ) -> Handoff:
-    """生成交接草稿（待客户确认）。同一会话已有进行中的交接时直接返回，不重复创建。"""
+    """生成交接请求并同步到理财经理看板。同一会话已有进行中的交接时直接返回，不重复创建。"""
     if existing := active_handoff(db, conversation_id):
         return existing
     if reason not in REASON_LABELS:
@@ -203,9 +202,9 @@ def create_draft(
         conversation_id=conversation_id,
         customer_id=customer_id,
         reason=reason,
-        status=AWAITING_CONSENT,
+        status=PENDING,
         summary=build_summary(db, conversation_id, customer_id, reason, open_questions, now),
-        consent_scope=CONSENT_SCOPE,
+        consent_scope=SYNC_SCOPE,
         assigned_rm_id=rm_id,
         assigned_rm_name=rm_name,
         created_at=now,
@@ -226,5 +225,20 @@ def handoff_view(handoff: Handoff | None) -> dict | None:
         "status_label": STATUS_LABELS[handoff.status],
         "rm_name": handoff.assigned_rm_name,
         "reason": REASON_LABELS.get(handoff.reason, handoff.reason),
-        "ai_paused": handoff.status in AI_PAUSED,
+    }
+
+
+def rm_contact_card(handoff: Handoff) -> dict:
+    """客户界面的理财经理名片：只含理财经理信息与联系方式，不展示客户资料。"""
+    base = get_customer_info_system().get(handoff.customer_id)
+    if base and base.assigned_rm.id == handoff.assigned_rm_id:
+        contact = base.assigned_rm.contact_card()
+    else:
+        contact = {"rm_name": handoff.assigned_rm_name, "rm_title": "理财经理"}
+        contact |= {"phone": None, "wecom_url": None}
+    return {
+        "type": "rm_contact",
+        **contact,
+        "handoff_id": handoff.id,
+        "notice": f"您的咨询要点已同步给{handoff.assigned_rm_name}，联系时无需重复说明。",
     }

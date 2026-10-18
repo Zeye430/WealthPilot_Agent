@@ -5,7 +5,7 @@ from decimal import Decimal as D
 import pytest
 
 from app.customers.base import age_option, get_customer_info_system
-from app.customers.context import prompt_section
+from app.customers.context import age_conflict_note, prompt_section
 from app.customers.needs import Needs
 from app.products.allocation import FAIL, OK, WARN, AllocationError, simulate
 from app.products.catalog import load_catalog
@@ -110,3 +110,12 @@ def test_invalid_items_raise():
         simulate([("不存在的产品", D(1000))], CATALOG, "C2", MAIN_NEEDS)
     with pytest.raises(AllocationError):
         simulate([("知岸活钱宝", D(0))], CATALOG, "C2", MAIN_NEEDS)
+
+
+def test_age_conflict_note_when_reply_ignores_bank_record():  # P7 场景评估 M02
+    base = get_customer_info_system().get("demo_customer_1")  # 52 岁
+    note = age_conflict_note("我今年35岁，帮我看看产品", "以下是产品……", base)
+    assert note and "52 岁" in note and "网点更新" in note
+    assert age_conflict_note("我今年35岁", "根据登记，您的年龄为 52 岁……", base) is None
+    assert age_conflict_note("我52岁", "以下是产品……", base) is None
+    assert age_conflict_note("我想买理财", "以下是产品……", base) is None

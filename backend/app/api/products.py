@@ -1,6 +1,6 @@
-"""产品浏览 API。
+"""产品浏览 API：全部在售产品可查看，能否买入由代码判断。
 
-与 LLM 工具共用同一套服务与适当性规则：绕过 Agent 直接调用接口，也绕不过过滤（S11）。
+与 LLM 工具共用同一套适当性规则：超出评级的产品在任何入口都不能买入（S11）。
 """
 
 from datetime import datetime
@@ -12,62 +12,80 @@ from app.api.deps import get_customer_id, get_now
 from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
 from app.compliance.policy import Permission, evaluate_gate
-from app.compliance.suitability import REASON_LABELS, CustomerContext, evaluate
+from app.compliance.suitability import CustomerContext, evaluate
 from app.db.session import get_session
 from app.products import presenter
 from app.products.catalog import ProductType, load_catalog
-from app.products.service import SearchFilters, search
+from app.products.service import SearchFilters, browse
+from app.purchases.service import blocking_reasons
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
 
-def assessed_context(
+def customer_rating(
     db: Session = Depends(get_session),
     customer_id: str = Depends(get_customer_id),
     now: datetime = Depends(get_now),
-) -> CustomerContext:
+) -> str | None:
+    """有效测评的评级；未测评或已过期时为 None（仍可浏览，但不能买入）。"""
     gate = evaluate_gate(latest_confirmed(db, customer_id), now)
-    if gate.permission is not Permission.ASSESSED:
-        raise HTTPException(status_code=403, detail="请先完成风险承受能力测评，再查看产品。")
-    return CustomerContext(risk_rating=gate.risk_rating)
+    return gate.risk_rating if gate.permission is Permission.ASSESSED else None
 
 
 @router.get("")
 def list_products(
     product_type: list[ProductType] | None = Query(default=None),
     max_lockup_days: int | None = None,
-    ctx: CustomerContext = Depends(assessed_context),
+    rating: str | None = Depends(customer_rating),
 ):
+    """全部在售产品。可买入的排在前面；超出评级或未测评的标注原因，只能查看。"""
     catalog = load_catalog()
-    result = search(
-        catalog, ctx, SearchFilters(product_types=product_type, max_lockup_days=max_lockup_days)
+    result = browse(
+        catalog, rating, SearchFilters(product_types=product_type, max_lockup_days=max_lockup_days)
     )
-    band = load_questionnaire().band(ctx.risk_rating)
+    band = load_questionnaire().band(rating) if rating else None
     return {
         "catalog_version": catalog.catalog_version,
         "rating": {
-            "code": ctx.risk_rating,
+            "code": band.rating,
             "name": band.name,
             "max_product_risk": band.max_product_risk,
-        },
+        }
+        if band
+        else None,
         "items": [
-            {**presenter.card(r.product), "rank": i + 1, "rank_factors": r.explanation()}
+            {
+                **presenter.card(r.product),
+                "purchasable": True,
+                "rank": i + 1,
+                "highlights": r.highlights(),
+            }
             for i, r in enumerate(result.ranked)
         ]
-        + [{**presenter.card(p), "rank": None, "warnings": e.messages} for p, e in result.unranked],
-        "excluded": [{"reason": REASON_LABELS[c], "count": n} for c, n in result.excluded.items()],
-        "ranking_note": "排序依据：期限匹配、流动性、费用；不按收益排序。",
+        + [
+            {
+                **presenter.card(p),
+                "purchasable": not blocking_reasons(p, rating),
+                "rank": None,
+                "warnings": messages,
+            }
+            for p, messages in result.other
+        ],
+        "ranking_note": "排序依据：流动性、费用；不按收益排序。",
     }
 
 
 @router.get("/{code}")
-def product_detail(code: str, ctx: CustomerContext = Depends(assessed_context)):
+def product_detail(code: str, rating: str | None = Depends(customer_rating)):
+    """产品详情对所有客户开放（客观条款）；能否买入由代码判断并说明原因。"""
     product = load_catalog().get(code)
     if product is None:
         raise HTTPException(status_code=404, detail="产品不存在")
-    eligibility = evaluate(product, ctx)
+    blocked = blocking_reasons(product, rating)
+    eligibility = evaluate(product, CustomerContext(risk_rating=rating)) if rating else None
     return {
         **presenter.detail(product),
-        "eligible": eligibility.eligible,
-        "eligibility_messages": eligibility.messages,
+        "eligible": eligibility.eligible if eligibility else False,
+        "eligibility_messages": eligibility.messages if eligibility else [],
+        "purchase": {"allowed": not blocked, "reasons": blocked},
     }

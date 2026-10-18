@@ -6,13 +6,15 @@ import { ApiError, DEMO_RMS, rmApi, type RmHandoffDetail, type RmHandoffRow } fr
 
 const POLL_MS = 3000;
 
-/** 理财经理看板（演示）：只能看到分配给自己、且客户已同意分享的交接请求。 */
+/**
+ * 理财经理看板（演示）：查看客户联系前同步过来的咨询要点。
+ * 客户通过名片上的企业微信 / 电话联系理财经理，看板只用于了解情况和标记跟进状态。
+ */
 export function RmDashboard() {
   const [rm, setRm] = useState(DEMO_RMS[0].id);
   const [rows, setRows] = useState<RmHandoffRow[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<RmHandoffDetail | null>(null);
-  const [reply, setReply] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -43,7 +45,7 @@ export function RmDashboard() {
     }
   }
 
-  const canReply = detail && (detail.status === "ACCEPTED" || detail.status === "IN_PROGRESS");
+  const canResolve = detail && (detail.status === "PENDING" || detail.status === "ACCEPTED");
 
   return (
     <div className="flex h-full flex-col">
@@ -74,8 +76,8 @@ export function RmDashboard() {
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <aside className="border-b border-rule md:w-80 md:border-r md:border-b-0" aria-label="交接请求">
-          <p className="px-5 pt-4 text-xs font-medium text-ink-2">交接请求（客户已同意分享）</p>
-          {rows.length === 0 && <p className="px-5 py-3 text-sm text-ink-3">暂无请求</p>}
+          <p className="px-5 pt-4 text-xs font-medium text-ink-2">客户咨询</p>
+          {rows.length === 0 && <p className="px-5 py-3 text-sm text-ink-3">暂无咨询</p>}
           <ul className="space-y-1 p-3">
             {rows.map((r) => (
               <li key={r.id}>
@@ -103,7 +105,7 @@ export function RmDashboard() {
         <main className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {error && <p className="mb-3 text-sm text-danger">{error}</p>}
           {!detail ? (
-            <p className="text-sm text-ink-3">选择左侧的交接请求查看摘要。</p>
+            <p className="text-sm text-ink-3">选择左侧的客户咨询查看要点。</p>
           ) : (
             <div className="mx-auto max-w-3xl space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -120,24 +122,24 @@ export function RmDashboard() {
                       onClick={() => act(() => rmApi.accept(rm, detail.id))}
                       className="rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface"
                     >
-                      接单
+                      标记跟进中
                     </button>
                   )}
-                  {canReply && (
+                  {canResolve && (
                     <button
                       type="button"
                       onClick={() => act(() => rmApi.resolve(rm, detail.id))}
                       className="rounded-sm border border-rule px-4 py-2 text-sm hover:border-ink-3"
                     >
-                      结束服务
+                      结束跟进
                     </button>
                   )}
                 </div>
               </div>
 
               <section className="rounded-sm border border-rule bg-surface px-4 py-3 text-sm">
-                <h2 className="font-serif font-bold">交接摘要</h2>
-                <p className="mt-0.5 text-xs text-ink-3">由系统根据客户资料与对话自动生成，客户已同意分享：{detail.consent_scope.join("、")}</p>
+                <h2 className="font-serif font-bold">咨询要点</h2>
+                <p className="mt-0.5 text-xs text-ink-3">由系统根据客户资料与对话自动生成，包括：{detail.sync_scope.join("、")}</p>
                 <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
                   {detail.summary.customer && (
                     <Item label="客户资料">
@@ -160,7 +162,7 @@ export function RmDashboard() {
                   {detail.messages.map((m, i) => (
                     <li key={i} className={m.role === "user" ? "text-right" : ""}>
                       <span className="block text-[11px] text-ink-3">
-                        {{ user: "客户", assistant: "AI 助手", rm: "我（理财经理）" }[m.role]}
+                        {{ user: "客户", assistant: "AI 助手", rm: "理财经理（旧版应用内回复）" }[m.role]}
                       </span>
                       <span
                         className={`inline-block max-w-[85%] rounded-sm px-3 py-2 text-left leading-6 whitespace-pre-wrap ${
@@ -173,33 +175,6 @@ export function RmDashboard() {
                   ))}
                 </ol>
               </section>
-
-              {canReply && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const text = reply.trim();
-                    if (!text) return;
-                    setReply("");
-                    act(() => rmApi.reply(rm, detail.id, text));
-                  }}
-                  className="flex gap-2"
-                >
-                  <label htmlFor="rm-reply" className="sr-only">
-                    回复客户
-                  </label>
-                  <input
-                    id="rm-reply"
-                    value={reply}
-                    onChange={(e) => setReply(e.target.value)}
-                    placeholder="回复客户"
-                    className="min-w-0 flex-1 rounded-sm border border-rule bg-surface px-3 py-2 text-sm"
-                  />
-                  <button type="submit" className="rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface">
-                    发送
-                  </button>
-                </form>
-              )}
 
               <section className="text-xs text-ink-3">
                 <h2 className="font-medium text-ink-2">状态记录</h2>

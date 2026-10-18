@@ -77,8 +77,8 @@ def test_negated_or_factual_statements_pass(text):
 def test_recommendation_blocked_before_assessment():  # S02e
     text = "我建议您购买一款固收类理财。"
     assert check_output(text, Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
-    # 测评后同样不输出个性化推荐结论（Phase 5 起）
-    assert check_output(text, Permission.ASSESSED) == ["O-PERSONALIZED_ADVICE"]
+    # 测评后允许需求匹配式推荐（产品负责人决定，2026-10-18）
+    assert check_output(text, Permission.ASSESSED, risk_rating="C2") == []
 
 
 def test_negated_recommendation_passes_before_assessment():
@@ -128,6 +128,23 @@ def test_reassessment_allowed_when_circumstances_change():
     assert check_output(text, Permission.ASSESSED) == []
 
 
+def test_reassessment_in_same_paragraph_as_return_gap_blocked():
+    # P7 场景评估 M01：两句分开写，连起来读仍是「想要 5% 就去重新测评」
+    text = (
+        "如果您希望追求 5% 左右的收益，可能需要考虑 PR3 及以上的产品，但这超出了您的风险承受能力。"
+        "若您的情况发生变化，可以重新测评。"
+    )
+    assert "O-REASSESSMENT_STEERING" in check_output(text, Permission.ASSESSED)
+    redacted = remove_steering(text)
+    assert redacted.endswith("但这超出了您的风险承受能力。")
+    assert check_output(redacted, Permission.ASSESSED) == []
+
+
+def test_reassessment_in_separate_paragraph_passes():
+    text = "现金管理类产品通常每日开放。\n\n如果您的收入或资产情况发生变化，可以重新测评。"
+    assert check_output(text, Permission.ASSESSED) == []
+
+
 def test_neutral_reassessment_mentions_pass():
     for text in (
         "如果您的情况确实发生了变化（如收入、资产规模有重大改变），可以重新进行风险测评。",
@@ -154,11 +171,58 @@ def test_rewrite_feedback_quotes_steering_sentence():
     assert "想要更高收益的话" in describe(["O-REASSESSMENT_STEERING"], reply)
 
 
-def test_personalized_advice_blocked_after_assessment():
-    assert "O-PERSONALIZED_ADVICE" in check_output("建议配置现金管理类产品。", Permission.ASSESSED)
-    assert "O-PERSONALIZED_ADVICE" in check_output("这款很适合您。", Permission.ASSESSED)
-    neutral = "在您的风险等级范围内的产品包括现金管理类和固定收益类。"
-    assert check_output(neutral, Permission.ASSESSED) == []
+# ---------- 需求匹配式推荐（产品负责人决定，2026-10-18） ----------
+
+
+def _assessed(text, rating="C2"):
+    # grounding 用回答本身：这里只测推荐规则，产品是否查询过由其他用例覆盖
+    return check_output(text, Permission.ASSESSED, grounding=text, risk_rating=rating)
+
+
+def test_need_matched_recommendation_within_rating_passes():
+    text = (
+        "根据您两年内不用、20 万需要随时取用的需求，比较匹配的是知岸活钱宝和鸿屿睿远两年持有："
+        "前者每日开放，后者持有期与您的计划一致。点开卡片可查看详情或买入。"
+    )
+    assert _assessed(text) == []
+
+
+def test_recommending_product_above_rating_blocked():
+    assert _assessed("我推荐知岸均衡配置，股债平衡。") == ["O-UNSUITABLE_RECOMMENDATION"]
+    assert _assessed("知岸权益精选也值得考虑。") == ["O-UNSUITABLE_RECOMMENDATION"]
+    # 同一产品对 C4 客户在评级范围内
+    assert _assessed("我推荐知岸均衡配置，股债平衡。", rating="C4") == []
+
+
+def test_mentioning_product_above_rating_with_limitation_passes():
+    for text in (
+        "知岸均衡配置风险等级为 PR4，超出您的风险等级，不作推荐。",
+        "不建议您考虑知岸权益精选，它与您的风险等级不匹配。",
+    ):
+        assert _assessed(text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["这款是限时发售，额度有限，建议尽快。", "错过就没有了，赶紧下单。", "名额紧张，马上购买吧。"],
+)
+def test_pressure_sales_blocked(text):
+    assert "O-PRESSURE_SALES" in _assessed(text)
+
+
+def test_cross_metric_comparison_blocked():  # P7 场景评估 P05
+    for text in (
+        "匹配点：在保持每日流动性的同时，业绩比较基准高于现金管理类产品。",
+        "知岸稳享每日开放的业绩比较基准略高于七日年化收益率。",
+    ):
+        assert "O-METRIC_MIXING" in _assessed(text)
+    caveat = "业绩比较基准与现金管理类的七日年化口径不同，不能直接比较高低。"
+    assert _assessed(caveat) == []
+
+
+def test_return_pitch_blocked():
+    assert "O-RETURN_PITCH" in _assessed("我推荐这款，它的收益最高。")
+    assert _assessed("我不按收益高低推荐，而是看期限和流动性是否匹配。") == []
 
 
 # ---------- 虚构真人接入（Phase 6） ----------

@@ -41,6 +41,10 @@ export type ProductCard = {
   synthetic: boolean;
   rank?: number | null;
   rank_factors?: string;
+  /** 匹配理由（期限、流动性、费用），不涉及收益 */
+  highlights?: string[];
+  /** 能否买入：由后端按评级、在售状态等规则判断 */
+  purchasable?: boolean;
   warnings?: string[];
 };
 
@@ -65,6 +69,7 @@ export type ProductDetail = ProductCard & {
   metrics: { label: string; text: string; basis: string | null }[];
   eligible: boolean;
   eligibility_messages: string[];
+  purchase?: { allowed: boolean; reasons: string[] };
 };
 
 export type ProductDetailBlock = ProductDetail & { type: "product_detail" };
@@ -79,10 +84,29 @@ export type ComparisonTableBlock = {
 
 export type ProductListResponse = {
   catalog_version: string;
-  rating: { code: string; name: string; max_product_risk: string };
+  rating: { code: string; name: string; max_product_risk: string } | null;
   items: ProductCard[];
-  excluded: ExcludedSummary[];
   ranking_note: string;
+};
+
+export type PurchasePreview = {
+  allowed: boolean;
+  errors: string[];
+  product_code: string;
+  product_name: string;
+  risk_level: string;
+  amount: string | null;
+  subscription_fee: string | null;
+  subscription_rate: string;
+  available_balance: string;
+  documents: { id: string; name: string }[];
+  risk_disclosure: string;
+};
+
+export type PurchaseResult = PurchasePreview & {
+  status: "DEMO_NOT_PLACED";
+  message: string;
+  confirmed_at: string;
 };
 
 export type SourceItem = {
@@ -143,13 +167,7 @@ export type BaseProfileSummary = {
   source: string;
 };
 
-export type HandoffStatus =
-  | "AWAITING_CONSENT"
-  | "PENDING"
-  | "ACCEPTED"
-  | "IN_PROGRESS"
-  | "RESOLVED"
-  | "CANCELLED";
+export type HandoffStatus = "PENDING" | "ACCEPTED" | "RESOLVED" | "CANCELLED" | "AWAITING_CONSENT" | "IN_PROGRESS";
 
 export type HandoffView = {
   id: string;
@@ -157,27 +175,21 @@ export type HandoffView = {
   status_label: string;
   rm_name: string;
   reason: string;
-  ai_paused: boolean;
 };
 
-export type HandoffConsentBlock = HandoffView & {
-  type: "handoff_consent";
-  scope: string[];
-  preview: {
-    assessment: string;
-    needs: string[];
-    products_discussed: string[];
-    open_questions: string[];
-  };
+/** 理财经理名片：只含理财经理信息与联系方式，不展示客户资料 */
+export type RmContactBlock = {
+  type: "rm_contact";
+  rm_name: string;
+  rm_title: string;
+  phone: string | null;
+  wecom_url: string | null;
+  handoff_id: string;
+  notice: string;
 };
-
-export type HandoffStatusBlock = HandoffView & { type: "handoff_status" };
-export type HandoffRelayBlock = { type: "handoff_relay"; rm_name: string };
 
 export type UIBlock =
-  | HandoffConsentBlock
-  | HandoffStatusBlock
-  | HandoffRelayBlock
+  | RmContactBlock
   | NeedsUpdateBlock
   | AllocationBlock
   | SourcesBlock
@@ -190,7 +202,7 @@ export type UIBlock =
   | ComparisonTableBlock;
 
 export type ChatMessage =
-  | { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }
+  | { role: "user" | "assistant"; content: string; ui_blocks: UIBlock[] }
   // 仅前端展示的系统提示（如「测评已完成」），不发送给后端
   | { role: "notice"; content: string; ui_blocks: [] };
 
@@ -228,13 +240,7 @@ export type ConversationSummary = {
 export type ConversationDetail = {
   id: string;
   title: string | null;
-  messages: { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }[];
-  handoff: HandoffView | null;
-};
-
-export type MessagesSince = {
-  messages: { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }[];
-  total: number;
+  messages: { role: "user" | "assistant"; content: string; ui_blocks: UIBlock[] }[];
   handoff: HandoffView | null;
 };
 

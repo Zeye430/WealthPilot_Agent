@@ -1,14 +1,13 @@
+"use client";
+
+import { useProductActions } from "@/components/products/ProductActions";
 import type { ProductCard } from "@/lib/types";
 
-/** 产品卡片：对话中的产品列表与「产品浏览」页共用。收益数字始终带口径标签。 */
-export function ProductCardView({
-  product,
-  onOpen,
-}: {
-  product: ProductCard;
-  onOpen?: (code: string) => void;
-}) {
+/** 产品卡片：对话中的产品列表与「产品」页共用，点击打开详情与买入。收益数字始终带口径标签。 */
+export function ProductCardView({ product }: { product: ProductCard }) {
+  const { open } = useProductActions();
   const unverified = product.data_quality === "UNVERIFIED";
+  const viewOnly = product.purchasable === false;
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -44,28 +43,38 @@ export function ProductCardView({
         </div>
       </dl>
 
+      {product.highlights && product.highlights.length > 0 && (
+        <p className="mt-3 flex flex-wrap gap-1.5 text-xs">
+          {product.highlights.map((h) => (
+            <span key={h} className="rounded-sm bg-brand-soft px-1.5 py-0.5 text-brand">
+              {h}
+            </span>
+          ))}
+        </p>
+      )}
       {product.risk_note && <p className="mt-2 text-xs leading-5 text-ink-2">{product.risk_note}</p>}
-      {unverified &&
+      {(unverified || viewOnly) &&
         product.warnings?.map((w) => (
-          <p key={w} className="mt-2 border-l-2 border-notice bg-notice-soft px-2 py-1 text-xs text-ink-2">
+          <p key={w} className="mt-2 border-l-2 border-notice bg-notice-soft px-2 py-1 text-xs leading-5 text-ink-2">
             {w}
           </p>
         ))}
 
-      <p className="mt-3 flex items-center justify-between text-[11px] text-ink-3">
-        <span>虚构演示产品 {product.code}</span>
-        {product.rank ? <span className="figures">排序第 {product.rank} 位</span> : unverified ? <span>不参与排序</span> : null}
+      <p className="mt-3 flex items-center justify-between border-t border-rule pt-2.5 text-xs">
+        <span className="text-ink-3">虚构演示产品 {product.code}</span>
+        <span className={viewOnly ? "text-ink-3" : "font-medium text-brand"}>{viewOnly ? "仅可查看" : "查看详情 / 买入"}</span>
       </p>
     </>
   );
 
-  const className = "block h-full w-full rounded-sm border border-rule bg-surface p-4 text-left";
-  return onOpen ? (
-    <button type="button" onClick={() => onOpen(product.code)} className={`${className} hover:border-brand`}>
+  return (
+    <button
+      type="button"
+      onClick={() => open(product.code)}
+      className="block h-full w-full rounded-sm border border-rule bg-surface p-4 text-left hover:border-brand"
+    >
       {body}
     </button>
-  ) : (
-    <div className={className}>{body}</div>
   );
 }
 

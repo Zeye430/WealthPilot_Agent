@@ -3,6 +3,7 @@
 # WealthPilot 对基础画像只读，客户在对话中提供的新需求另存为「本次需求」，不会改写基础画像。
 #
 # 数据最小化：只保存理财服务需要的字段，不保存证件号、手机号、地址等敏感信息。
+# 理财经理的电话、企业微信链接（phone / wecom_url）来自员工系统；演示数据留空，避免指向真实号码或账号。
 
 as_of: 2026-10-16
 customers:
@@ -13,7 +14,7 @@ customers:
     occupation: 企业职员
     customer_since: 2015-06-18
     kyc_verified: true
-    assigned_rm: { id: RM001, name: 李经理（虚构） }
+    assigned_rm: { id: RM001, name: 李经理（虚构）, title: 高级理财经理 }
     assets_at_bank:
       demand_deposit: 150000
       time_deposit: 300000
@@ -27,7 +28,7 @@ customers:
     occupation: 设计师
     customer_since: 2021-03-02
     kyc_verified: true
-    assigned_rm: { id: RM002, name: 周经理（虚构） }
+    assigned_rm: { id: RM002, name: 周经理（虚构）, title: 理财经理 }
     assets_at_bank:
       demand_deposit: 80000
       time_deposit: 0
@@ -40,7 +41,7 @@ customers:
     occupation: 测试
     customer_since: 2024-01-01
     kyc_verified: true
-    assigned_rm: { id: RM001, name: 李经理（虚构） }
+    assigned_rm: { id: RM001, name: 李经理（虚构）, title: 高级理财经理 }
     assets_at_bank:
       demand_deposit: 50000
       time_deposit: 0
@@ -54,7 +55,7 @@ customers:
     occupation: 企业职员
     customer_since: 2015-06-18
     kyc_verified: true
-    assigned_rm: { id: RM001, name: 李经理（虚构） }
+    assigned_rm: { id: RM001, name: 李经理（虚构）, title: 高级理财经理 }
     assets_at_bank:
       demand_deposit: 150000
       time_deposit: 300000

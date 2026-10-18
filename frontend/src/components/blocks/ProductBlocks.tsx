@@ -2,13 +2,18 @@
 
 import { useState } from "react";
 
+import { useProductActions } from "@/components/products/ProductActions";
 import { ProductCardView } from "@/components/products/ProductCardView";
-import { ProductDetailDialog } from "@/components/products/ProductDetailDialog";
 import { ProductDetailView } from "@/components/products/ProductDetailView";
 import type { ComparisonTableBlock, ProductDetailBlock, ProductListBlock } from "@/lib/types";
 
+/** 对话中最多先展示匹配度最高的 3 款，其余折叠，避免一次给客户太多选择。 */
+const FIRST_SHOWN = 3;
+
 export function ProductListView({ block }: { block: ProductListBlock }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? block.items : block.items.slice(0, FIRST_SHOWN);
+  const hidden = block.items.length - shown.length;
   return (
     <figure className="max-w-3xl">
       <figcaption className="font-serif text-base font-bold">{block.title}</figcaption>
@@ -16,24 +21,45 @@ export function ProductListView({ block }: { block: ProductListBlock }) {
         <p className="mt-2 text-sm text-ink-2">没有符合条件的产品。</p>
       ) : (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-          {block.items.map((item) => (
+          {shown.map((item) => (
             <li key={item.code}>
-              <ProductCardView product={item} onOpen={setOpen} />
+              <ProductCardView product={item} />
             </li>
           ))}
         </ul>
       )}
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="mt-2 text-sm text-brand underline underline-offset-4"
+        >
+          查看其余 {hidden} 款
+        </button>
+      )}
       <Footnotes excluded={block.excluded} lines={[block.ranking_note, block.disclaimer]} />
-      <ProductDetailDialog code={open} onClose={() => setOpen(null)} />
     </figure>
   );
 }
 
 export function ProductDetailCard({ block }: { block: ProductDetailBlock }) {
+  const { open } = useProductActions();
   return (
     <figure className="max-w-2xl rounded-sm border border-rule bg-surface px-5 py-4">
       <figcaption className="mb-3 font-serif text-lg font-bold">{block.name}</figcaption>
       <ProductDetailView product={block} />
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-rule pt-3">
+        <p className="text-xs text-ink-3">{block.eligible ? "在您的风险等级范围内" : "超出您的风险等级，仅可查看"}</p>
+        {block.eligible && (
+          <button
+            type="button"
+            onClick={() => open(block.code)}
+            className="rounded-sm bg-brand px-5 py-2 text-sm font-medium text-surface"
+          >
+            买入
+          </button>
+        )}
+      </div>
     </figure>
   );
 }

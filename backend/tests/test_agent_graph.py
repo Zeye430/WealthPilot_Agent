@@ -337,7 +337,9 @@ def test_made_up_product_is_rewritten():
         ]
     )
     result = run(model, label="PRODUCT_OR_ADVICE", text="有什么好产品？")
-    assert decisions(result, "OUTPUT")[0]["reason_codes"] == ["O-UNGROUNDED_PRODUCT"]
+    codes = decisions(result, "OUTPUT")[0]["reason_codes"]
+    # 既是编造（本轮未查询过），又是向 C2 客户推荐 PR5 产品
+    assert codes[:2] == ["O-UNGROUNDED_PRODUCT", "O-UNSUITABLE_RECOMMENDATION"]
 
 
 def test_product_fee_rates_come_from_catalog_not_llm():

@@ -55,7 +55,7 @@ EVIDENCE_BLOCK_TYPES = {
     "allocation",
 }
 # 流程性结果（转人工、测评入口、记录需求）不含事实陈述，不需要标注「一般性说明」
-PROCEDURAL_BLOCK_TYPES = {"handoff_consent", "handoff_status", "assessment_prompt", "needs_update"}
+PROCEDURAL_BLOCK_TYPES = {"rm_contact", "assessment_prompt", "needs_update"}
 GENERAL_NOTE = {"type": "source_note", "variant": "general", "text": "一般性说明，未引用资料"}
 CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 
@@ -169,47 +169,34 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     def guard(state: AgentState):
         """第三道防线：首次未通过让模型改写一次，再次未通过使用安全兜底回答。"""
         reply = _text(state["messages"][-1])
-        violations = output_guard.check_output(
-            reply, state["permission"], _grounding(state), _retrieved_ids(state)
-        )
+        rating = state.get("risk_rating")
+
+        def check(text: str) -> list[str]:
+            return output_guard.check_output(
+                text, state["permission"], _grounding(state), _retrieved_ids(state), rating
+            )
+
+        violations = check(reply)
         if not violations:
             return {}
-        attempts = state.get("guard_attempts", 0)
-        if attempts == 0:
+        snippets = [f"片段:{x}" for x in output_guard.offending_snippets(reply, rating)]
+        if state.get("guard_attempts", 0) == 0:
             return {
                 "guard_attempts": 1,
-                "messages": [SystemMessage(output_guard.describe(violations, reply))],
-                "policy_decisions": [
-                    _decision(
-                        "OUTPUT",
-                        "REWRITE",
-                        [
-                            *violations,
-                            *(f"片段:{x}" for x in output_guard.offending_snippets(reply)),
-                        ],
-                    )
-                ],
+                "messages": [SystemMessage(output_guard.describe(violations, reply, rating))],
+                "policy_decisions": [_decision("OUTPUT", "REWRITE", [*violations, *snippets])],
             }
-        snippets = [f"片段:{x}" for x in output_guard.offending_snippets(reply)]
         if violations == ["O-REASSESSMENT_STEERING"]:
             # 改写后仍有诱导句：删去这些句子，其余内容通过复查则保留，避免整条回答退化为兜底
             redacted = output_guard.remove_steering(reply)
-            if redacted and not output_guard.check_output(
-                redacted, state["permission"], _grounding(state), _retrieved_ids(state)
-            ):
+            if redacted and not check(redacted):
                 return {
                     "reply": redacted,
                     "policy_decisions": [_decision("OUTPUT", "REDACT", [*violations, *snippets])],
                 }
         return {
             "reply": SAFE_FALLBACK_REPLY,
-            "policy_decisions": [
-                _decision(
-                    "OUTPUT",
-                    "FALLBACK",
-                    [*violations, *snippets],
-                )
-            ],
+            "policy_decisions": [_decision("OUTPUT", "FALLBACK", [*violations, *snippets])],
         }
 
     def route_after_guard(state: AgentState) -> str:
