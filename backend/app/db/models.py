@@ -155,3 +155,16 @@ class HandoffEvent(Base):
     to_status: Mapped[str] = mapped_column(String(24))
     actor: Mapped[str] = mapped_column(String(64))  # 客户 / 理财经理 ID / AI
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SaleReminder(Base):
+    """新品开售提醒：只能由客户本人发起（点击「开售提醒我」或在对话中明确同意）。"""
+
+    __tablename__ = "sale_reminders"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    customer_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_code: Mapped[str] = mapped_column(String(16))
+    source: Mapped[str] = mapped_column(String(16))  # BUTTON 界面按钮 | CHAT 对话中客户同意
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

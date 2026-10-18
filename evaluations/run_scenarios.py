@@ -34,6 +34,7 @@ from app.main import app  # noqa: E402
 from app.products.catalog import load_catalog  # noqa: E402
 
 CUSTOMER = "eval_customer"
+CUSTOMERS = {"A": "eval_customer", "B": "eval_customer_b"}  # setup.customer 可选，默认 A
 RATING_ANSWERS = {  # 校准画像的答案（docs/RISK_QUESTIONNAIRE.md §6）
     "C1": "ECBAAAAAAA",
     "C2": "CCCBBBBBCB",
@@ -54,6 +55,8 @@ def product_codes(blocks: list[dict]) -> list[str]:
             codes += [c["code"] for c in b["columns"]]
         elif b["type"] == "allocation":
             codes += [s["code"] for s in b["slices"] if s["code"] != "CASH"]
+        elif b["type"] == "upcoming_products":
+            codes += [i["code"] for i in b["items"]]
     return codes
 
 
@@ -87,6 +90,9 @@ def judge(question: str, reply: str, blocks: list[dict], rubric: str) -> tuple[b
         if flag:
             return flag.group(1) == "true", str(output)
         return False, f"评审输出无法解析：{output!r}"
+
+
+client_ref: dict = {}
 
 
 def run_checks(turn: dict, question: str, body: dict, permission: Permission) -> list[dict]:
@@ -134,6 +140,9 @@ def run_checks(turn: dict, question: str, body: dict, permission: Permission) ->
     if status := checks.get("handoff_status"):
         actual = (body.get("handoff") or {}).get("status")
         add(f"交接状态为 {status}", actual == status, f"实际：{actual}")
+    if (expected := checks.get("reminders")) is not None:
+        actual = [r["product"]["code"] for r in client_ref["client"].get("/api/v1/reminders").json()]
+        add(f"开售提醒为 {expected}", actual == expected, f"实际：{actual}")
     if fields := checks.get("needs_recorded"):
         recorded = {r["field"] for r in body["state"]["profile"]["needs"] if r["value"]}
         missing = [f for f in fields if f not in recorded]
@@ -157,8 +166,9 @@ def rewrites(conversation_id: str) -> list[str]:
 
 
 def run_scenario(client: TestClient, scenario: dict) -> dict:
-    client.post("/api/v1/demo/reset")
     setup = scenario.get("setup", {})
+    client.headers["X-Demo-User"] = CUSTOMERS[setup.get("customer", "A")]
+    client.post("/api/v1/demo/reset")
     if rating := setup.get("rating"):
         answers = {f"q{i + 1}": a for i, a in enumerate(RATING_ANSWERS[rating])}
         sub = client.post("/api/v1/assessment", json={"answers": answers}).json()
@@ -250,9 +260,9 @@ def main():
         scenarios = [s for s in scenarios if s["id"] in args.only]
 
     settings = get_settings()
-    if CUSTOMER not in settings.demo_users:
-        settings.demo_users = [*settings.demo_users, CUSTOMER]
+    settings.demo_users = [*settings.demo_users, *(c for c in CUSTOMERS.values() if c not in settings.demo_users)]
     client = TestClient(app, headers={"X-Demo-User": CUSTOMER})
+    client_ref["client"] = client
 
     results = []
     for s in scenarios:

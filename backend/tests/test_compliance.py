@@ -218,6 +218,48 @@ def test_cross_metric_comparison_blocked():  # P7 场景评估 P05
         assert "O-METRIC_MIXING" in _assessed(text)
     caveat = "业绩比较基准与现金管理类的七日年化口径不同，不能直接比较高低。"
     assert _assessed(caveat) == []
+    # 分句写：前一句讲现金管理类，后一句说「业绩比较基准更高一些」
+    split = (
+        "流动性要求高可以优先考虑现金管理类的活钱宝；"
+        "能接受略高波动的话，知岸稳享每日开放的业绩比较基准区间更高一些。"
+    )
+    assert "O-METRIC_MIXING" in _assessed(split)
+
+
+def test_gift_tied_to_product_purchase_blocked():
+    for text in (
+        "现在购买知岸活钱宝即送 2000 积分。",
+        "买入这款产品还有礼品相送。",
+        "返现 1% 给认购客户。",
+    ):
+        assert "O-GIFT_FOR_PURCHASE" in _assessed(text)
+    ok = (
+        "活动期内月日均金融资产新增 10 万元及以上可获 2,000 积分，存款、理财均计入，"
+        "不限定购买某款产品。"
+    )
+    assert _assessed(ok) == []
+
+
+def test_factual_raise_limit_passes_but_urgency_blocked():
+    fact = (
+        "本期募集规模上限 5 亿元，额满提前结束募集；10 月 26 日开售，需要的话可以为您预约开售提醒。"
+    )
+    assert _assessed(fact) == []
+    assert "O-PRESSURE_SALES" in _assessed("这款新品额度有限，很多人在抢，赶紧预约。")
+
+
+def test_benchmark_figures_must_come_from_tool_results():  # 场景评估 N02
+    grounding = '{"metric": "业绩比较基准 2.80%–3.30%"}'
+    wrong = "知岸定享 365 天第 15 期的业绩比较基准为 2.60%–3.20%。"
+    right = "知岸定享 365 天第 15 期的业绩比较基准为 2.8%–3.3%。"  # 位数不同、数值相同也算有来源
+    assert "O-UNGROUNDED_FIGURE" in check_output(wrong, Permission.ASSESSED, grounding + wrong[:12])
+    ok = check_output(
+        right, Permission.ASSESSED, grounding + "知岸定享 365 天第 15 期", risk_rating="C2"
+    )
+    assert ok == []
+    # 不在收益指标语境中的百分数（如配置占比）不检查，即使同句提到业绩比较基准
+    share = "知岸稳享一年持有 10 万元（22.22%），业绩比较基准 2.50%–3.20%。"
+    assert check_output(share, Permission.ASSESSED, "知岸稳享一年持有 2.50%–3.20%") == []
 
 
 def test_return_pitch_blocked():

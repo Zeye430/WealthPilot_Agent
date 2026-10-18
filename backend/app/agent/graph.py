@@ -25,12 +25,14 @@ from app.agent.prompts import (
     ASSESSMENT_REQUIRED_REPLY,
     OUT_OF_SCOPE_REPLY,
     SAFE_FALLBACK_REPLY,
+    TOOL_LIMIT_INSTRUCTION,
     TOOL_LIMIT_REPLY,
     system_prompt,
 )
 from app.compliance import output_guard
 from app.compliance.policy import RULE_VERSION, Permission, tool_allowed
 from app.tools.assessment_tools import ASSESSMENT_PROMPT_BLOCK, ASSESSMENT_TOOLS
+from app.tools.benefit_tools import BENEFIT_TOOLS
 from app.tools.calculation_tools import CALCULATION_TOOLS, HYPOTHETICAL_NOTE
 from app.tools.document_tools import DOCUMENT_TOOLS
 from app.tools.handoff_tools import HANDOFF_TOOLS
@@ -41,6 +43,7 @@ ALL_TOOLS = [
     *ASSESSMENT_TOOLS,
     *CALCULATION_TOOLS,
     *PRODUCT_TOOLS,
+    *BENEFIT_TOOLS,
     *DOCUMENT_TOOLS,
     *PROFILE_TOOLS,
     *HANDOFF_TOOLS,
@@ -158,13 +161,41 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         if allowed:
             permitted = last.model_copy(update={"tool_calls": allowed})
             # 传入完整状态：产品工具通过 InjectedState 读取客户评级（LLM 不可见）
-            result = tool_node.invoke({**state, "messages": [permitted]}, config)
+            # 传入本轮完整消息（最后一条为待执行的调用），工具可据此限制本轮的重复调用
+            result = tool_node.invoke(
+                {**state, "messages": [*state["messages"][:-1], permitted]}, config
+            )
             messages = result["messages"] + messages
         decisions = [_decision("TOOL", "BLOCK_TOOL", [f"TOOL:{c['name']}"]) for c in blocked]
         return {"messages": messages, "policy_decisions": decisions}
 
     def tool_limit(state: AgentState):
-        return {"reply": TOOL_LIMIT_REPLY}
+        """工具调用达到上限：不再执行工具，让模型根据已有结果作答（不绑定工具）。
+
+        已产生的界面块照常展示；总结仍需通过输出审查，未通过或为空时才用固定话术。
+        """
+        prompt = system_prompt(
+            state["permission"], state.get("risk_rating"), state.get("customer_context", "")
+        )
+        # 去掉未执行的工具调用消息，避免模型接口要求补齐工具结果
+        earlier = state["messages"][:-1]
+        summary = model.invoke(
+            [SystemMessage(prompt), *earlier, SystemMessage(TOOL_LIMIT_INSTRUCTION)]
+        )
+        text = _text(summary)
+        violations = output_guard.check_output(
+            text,
+            state["permission"],
+            _grounding(state),
+            _retrieved_ids(state),
+            state.get("risk_rating"),
+        )
+        if getattr(summary, "tool_calls", None) or not text or violations:
+            return {
+                "reply": TOOL_LIMIT_REPLY,
+                "policy_decisions": [_decision("TOOL", "TOOL_LIMIT", violations)],
+            }
+        return {"reply": text, "policy_decisions": [_decision("TOOL", "TOOL_LIMIT_SUMMARY")]}
 
     def guard(state: AgentState):
         """第三道防线：首次未通过让模型改写一次，再次未通过使用安全兜底回答。"""
@@ -179,11 +210,14 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         violations = check(reply)
         if not violations:
             return {}
-        snippets = [f"片段:{x}" for x in output_guard.offending_snippets(reply, rating)]
+        grounding = _grounding(state)
+        snippets = [f"片段:{x}" for x in output_guard.offending_snippets(reply, rating, grounding)]
         if state.get("guard_attempts", 0) == 0:
             return {
                 "guard_attempts": 1,
-                "messages": [SystemMessage(output_guard.describe(violations, reply, rating))],
+                "messages": [
+                    SystemMessage(output_guard.describe(violations, reply, rating, grounding))
+                ],
                 "policy_decisions": [_decision("OUTPUT", "REWRITE", [*violations, *snippets])],
             }
         if violations == ["O-REASSESSMENT_STEERING"]:
@@ -219,6 +253,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
             question, reply
         ):
             reply = f"{reply}\n\n> {output_guard.NO_GUARANTEE_NOTE}"
+        blocks = latest_allocation_only(blocks)
         # 模型可能重复调用同一工具，界面上去掉内容完全相同的块
         blocks = list(
             {json.dumps(b, sort_keys=True, ensure_ascii=False): b for b in blocks}.values()
@@ -255,6 +290,19 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     graph.add_conditional_edges("output_guard", route_after_guard, ["agent", "finalize"])
     graph.add_edge("finalize", END)
     return graph.compile()
+
+
+def latest_allocation_only(blocks: list[dict]) -> list[dict]:
+    """同一轮多次模拟配置时只展示一份：最后一次通过检查的；都没通过则展示最后一次。
+
+    其余是调整前的草稿，并列展示会互相矛盾；模型通常也按通过检查的方案作答（场景评估 V02）。
+    """
+    allocations = [i for i, b in enumerate(blocks) if b["type"] == "allocation"]
+    if len(allocations) <= 1:
+        return blocks
+    passed = [i for i in allocations if blocks[i].get("passed")]
+    keep = (passed or allocations)[-1]
+    return [b for i, b in enumerate(blocks) if b["type"] != "allocation" or i == keep]
 
 
 def _source_blocks(messages: list[BaseMessage]) -> list[dict]:
@@ -306,12 +354,14 @@ def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple
 def _grounding(state: AgentState) -> str:
     """回答之前已出现的内容，用于核对回答提到的产品是否有来源。
 
-    测评前只认客户自己说过的产品名；测评后还包括历史回答和工具结果。
+    测评前只认客户自己说过的产品名和客户资料中的已有持仓；测评后还包括历史回答和工具结果。
     """
     earlier = state["messages"][:-1]
     if state["permission"] is Permission.ASSESSMENT_REQUIRED:
         earlier = [m for m in earlier if isinstance(m, HumanMessage)]
-    return "\n".join(_text(m) for m in earlier if not isinstance(m, SystemMessage))
+    # 客户资料（含银行系统中的已有持仓）：提到客户自己持有的产品不算泄露（场景评估 R01）
+    profile = state.get("customer_context", "")
+    return "\n".join([profile, *(_text(m) for m in earlier if not isinstance(m, SystemMessage))])
 
 
 def _text(message: BaseMessage) -> str:

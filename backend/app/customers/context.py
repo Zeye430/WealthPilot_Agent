@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
+from app.benefits.service import tier_status
 from app.customers.base import BaseProfile, get_customer_info_system
 from app.customers.needs import Needs, get_needs
+from app.products.presenter import format_money
 
 
 def assessed_loss_tolerance(db: Session, customer_id: str) -> str | None:
@@ -34,6 +36,26 @@ def customer_profile(db: Session, customer_id: str) -> dict:
     return {"base": base.summary() if base else None, "needs": needs}
 
 
+def tier_lines(base: BaseProfile, needs: Needs) -> list[str]:
+    """客户等级与「可提示升级」的时机：由代码判断，AI 只在合适时提示一次。"""
+    status = tier_status(base, needs.investment_amount)
+    line = (
+        f"- 客户等级：{status.tier.name}（{status.tier.card_name}），"
+        f"金融资产合计约 {format_money(status.aum)}"
+    )
+    nxt = status.next_tier
+    if nxt:
+        line += f"；距{nxt.name}（{format_money(nxt.min_aum)}）还差 {format_money(status.gap)}"
+    lines = [line]
+    if status.reaches_next_with_plan or status.near_next:
+        # 主动提示的措辞必须包含前提与「以银行评定为准」，由代码统一追加（场景评估 V02）
+        lines.append(
+            "- 等级升级提示由系统在回答末尾自动补充，你不要主动提等级升级或权益；"
+            "客户主动问奖励、权益时再调用 get_customer_benefits。"
+        )
+    return lines
+
+
 def prompt_section(
     base: BaseProfile | None, needs: Needs, loss_tolerance: str | None = None
 ) -> str:
@@ -49,6 +71,7 @@ def prompt_section(
             f"- 在本行资产：活期存款 {a['demand_deposit']}，定期存款 {a['time_deposit']}，"
             f"理财持仓 {holdings}；可随时支取的资产合计约 {a['liquid_total']}",
             f"- 专属理财经理：{s['assigned_rm']}",
+            *tier_lines(base, needs),
         ]
     else:
         lines.append("- 系统中暂无该客户的基础资料")
@@ -87,4 +110,27 @@ def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str
     return (
         f"根据银行登记信息，您的年龄为 {base.age} 岁，产品匹配以登记信息和风险测评结果为准；"
         "如信息有变化，可携带有效证件到网点更新。"
+    )
+
+
+def tier_upgrade_note(
+    base: BaseProfile | None, needs: Needs, reply: str, history: str
+) -> str | None:
+    """计划资金转入后可达下一等级、而回答和此前对话都没有提到时，由代码补充一次（场景评估 V02 发现）。
+
+    只陈述事实与前提（新转入资金、以银行评定为准），不与任何产品挂钩。
+    """
+    if base is None or needs.investment_amount is None:
+        return None
+    status = tier_status(base, needs.investment_amount)
+    if not status.reaches_next_with_plan:
+        return None
+    target = status.projected_tier
+    if target.name in reply or target.name in history:
+        return None
+    perks = "、".join(target.benefits[:2])
+    return (
+        f"另外提示：如这笔 {format_money(needs.investment_amount)} 为新转入本行的资金，"
+        f"您的金融资产将达到{target.name}（{target.card_name}）标准，可享{perks}等权益；"
+        "等级按月日均金融资产评定，以银行评定结果为准。"
     )

@@ -58,6 +58,7 @@ class OperationMode(StrEnum):
 class ProductStatus(StrEnum):
     ON_SALE = "ON_SALE"
     ENDED = "ENDED"
+    UPCOMING = "UPCOMING"  # 已公告、尚未开始募集的新发产品，可预约开售提醒，不能买入
 
 
 class DataQuality(StrEnum):
@@ -182,6 +183,10 @@ class Product(BaseModel):
     data_quality: DataQuality
     inception_date: date
     maturity_date: date | None = None
+    # 新发产品的募集期与募集规模上限（说明书披露的事实，额满提前结束募集）
+    sale_start: date | None = None
+    sale_end: date | None = None
+    raise_limit: Decimal | None = None
     investment_scope: str
     strategy: str
     fees: Fees
@@ -211,6 +216,11 @@ class Product(BaseModel):
             raise ValueError(f"{self.code}：七日年化收益率只适用于现金管理类产品")
         if not is_cash and MetricType.PERFORMANCE_BENCHMARK not in types:
             raise ValueError(f"{self.code}：净值型产品必须披露业绩比较基准")
+        if self.status is ProductStatus.UPCOMING:
+            if not (self.sale_start and self.sale_end and self.sale_start <= self.sale_end):
+                raise ValueError(f"{self.code}：新发产品必须填写募集期 sale_start / sale_end")
+            if self.inception_date <= self.sale_end:
+                raise ValueError(f"{self.code}：成立日应晚于募集结束日")
         return self
 
     @property

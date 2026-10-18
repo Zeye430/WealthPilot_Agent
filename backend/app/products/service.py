@@ -4,7 +4,13 @@ from collections import Counter
 
 from pydantic import BaseModel
 
-from app.compliance.suitability import CustomerContext, Eligibility, evaluate
+from app.compliance.suitability import (
+    NOT_ON_SALE,
+    UNVERIFIED,
+    CustomerContext,
+    Eligibility,
+    evaluate,
+)
 from app.products.catalog import Catalog, DataQuality, Product, ProductStatus, ProductType
 from app.products.ranking import RankedProduct, rank
 
@@ -64,11 +70,21 @@ def browse(catalog: Catalog, rating: str | None, filters: SearchFilters) -> Brow
     return BrowseResult(ranked=rank(candidates), other=other)
 
 
+def upcoming(catalog: Catalog, ctx: CustomerContext | None) -> list[Product]:
+    """即将发售的新品。传入客户条件时，只返回评级、期限、起购金额都符合的（与在售产品同一套规则）。"""
+    products = [p for p in catalog.products if p.status is ProductStatus.UPCOMING]
+    if ctx is None:
+        return products
+    allowed = {NOT_ON_SALE, UNVERIFIED}  # 「尚未开售」本身不是不合格
+    return [p for p in products if set(evaluate(p, ctx).reason_codes) <= allowed]
+
+
 def search(catalog: Catalog, ctx: CustomerContext, filters: SearchFilters) -> SearchResult:
     """先按客户的查询条件筛选，再做适当性硬过滤，最后只对合格产品排序。"""
     candidates, unranked, excluded = [], [], Counter()
     for product in catalog.products:
-        if not _matches(product, filters):
+        # 即将发售的新品单独返回（upcoming），不算作被排除
+        if product.status is ProductStatus.UPCOMING or not _matches(product, filters):
             continue
         result = evaluate(product, ctx)
         if not result.eligible:

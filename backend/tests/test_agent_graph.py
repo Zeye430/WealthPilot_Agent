@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.agent.graph import build_graph
+from app.agent.graph import build_graph, latest_allocation_only
 from app.agent.prompts import (
     ASSESSMENT_REQUIRED_REPLY,
     OUT_OF_SCOPE_REPLY,
@@ -96,6 +96,32 @@ def test_tool_call_limit_stops_loop():
     result = run(model, max_tool_calls=2)
     assert result["reply"].startswith(TOOL_LIMIT_REPLY)
     assert sum(isinstance(m, ToolMessage) for m in result["messages"]) == 2
+
+
+def test_tool_limit_summarizes_existing_results():  # 场景评估 V02
+    calls = [tool_call("calculate_growth", GROWTH_ARGS, call_id=f"c{i}") for i in range(3)]
+    model = ScriptedChatModel(responses=[*calls, AIMessage("按 5% 测算，10 年后约 162.89 万元。")])
+    result = run(model, max_tool_calls=2)
+    # 第 3 次调用不执行，模型根据已有两次结果作答；已产生的图表照常展示
+    assert result["reply"].startswith("按 5% 测算")
+    assert sum(isinstance(m, ToolMessage) for m in result["messages"]) == 2
+    assert "calculation_result" in block_types(result)
+    assert decisions(result, "TOOL")[-1]["decision"] == "TOOL_LIMIT_SUMMARY"
+
+
+def test_simulation_count_is_per_turn():
+    from app.tools.profile_tools import MAX_SIMULATIONS_PER_TURN, _simulations_this_turn
+
+    sim = {"allocations": [{"product": "知岸活钱宝", "amount": 100000}]}
+    earlier_turn = [HumanMessage("上次"), tool_call("simulate_allocation", sim, "a")]
+    this_turn = [
+        HumanMessage("帮我配置"),
+        tool_call("simulate_allocation", sim, "b"),
+        tool_call("simulate_allocation", sim, "c"),
+    ]
+    assert _simulations_this_turn({"messages": [*earlier_turn, *this_turn]}) == 2
+    extra = [*earlier_turn, *this_turn, tool_call("simulate_allocation", sim, "d")]
+    assert _simulations_this_turn({"messages": extra}) > MAX_SIMULATIONS_PER_TURN
 
 
 def test_scenarios_tool_sorted_series():
@@ -269,6 +295,26 @@ def test_guarantee_question_gets_explicit_denial():
     assert result["reply"] == explicit
 
 
+def test_own_holding_mentioned_before_assessment_is_not_a_leak():  # 场景评估 R01
+    reply = "存款保险最高偿付 50 万元；您持有的知岸活钱宝属于理财产品，不在存款保险范围内。"
+    graph = build_graph(
+        ScriptedChatModel(responses=[AIMessage(reply)]),
+        ScriptedChatModel(responses=[AIMessage("FINANCE_KNOWLEDGE")]),
+    )
+    result = graph.invoke(
+        {
+            "messages": [HumanMessage("银行倒闭了我的钱能赔多少？")],
+            "permission": Permission.ASSESSMENT_REQUIRED,
+            "risk_rating": None,
+            "gate_reasons": ["ASSESSMENT_MISSING"],
+            "policy_decisions": [],
+            "customer_context": "- 在本行资产：理财持仓 知岸活钱宝 5 万元",
+        }
+    )
+    assert result["reply"].startswith("存款保险最高偿付")
+    assert decisions(result, "OUTPUT") == []
+
+
 def test_recommendation_before_assessment_is_rewritten():
     model = ScriptedChatModel(
         responses=[
@@ -374,3 +420,17 @@ def test_product_fee_requires_holding_days():
     result = run(model)
     tool_msg = next(m for m in result["messages"] if isinstance(m, ToolMessage))
     assert tool_msg.status == "error" and "持有天数" in tool_msg.content
+
+
+def test_only_last_allocation_shown():  # 场景评估 V02：调整前的草稿与最终方案并列会互相矛盾
+    blocks = [
+        {"type": "product_list", "items": []},
+        {"type": "allocation", "title": "草稿"},
+        {"type": "allocation", "title": "调整后"},
+    ]
+    assert [b.get("title") for b in latest_allocation_only(blocks)] == [None, "调整后"]
+    mixed = [
+        {"type": "allocation", "title": "通过", "passed": True},
+        {"type": "allocation", "title": "未通过", "passed": False},
+    ]
+    assert [b["title"] for b in latest_allocation_only(mixed)] == ["通过"]

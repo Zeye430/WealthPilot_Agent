@@ -4,8 +4,14 @@ from decimal import Decimal as D
 
 import pytest
 
+from app.benefits.service import active_campaigns, load_benefits, tier_status
 from app.customers.base import age_option, get_customer_info_system
-from app.customers.context import age_conflict_note, prompt_section
+from app.customers.context import (
+    age_conflict_note,
+    prompt_section,
+    tier_lines,
+    tier_upgrade_note,
+)
 from app.customers.needs import Needs
 from app.products.allocation import FAIL, OK, WARN, AllocationError, simulate
 from app.products.catalog import load_catalog
@@ -119,3 +125,54 @@ def test_age_conflict_note_when_reply_ignores_bank_record():  # P7 场景评估 
     assert age_conflict_note("我今年35岁", "根据登记，您的年龄为 52 岁……", base) is None
     assert age_conflict_note("我52岁", "以下是产品……", base) is None
     assert age_conflict_note("我想买理财", "以下是产品……", base) is None
+
+
+# ---------- 客户等级与营销活动（2026-10-18） ----------
+
+
+def test_bank_recorded_tier_matches_benefit_thresholds():
+    """基础画像中的客户等级（银行系统记录）应与等级规则一致，防止演示数据前后矛盾。"""
+    system = get_customer_info_system()
+    for cid in ("demo_customer_1", "demo_customer_2", "pytest_customer", "eval_customer"):
+        base = system.get(cid)
+        assert tier_status(base).tier.name == base.customer_tier, cid
+
+
+def test_tier_gap_and_projection_with_new_money():
+    chen = get_customer_info_system().get("demo_customer_2")  # 8 万，金卡客户
+    status = tier_status(chen, D(450000))
+    assert status.tier.name == "金卡客户" and status.next_tier.name == "财富客户"
+    assert status.gap == D(420000)
+    assert status.reaches_next_with_plan and status.projected_tier.name == "财富客户"
+    assert not tier_status(chen, D(100000)).reaches_next_with_plan
+
+
+def test_tier_hint_only_when_plan_reaches_next_tier():
+    chen = get_customer_info_system().get("demo_customer_2")
+    hinted = "\n".join(tier_lines(chen, Needs(investment_amount=D(450000))))
+    assert "由系统在回答末尾自动补充" in hinted
+    assert "自动补充" not in "\n".join(tier_lines(chen, Needs()))
+
+
+def test_campaigns_filtered_by_period_and_tier():
+    config = load_benefits()
+    wealth = next(t for t in config.tiers if t.code == "WEALTH")
+    gold = next(t for t in config.tiers if t.code == "GOLD")
+    from datetime import date
+
+    assert {c.id for c in active_campaigns(gold, date(2026, 10, 18))} == {
+        "NEW_ASSET_2026Q4",
+        "FIRST_WEALTH_2026Q4",
+    }
+    assert {c.id for c in active_campaigns(wealth, date(2026, 10, 18))} == {"NEW_ASSET_2026Q4"}
+    assert active_campaigns(gold, date(2027, 1, 5)) == []  # 活动已结束
+
+
+def test_tier_upgrade_note_once_per_conversation():  # 场景评估 V02
+    chen = get_customer_info_system().get("demo_customer_2")
+    needs = Needs(investment_amount=D(450000))
+    note = tier_upgrade_note(chen, needs, "为您推荐以下产品……", history="")
+    assert note and "财富客户" in note and "新转入" in note and "以银行评定结果为准" in note
+    assert tier_upgrade_note(chen, needs, "……可达到财富客户标准", history="") is None
+    assert tier_upgrade_note(chen, needs, "……", history="之前提过财富客户") is None
+    assert tier_upgrade_note(chen, Needs(investment_amount=D(100000)), "……", history="") is None

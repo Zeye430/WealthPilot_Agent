@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { ProductDetailView } from "@/components/products/ProductDetailView";
 import { PurchaseFlow } from "@/components/products/PurchaseFlow";
+import { RemindButton } from "@/components/products/UpcomingCard";
 import { ApiError, getProduct } from "@/lib/api";
 import type { ProductDetail } from "@/lib/types";
 
@@ -78,7 +79,32 @@ export function ProductDetailDialog({
               {!product && !error && <p className="text-sm text-ink-2">加载中…</p>}
               {product && <ProductDetailView product={product} />}
             </div>
-            {purchase && (
+            {product?.remind && (
+              <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-rule bg-paper px-5 py-3 sm:px-7">
+                <p className="text-xs leading-5 text-ink-2">
+                  募集期 {product.sale_window}，开售后需要您本人确认买入。
+                </p>
+                <div className="w-full sm:w-48">
+                  {!product.remind.allowed && needsAssessment ? (
+                    <button
+                      type="button"
+                      onClick={onStartAssessment}
+                      className="w-full rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface"
+                    >
+                      去测评
+                    </button>
+                  ) : (
+                    <RemindButton
+                      code={product.code}
+                      initial={product.remind.reminded}
+                      allowed={product.remind.allowed}
+                      reason={product.remind.reason}
+                    />
+                  )}
+                </div>
+              </footer>
+            )}
+            {purchase && !product?.remind && (
               <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-rule bg-paper px-5 py-3 sm:px-7">
                 {purchase.allowed ? (
                   <>

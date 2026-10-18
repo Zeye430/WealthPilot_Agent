@@ -5,6 +5,7 @@
 
 import re
 from collections.abc import Collection
+from decimal import Decimal
 
 from app.assessment.scoring import rating_allows
 from app.compliance.policy import Permission
@@ -125,6 +126,14 @@ PRESSURE_SALES = [
         r"再不买",
     )
 ]
+# 4. 把礼品、积分、返现与购买某款产品挂钩（权益只与资产总额挂钩，见 data/benefits/benefits.yaml）
+GIFT_FOR_PURCHASE = [
+    re.compile(p)
+    for p in (
+        r"(购买|买入|认购|申购)[^。！？；\n]{0,15}(送|赠送|返现|返利|礼品|积分)",
+        r"(送|赠送|返现|返利)[^。！？；\n]{0,10}(购买|买入|认购|申购)",
+    )
+]
 # 3. 以收益高低作为推荐理由
 RETURN_PITCH = [
     re.compile(p)
@@ -155,14 +164,35 @@ METRIC_CAVEAT = re.compile(r"口径不同|不同口径|(不能|不可|无法|不
 
 
 def metric_mixing(text: str) -> list[str]:
-    return [
-        s.strip()[:40]
-        for s in SENTENCE_SPLIT.split(text)
-        if BENCHMARK.search(s)
-        and CASH_METRIC.search(s)
-        and COMPARISON.search(s)
-        and not METRIC_CAVEAT.search(s)
-    ]
+    """同句比较，或同一段落中先提现金管理类、再说某产品「业绩比较基准更高」（场景评估 P05）。"""
+    hits = []
+    for para in PARAGRAPH_SPLIT.split(text):
+        cash_in_para = bool(CASH_METRIC.search(para))
+        hits += [
+            s.strip()[:40]
+            for s in SENTENCE_SPLIT.split(para)
+            if BENCHMARK.search(s)
+            and COMPARISON.search(s)
+            and (CASH_METRIC.search(s) or cash_in_para)
+            and not METRIC_CAVEAT.search(s)
+        ]
+    return hits
+
+
+# 收益数字必须有来源：业绩比较基准、七日年化所在句中的百分数，须出现在本轮工具结果或此前对话中。
+# P7 场景评估 N02 发现模型把新品的业绩比较基准 2.80%–3.30% 说成 2.60%–3.20%。
+PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+# 只检查紧跟在收益指标名称后的数字（含区间），不检查同句中的配置占比等其他百分数（场景评估 V02）
+METRIC_FIGURE = re.compile(
+    r"(?:业绩比较基准|七日年化(?:收益率)?|万份收益)[^。；！？\n%\d]{0,12}"
+    r"(\d+(?:\.\d+)?)\s*%(?:\s*[–—\-~至到]\s*(\d+(?:\.\d+)?)\s*%)?"
+)
+
+
+def ungrounded_figures(text: str, grounding: str) -> list[str]:
+    known = {Decimal(m) for m in PERCENT.findall(grounding)}
+    figures = [n for m in METRIC_FIGURE.finditer(text) for n in m.groups() if n]
+    return [f"{n}%" for n in figures if Decimal(n) not in known]
 
 
 def unsuitable_recommendations(text: str, risk_rating: str | None) -> list[str]:
@@ -327,6 +357,10 @@ def check_output(
         violations.append("O-RETURN_PITCH")
     if metric_mixing(reply):
         violations.append("O-METRIC_MIXING")
+    if _affirmative_hits(reply, GIFT_FOR_PURCHASE):
+        violations.append("O-GIFT_FOR_PURCHASE")
+    if permission is Permission.ASSESSED and ungrounded_figures(reply, grounding):
+        violations.append("O-UNGROUNDED_FIGURE")
     if steers_reassessment(reply):
         violations.append("O-REASSESSMENT_STEERING")
     if _affirmative_hits(reply, FALSE_HANDOFF):
@@ -338,11 +372,19 @@ def check_output(
     return violations
 
 
-def offending_snippets(reply: str, risk_rating: str | None = None) -> list[str]:
+def offending_snippets(
+    reply: str, risk_rating: str | None = None, grounding: str | None = None
+) -> list[str]:
     """违规片段（写入审计记录，便于事后定位模型反复触发的表述）。"""
     hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, PRESSURE_SALES)
     hits += _affirmative_hits(reply, RETURN_PITCH) + _affirmative_hits(reply, FALSE_HANDOFF)
-    hits += metric_mixing(reply)
+    hits += metric_mixing(reply) + _affirmative_hits(reply, GIFT_FOR_PURCHASE)
+    if grounding is not None:
+        hits += [
+            f"产品:{c}" for c in sorted(mentioned_products(reply) - mentioned_products(grounding))
+        ]
+    if grounding is not None:
+        hits += ungrounded_figures(reply, grounding)
     # 测评前任何推荐都是违规；测评后只有推荐超评级产品才是
     hits += unsuitable_recommendations(reply, risk_rating) if risk_rating else []
     hits += _affirmative_hits(reply, RECOMMENDATION) if not risk_rating else []
@@ -357,10 +399,12 @@ def offending_snippets(reply: str, risk_rating: str | None = None) -> list[str]:
     return list(dict.fromkeys(hits))[:5]
 
 
-def describe(violations: list[str], reply: str, risk_rating: str | None = None) -> str:
+def describe(
+    violations: list[str], reply: str, risk_rating: str | None = None, grounding: str | None = None
+) -> str:
     """给 LLM 的改写反馈。"""
     hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, RECOMMENDATION)
-    hits += offending_snippets(reply, risk_rating)
+    hits += offending_snippets(reply, risk_rating, grounding)
     return (
         "你的上一条回答未通过合规审查（"
         + "、".join(violations)
@@ -395,6 +439,17 @@ def describe(violations: list[str], reply: str, risk_rating: str | None = None) 
         + (
             "推荐理由只能是期限、流动性、费用、起购金额等与客户需求的匹配点，不能以收益高低作为理由。"
             if "O-RETURN_PITCH" in violations
+            else ""
+        )
+        + (
+            "回答中的业绩比较基准或七日年化数字与产品资料不符或没有来源，"
+            "只能使用工具结果中的原始数字，不确定时不要写具体数字。"
+            if "O-UNGROUNDED_FIGURE" in violations
+            else ""
+        )
+        + (
+            "权益和活动只与金融资产总额挂钩（存款也计入），不能说购买某款产品送礼品、积分或返现。"
+            if "O-GIFT_FOR_PURCHASE" in violations
             else ""
         )
         + (

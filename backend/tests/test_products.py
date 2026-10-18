@@ -20,7 +20,7 @@ from app.compliance.suitability import (
 from app.products.catalog import CATALOG_PATH, Catalog, MetricType, load_catalog, parse_rate
 from app.products.documents import render
 from app.products.ranking import rank
-from app.products.service import SearchFilters, search
+from app.products.service import SearchFilters, search, upcoming
 from app.tools.product_tools import compare_products, get_product_details, months_to_days
 
 CATALOG = load_catalog()
@@ -41,11 +41,11 @@ def raw_catalog() -> dict:
 
 def test_catalog_distribution_matches_product_catalog_doc():
     levels = sorted(p.effective_risk_level for p in CATALOG.products)
-    assert len(levels) == 16
+    assert len(levels) == 18  # 16 款在售 / 已到期 + 2 款即将发售
     assert {lv: levels.count(lv) for lv in set(levels)} == {
         "PR1": 2,
-        "PR2": 9,
-        "PR3": 2,
+        "PR2": 10,
+        "PR3": 3,
         "PR4": 2,
         "PR5": 1,
     }
@@ -145,6 +145,26 @@ def test_search_excludes_and_counts():
     assert all(int(CATALOG.get(c).effective_risk_level[2:]) <= 2 for c in codes)
     assert [prod.code for prod, _ in result.unranked] == ["HY-F04"]
     assert result.excluded == {RISK_EXCEEDS: 5, NOT_ON_SALE: 1}
+
+
+def test_upcoming_products_follow_same_suitability_rules():
+    assert [x.code for x in upcoming(CATALOG, C2)] == ["ZA-F06"]  # PR3 新品对 C2 不展示
+    assert {x.code for x in upcoming(CATALOG, CustomerContext(risk_rating="C3"))} == {
+        "ZA-F06",
+        "HY-P02",
+    }
+    short = CustomerContext(risk_rating="C3", horizon_days=90)
+    assert upcoming(CATALOG, short) == []  # 封闭 365 天、持有 180 天都超过 90 天期限
+    message = evaluate(p("ZA-F06"), C2).messages[0]
+    assert "尚未开售" in message and "10 月 26 日" in message
+
+
+def test_upcoming_product_requires_sale_window():
+    data = raw_catalog()
+    za_f06 = next(x for x in data["products"] if x["code"] == "ZA-F06")
+    del za_f06["sale_start"]
+    with pytest.raises(ValidationError, match="募集期"):
+        Catalog.model_validate(data)
 
 
 def test_filters_apply_before_suitability():

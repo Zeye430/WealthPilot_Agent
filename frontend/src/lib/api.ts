@@ -10,6 +10,7 @@ import type {
   PurchasePreview,
   PurchaseResult,
   Questionnaire,
+  Reminder,
 } from "./types";
 
 export class ApiError extends Error {}
@@ -87,6 +88,17 @@ export const getProducts = (productType?: string) =>
 
 export const getProduct = (code: string) =>
   request<ProductDetail>(`/api/v1/products/${encodeURIComponent(code)}`);
+
+export const listReminders = () => request<Reminder[]>("/api/v1/reminders");
+
+export const createReminder = (productCode: string) =>
+  request<Reminder>("/api/v1/reminders", {
+    method: "POST",
+    body: JSON.stringify({ product_code: productCode }),
+  });
+
+export const cancelReminder = (id: string) =>
+  request<void>(`/api/v1/reminders/${id}`, { method: "DELETE" });
 
 export const previewPurchase = (productCode: string, amount: number) =>
   request<PurchasePreview>("/api/v1/purchases/preview", {

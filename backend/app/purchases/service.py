@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from app.assessment.scoring import load_questionnaire, rating_allows
 from app.calculations.core import subscription_fee
 from app.products.catalog import Product, ProductStatus
-from app.products.presenter import format_money, format_rate
+from app.products.presenter import format_money, format_rate, sale_window
 
 DOCUMENTS = [
     {"id": "prospectus", "name": "产品说明书"},
@@ -47,7 +47,9 @@ def blocking_reasons(product: Product, rating: str | None) -> list[str]:
             f"该产品风险等级为 {product.effective_risk_level}，超出您的风险承受能力"
             f"（{rating} {band.name}，可购买 {band.max_product_risk} 及以下），无法买入。"
         )
-    if product.status is not ProductStatus.ON_SALE:
+    if product.status is ProductStatus.UPCOMING:
+        reasons.append(f"该产品尚未开售（募集期 {sale_window(product)}），可以预约开售提醒。")
+    elif product.status is not ProductStatus.ON_SALE:
         reasons.append("该产品已到期或暂停销售，无法买入。")
     if product.fees.subscription is None:
         reasons.append("该产品申购费率尚未核实，暂不支持买入。")

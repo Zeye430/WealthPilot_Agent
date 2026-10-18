@@ -36,7 +36,7 @@ export type ProductCard = {
   minimum: string;
   annual_fee: string;
   metric: { type: string; label: string; text: string };
-  status: "ON_SALE" | "ENDED";
+  status: "ON_SALE" | "ENDED" | "UPCOMING";
   data_quality: "VERIFIED" | "UNVERIFIED";
   synthetic: boolean;
   rank?: number | null;
@@ -46,6 +46,43 @@ export type ProductCard = {
   /** 能否买入：由后端按评级、在售状态等规则判断 */
   purchasable?: boolean;
   warnings?: string[];
+  /** 即将发售的新品：募集期与募集规模上限 */
+  sale_window?: string | null;
+  raise_limit?: string | null;
+};
+
+export type RemindState = { allowed: boolean; reminded: boolean; reason: string | null };
+
+export type UpcomingProductsBlock = {
+  type: "upcoming_products";
+  items: (ProductCard & { reminded: boolean })[];
+  note: string;
+  disclaimer: string;
+};
+
+export type TierBenefitsBlock = {
+  type: "tier_benefits";
+  tier: { name: string; card_name: string };
+  aum: string;
+  benefits: string[];
+  next_tier: {
+    name: string;
+    card_name: string;
+    threshold: string;
+    gap: string;
+    progress: number;
+    benefits: string[];
+  } | null;
+  projection: { aum: string; tier_name: string; reaches_next: boolean } | null;
+  campaigns: { name: string; period: string; reward: string; rule: string }[];
+  evaluation_rule: string;
+};
+
+export type Reminder = {
+  id: string;
+  product: ProductCard;
+  created_at: string;
+  delivery_note: string;
 };
 
 export type ExcludedSummary = { reason: string; count: number };
@@ -70,6 +107,7 @@ export type ProductDetail = ProductCard & {
   eligible: boolean;
   eligibility_messages: string[];
   purchase?: { allowed: boolean; reasons: string[] };
+  remind?: RemindState | null;
 };
 
 export type ProductDetailBlock = ProductDetail & { type: "product_detail" };
@@ -86,6 +124,7 @@ export type ProductListResponse = {
   catalog_version: string;
   rating: { code: string; name: string; max_product_risk: string } | null;
   items: ProductCard[];
+  upcoming: (ProductCard & { remind: RemindState })[];
   ranking_note: string;
 };
 
@@ -190,6 +229,8 @@ export type RmContactBlock = {
 
 export type UIBlock =
   | RmContactBlock
+  | UpcomingProductsBlock
+  | TierBenefitsBlock
   | NeedsUpdateBlock
   | AllocationBlock
   | SourcesBlock

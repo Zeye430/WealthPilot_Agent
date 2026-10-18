@@ -6,8 +6,9 @@
 #   lockup_days:    OPEN 为 0；MIN_HOLDING 为最短持有天数；CLOSED 为封闭天数；PERIODIC_OPEN 为开放间隔天数
 #   费率写作百分数（如 0.10%），年化费率按日计提；缺失写 null，且 data_quality 必须为 UNVERIFIED
 #   distributor_risk_level: 知岸银行的销售评级（R1–R5），与发行评级不一致时取较高者
+#   status: ON_SALE 在售 | ENDED 已到期 | UPCOMING 即将发售（须填写募集期 sale_start / sale_end，可填募集规模上限 raise_limit）
 
-catalog_version: "2026-10-17.1"
+catalog_version: "2026-10-18.1"
 as_of: 2026-10-16
 
 products:
@@ -344,3 +345,50 @@ products:
       redemption: [{ max_days: 180, rate: 0.5% }, { max_days: null, rate: 0% }]
     metrics:
       - { type: PERFORMANCE_BENCHMARK, formula: 中证 800 指数收益率×85% + 中债总财富指数收益率×15%, basis: 按产品权益中枢配置比例选取对应市场指数加权。 }
+
+  # ---------- 即将发售（新发产品，可预约开售提醒） ----------
+
+  - code: ZA-F06
+    name: 知岸定享 365 天第 15 期
+    issuer: 知岸理财
+    product_type: FIXED_INCOME
+    operation_mode: CLOSED
+    lockup_days: 365
+    redemption_settlement: 到期后 T+2 兑付
+    issuer_risk_level: PR2
+    distributor_risk_level: R2
+    minimum_investment: 10000
+    status: UPCOMING
+    data_quality: VERIFIED
+    sale_start: 2026-10-26
+    sale_end: 2026-10-30
+    raise_limit: 500000000
+    inception_date: 2026-11-02
+    maturity_date: 2027-11-02
+    investment_scope: 债权类资产比例不低于 80%，主要投资于与产品期限相匹配的高等级信用债、金融债及同业存单。
+    strategy: 持有到期为主，配置剩余期限与产品期限相近的资产，降低净值波动。
+    fees: { management: 0.25%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 3.3%, basis: 参考 1 年期高等级信用债收益水平，结合产品期限与费用测算。 }
+
+  - code: HY-P02
+    name: 鸿屿稳进半年持有（固收+）
+    issuer: 鸿屿理财
+    product_type: FIXED_INCOME_PLUS
+    operation_mode: MIN_HOLDING
+    lockup_days: 180
+    redemption_settlement: T+2
+    issuer_risk_level: PR3
+    distributor_risk_level: R3
+    minimum_investment: 1
+    status: UPCOMING
+    data_quality: VERIFIED
+    sale_start: 2026-10-27
+    sale_end: 2026-11-02
+    raise_limit: 1000000000
+    inception_date: 2026-11-04
+    investment_scope: 债权类资产比例不低于 80%；可转债及权益类资产合计比例不超过 20%。
+    strategy: 以中短久期债券票息为基础，适度参与可转债与权益资产增强收益，每份额最短持有 180 天。
+    fees: { management: 0.50%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
+    metrics:
+      - { type: PERFORMANCE_BENCHMARK, low: 3.0%, high: 4.2%, basis: 债券部分参考中短期债券收益，可转债与权益部分参考相关指数表现，按配置比例加权测算。 }

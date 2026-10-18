@@ -21,7 +21,38 @@ from app.products.catalog import (
     ProductType,
     load_catalog,
 )
-from app.products.service import SearchFilters, search
+from app.products.service import SearchFilters, search, upcoming
+from app.reminders.service import CHAT, ReminderError, create_reminder, reminded_codes
+
+
+def _session():
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.session import get_engine
+
+    return sessionmaker(bind=get_engine(), expire_on_commit=False)()
+
+
+def _reminded(customer_id: str | None) -> set[str]:
+    if not customer_id:
+        return set()
+    try:
+        with _session() as db:
+            return reminded_codes(db, customer_id)
+    except Exception:
+        return set()
+
+
+UPCOMING_NOTE = "新品尚未开售，可预约开售提醒；开售后需由您本人确认买入。"
+
+
+def upcoming_block(products, reminded: set[str]) -> dict:
+    return {
+        "type": "upcoming_products",
+        "items": [{**presenter.card(p), "reminded": p.code in reminded} for p in products],
+        "note": UPCOMING_NOTE,
+        "disclaimer": PRODUCT_DISCLAIMER,
+    }
 
 
 def _recorded_needs(customer_id: str | None):
@@ -98,6 +129,12 @@ def search_products(
     客户想了解有哪些产品、要求筛选或推荐时使用。
     """
     ctx = _context(state, investment_amount, horizon_months)
+    upcoming_matches = [
+        p
+        for p in upcoming(load_catalog(), ctx)
+        if not product_types or p.product_type in product_types
+        if max_lockup_days is None or p.lockup_days <= max_lockup_days
+    ]
     result = search(
         load_catalog(),
         ctx,
@@ -132,9 +169,17 @@ def search_products(
             for item in items
         ],
         "excluded": excluded,
+        "upcoming": [
+            {k: c[k] for k in ("code", "name", "type_label", "risk_level", "lockup", "minimum")}
+            | {"sale_window": c["sale_window"], "raise_limit": c["raise_limit"]}
+            for c in (presenter.card(p) for p in upcoming_matches)
+        ],
         "rules": "只能介绍列表中的产品。从排序靠前的产品中挑选 1–3 款，结合客户需求说明匹配点"
         "（期限、流动性、费用、起购金额）；不得以收益高低为理由，不得承诺收益或制造紧迫感。"
-        "排序依据是期限匹配、流动性和费用，不是收益。",
+        "排序依据是期限匹配、流动性和费用，不是收益。"
+        "upcoming 是符合客户条件、即将发售的新品：可如实说明募集期和募集规模上限，"
+        "并询问是否预约开售提醒；"
+        "不要说「高收益」「很多人抢」「赶紧」，客户明确同意后才调用 set_sale_reminder。",
     }
     artifact = {
         "type": "product_list",
@@ -144,7 +189,10 @@ def search_products(
         "ranking_note": "排序依据：期限匹配、流动性、费用；不按收益排序。",
         "disclaimer": PRODUCT_DISCLAIMER,
     }
-    return _dump(content), [artifact]
+    artifacts = [artifact]
+    if upcoming_matches:
+        artifacts.append(upcoming_block(upcoming_matches, _reminded(state.get("customer_id"))))
+    return _dump(content), artifacts
 
 
 @tool(response_format="content_and_artifact")
@@ -273,7 +321,43 @@ def compare_products(
     return _dump(content), [artifact]
 
 
-PRODUCT_TOOLS = [search_products, get_product_details, compare_products]
+@tool(response_format="content_and_artifact")
+def set_sale_reminder(
+    state: Annotated[dict, InjectedState],
+    product: Annotated[str, Field(description="即将发售的新品代码或名称")],
+) -> tuple[str, list[dict]]:
+    """为客户预约新品开售提醒。只有客户明确表示「要提醒 / 帮我预约」时才调用。
+
+    提醒不等于购买：开售后需客户本人确认买入。只能预约风险等级范围内、即将发售的新品。
+    """
+    found = load_catalog().find_by_name(product)
+    if found is None:
+        raise ToolException(f"未找到产品「{product}」。")
+    customer_id = state.get("customer_id")
+    if not customer_id:
+        raise ToolException("无法识别客户。")
+    from datetime import UTC, datetime
+
+    with _session() as db:
+        try:
+            create_reminder(
+                db, customer_id, found, state.get("risk_rating"), CHAT, datetime.now(UTC)
+            )
+        except ReminderError as exc:
+            raise ToolException(str(exc)) from exc
+        db.commit()
+    content = {
+        "status": "已预约开售提醒",
+        "product": found.name,
+        "sale_window": presenter.sale_window(found),
+        "metric": "{label} {text}".format(**presenter.headline_metric(found)),
+        "next_step": "开售当天会提醒客户；购买需客户本人在开售后确认，"
+        "不要说已为客户购买或锁定额度。",
+    }
+    return _dump(content), [upcoming_block([found], {found.code})]
+
+
+PRODUCT_TOOLS = [search_products, get_product_details, compare_products, set_sale_reminder]
 for _t in PRODUCT_TOOLS:
     _t.handle_tool_error = True
     _t.handle_validation_error = True

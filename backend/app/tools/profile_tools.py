@@ -84,6 +84,24 @@ class AllocationItem(BaseModel):
     amount: float = Field(description="配置金额（元）")
 
 
+MAX_SIMULATIONS_PER_TURN = 2  # 首次模拟 + 按检查结果调整一次
+
+
+def _simulations_this_turn(state: dict) -> int:
+    """本轮（最后一条客户消息之后）模型发起的配置模拟次数，含正在执行的这次。"""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    messages = state.get("messages", [])
+    start = max((i for i, m in enumerate(messages) if isinstance(m, HumanMessage)), default=-1)
+    return sum(
+        1
+        for m in messages[start + 1 :]
+        if isinstance(m, AIMessage)
+        for c in m.tool_calls
+        if c["name"] == "simulate_allocation"
+    )
+
+
 @tool(response_format="content_and_artifact")
 def simulate_allocation(
     state: Annotated[dict, InjectedState],
@@ -96,6 +114,12 @@ def simulate_allocation(
     rating = state.get("risk_rating")
     if not rating:
         raise ToolException("客户尚未完成有效的风险测评，无法模拟配置。")
+    if _simulations_this_turn(state) > MAX_SIMULATIONS_PER_TURN:
+        # 场景评估 V02：模型反复调整组合，耗尽本轮工具调用次数
+        raise ToolException(
+            f"本轮已模拟 {MAX_SIMULATIONS_PER_TURN} 次配置，"
+            "请根据最后一次的检查结果回答客户，不要再模拟。"
+        )
     customer_id = _customer_id(state)
     with _session() as db:
         needs = get_needs(db, customer_id)

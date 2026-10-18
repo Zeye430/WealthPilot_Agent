@@ -298,6 +298,103 @@ def test_purchase_confirm_requires_documents_and_never_places_order(client):
     assert client.post("/api/v1/purchases/confirm", json=over).status_code == 409
 
 
+# ---------- 新品与开售提醒（2026-10-18） ----------
+
+
+def test_products_api_lists_upcoming_with_remind_state(client):
+    before = {u["code"]: u["remind"] for u in client.get("/api/v1/products").json()["upcoming"]}
+    assert set(before) == {"ZA-F06", "HY-P02"}
+    assert before["ZA-F06"]["allowed"] is False  # 未测评不能预约
+    complete_assessment(client)  # C2
+    after = {u["code"]: u for u in client.get("/api/v1/products").json()["upcoming"]}
+    assert after["ZA-F06"]["remind"] == {"allowed": True, "reminded": False, "reason": None}
+    assert after["ZA-F06"]["sale_window"] == "10 月 26 日–10 月 30 日"
+    assert after["ZA-F06"]["raise_limit"] == "5 亿元"
+    assert "超出您的风险承受能力" in after["HY-P02"]["remind"]["reason"]  # PR3 新品
+
+
+def test_upcoming_product_cannot_be_bought(client):
+    complete_assessment(client)
+    detail = client.get("/api/v1/products/ZA-F06").json()
+    assert detail["purchase"]["allowed"] is False
+    assert "尚未开售" in detail["purchase"]["reasons"][0]
+    assert detail["remind"]["allowed"] is True
+    body = client.post(
+        "/api/v1/purchases/preview", json={"product_code": "ZA-F06", "amount": 10000}
+    ).json()
+    assert body["allowed"] is False
+
+
+def test_reminder_create_list_cancel(client):
+    complete_assessment(client)
+    created = client.post("/api/v1/reminders", json={"product_code": "ZA-F06"}).json()
+    again = client.post("/api/v1/reminders", json={"product_code": "ZA-F06"}).json()
+    assert again["id"] == created["id"]  # 不重复创建
+    rows = client.get("/api/v1/reminders").json()
+    assert [r["product"]["code"] for r in rows] == ["ZA-F06"]
+    assert "演示环境不发送" in rows[0]["delivery_note"]
+    detail = client.get("/api/v1/products/ZA-F06").json()
+    assert detail["remind"]["reminded"] is True
+    assert client.delete(f"/api/v1/reminders/{created['id']}").status_code == 204
+    assert client.get("/api/v1/reminders").json() == []
+
+
+def test_reminder_rules_enforced_by_code(client):
+    assert client.post("/api/v1/reminders", json={"product_code": "ZA-F06"}).status_code == 409
+    complete_assessment(client)  # C2
+    over = client.post("/api/v1/reminders", json={"product_code": "HY-P02"})
+    assert over.status_code == 409 and "超出" in over.json()["detail"]
+    on_sale = client.post("/api/v1/reminders", json={"product_code": "ZA-F01"})
+    assert on_sale.status_code == 409  # 在售产品无需预约
+
+
+def test_search_tool_returns_matching_upcoming_and_chat_reminder(client):
+    complete_assessment(client)  # C2
+    use_models(
+        main=[
+            tool_call("search_products", {"horizon_months": 12}),
+            AIMessage("在您的风险等级范围内有以下产品；另有一款新品 10 月 26 日开售。"),
+        ],
+        router=["PRODUCT_OR_ADVICE"],
+    )
+    body = client.post("/api/v1/chat", json={"message": "一年内不用，有什么产品？"}).json()
+    block = next(b for b in body["reply"]["ui_blocks"] if b["type"] == "upcoming_products")
+    assert [i["code"] for i in block["items"]] == ["ZA-F06"]  # PR3 新品不展示给 C2
+    assert block["items"][0]["reminded"] is False
+
+    use_models(
+        main=[
+            tool_call("set_sale_reminder", {"product": "知岸定享 365 天第 15 期"}),
+            AIMessage("已为您预约开售提醒，开售后需要您本人确认买入。"),
+        ],
+        router=["PRODUCT_OR_ADVICE"],
+    )
+    conv = body["conversation_id"]
+    client.post("/api/v1/chat", json={"conversation_id": conv, "message": "好的，帮我设个提醒"})
+    assert [r["product"]["code"] for r in client.get("/api/v1/reminders").json()] == ["ZA-F06"]
+
+
+# ---------- 客户等级与权益（2026-10-18） ----------
+
+
+def test_benefits_tool_available_before_assessment(client):
+    use_models(
+        main=[
+            tool_call("get_customer_benefits", {"planned_amount": 450000}),
+            AIMessage("您目前是金卡客户……"),
+        ],
+        router=["SERVICE"],
+    )
+    body = client.post("/api/v1/chat", json={"message": "我转钱进来有什么奖励？"}).json()
+    block = next(b for b in body["reply"]["ui_blocks"] if b["type"] == "tier_benefits")
+    assert block["tier"]["name"] == "金卡客户"  # 测试客户 5 万
+    assert (
+        block["projection"]["reaches_next"] is True
+        and block["projection"]["tier_name"] == "财富客户"
+    )
+    # 活动是否在期内由 test_campaigns_filtered_by_period_and_tier 用固定日期覆盖，这里不依赖当天日期
+
+
 # ---------- 客户画像（Phase 5） ----------
 
 
@@ -352,6 +449,13 @@ def test_needs_recorded_in_chat_narrow_product_search(client):
     assert "HY-F02" not in codes  # 两年持有 > 12 个月
     reasons = {e["reason"] for e in block["excluded"]}
     assert {"起购金额高于计划投资金额", "持有或封闭期超过投资期限"} <= reasons
+
+
+def test_reset_clears_reminders(client):
+    complete_assessment(client)
+    client.post("/api/v1/reminders", json={"product_code": "ZA-F06"})
+    client.post("/api/v1/demo/reset")
+    assert client.get("/api/v1/reminders").json() == []
 
 
 def test_reset_clears_needs(client):

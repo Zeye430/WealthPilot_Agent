@@ -103,6 +103,9 @@ def _metric_section(product: Product) -> list[str]:
     return lines
 
 
+STATUS_TEXT = {"ON_SALE": "在售", "ENDED": "已到期", "UPCOMING": "即将发售"}
+
+
 def render(product: Product, catalog: Catalog) -> str:
     risks = list(COMMON_RISKS)
     if product.product_type in (
@@ -122,8 +125,14 @@ def render(product: Product, catalog: Catalog) -> str:
         ("起购金额", presenter.format_money(product.minimum_investment)),
         ("成立日", str(product.inception_date)),
         ("到期日", str(product.maturity_date) if product.maturity_date else "无固定期限"),
-        ("产品状态", "在售" if product.status.value == "ON_SALE" else "已到期"),
+        ("产品状态", STATUS_TEXT[product.status.value]),
     ]
+    if product.status.value == "UPCOMING":
+        base_rows.append(("募集期", presenter.sale_window(product)))
+        if product.raise_limit:
+            base_rows.append(
+                ("募集规模上限", f"{presenter.format_money(product.raise_limit)}，额满提前结束募集")
+            )
     fee = product.fees
     fee_rows = [(row["label"], row["value"]) for row in presenter.detail(product)["fees"]]
 

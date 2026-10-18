@@ -18,6 +18,7 @@ from app.db.models import (
     Message,
     PolicyDecisionLog,
     RiskAssessment,
+    SaleReminder,
     ToolCallLog,
 )
 from app.db.session import get_session
@@ -86,7 +87,7 @@ def confirm(
 
 @router.post("/demo/reset", status_code=204)
 def reset_demo(db: Session = Depends(get_session), customer_id: str = Depends(get_customer_id)):
-    """清空当前演示客户的测评、会话与本次需求（基础画像来自银行系统，不受影响）。"""
+    """清空当前演示客户的测评、会话、本次需求与开售提醒（基础画像来自银行系统，不受影响）。"""
     if not get_settings().demo_mode:
         raise HTTPException(status_code=404)
     conversation_ids = select(Conversation.id).where(Conversation.customer_id == customer_id)
@@ -98,4 +99,5 @@ def reset_demo(db: Session = Depends(get_session), customer_id: str = Depends(ge
     db.execute(delete(Conversation).where(Conversation.customer_id == customer_id))
     db.execute(delete(RiskAssessment).where(RiskAssessment.customer_id == customer_id))
     db.execute(delete(CustomerNeeds).where(CustomerNeeds.customer_id == customer_id))
+    db.execute(delete(SaleReminder).where(SaleReminder.customer_id == customer_id))
     db.commit()

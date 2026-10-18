@@ -9,12 +9,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent.graph import build_graph, current_turn
+from app.agent.prompts import OUT_OF_SCOPE_REPLY, SAFE_FALLBACK_REPLY, TOOL_LIMIT_REPLY
 from app.api.deps import CustomerState, customer_state, get_customer_id, get_now
 from app.assessment.service import latest_confirmed
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
 from app.customers.base import get_customer_info_system
-from app.customers.context import age_conflict_note, assessed_loss_tolerance, prompt_section
+from app.customers.context import (
+    age_conflict_note,
+    assessed_loss_tolerance,
+    prompt_section,
+    tier_upgrade_note,
+)
 from app.customers.needs import get_needs
 from app.db.models import Conversation, Message, PolicyDecisionLog, ToolCallLog
 from app.db.session import get_session
@@ -140,9 +146,16 @@ def chat(
     except Exception as exc:
         logger.exception("agent failed", extra={"conversation_id": conversation.id})
         raise HTTPException(status_code=502, detail="AI 服务暂时不可用，请稍后再试") from exc
-    if note := age_conflict_note(req.message, result["reply"], base):
+    # 固定话术（兜底、工具上限）后面不追加提示
+    fixed_reply = result["reply"] in (SAFE_FALLBACK_REPLY, TOOL_LIMIT_REPLY, OUT_OF_SCOPE_REPLY)
+    if not fixed_reply and (note := age_conflict_note(req.message, result["reply"], base)):
         # 放在回答开头：年龄影响适当性判断，客户应先看到以登记为准
         result["reply"] = f"> {note}\n\n{result['reply']}"
+    # 本轮可能刚记录了投资金额，重新读取需求后判断是否提示等级升级（每个对话最多一次）
+    history_text = "\n".join(str(m.content) for m in history)
+    upgrade = tier_upgrade_note(base, get_needs(db, customer_id), result["reply"], history_text)
+    if not fixed_reply and (note := upgrade):
+        result["reply"] = f"{result['reply']}\n\n> {note}"
 
     db.add(Message(conversation_id=conversation.id, role="user", content=req.message))
     db.add(

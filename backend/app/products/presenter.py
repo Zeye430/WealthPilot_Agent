@@ -7,6 +7,7 @@ from app.products.catalog import (
     MetricType,
     OperationMode,
     Product,
+    ProductStatus,
 )
 
 CURRENT_METRIC_ORDER = [
@@ -26,9 +27,19 @@ def format_rate(rate: Decimal | None) -> str:
 
 
 def format_money(amount: Decimal) -> str:
+    if amount >= 100000000 and amount % 10000000 == 0:
+        return f"{(amount / 100000000).normalize():f} 亿元"
     if amount >= 10000 and amount % 10000 == 0:
         return f"{(amount / 10000).normalize():f} 万元"
     return f"{amount.normalize():f} 元"
+
+
+def sale_window(product: Product) -> str | None:
+    """新发产品的募集期，如「10 月 26 日–10 月 30 日」。"""
+    if product.sale_start is None or product.sale_end is None:
+        return None
+    start, end = product.sale_start, product.sale_end
+    return f"{start.month} 月 {start.day} 日–{end.month} 月 {end.day} 日"
 
 
 def lockup_text(product: Product) -> str:
@@ -99,6 +110,14 @@ def card(product: Product) -> dict:
         "status": product.status.value,
         "data_quality": product.data_quality.value,
         "synthetic": True,
+        **(
+            {
+                "sale_window": sale_window(product),
+                "raise_limit": format_money(product.raise_limit) if product.raise_limit else None,
+            }
+            if product.status is ProductStatus.UPCOMING
+            else {}
+        ),
     }
 
 

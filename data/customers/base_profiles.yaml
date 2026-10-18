@@ -24,7 +24,7 @@ customers:
   demo_customer_2:
     display_name: 陈女士（虚构）
     age: 31
-    customer_tier: 普通客户
+    customer_tier: 金卡客户
     occupation: 设计师
     customer_since: 2021-03-02
     kyc_verified: true
@@ -37,7 +37,7 @@ customers:
   pytest_customer:
     display_name: 测试客户（虚构）
     age: 40
-    customer_tier: 普通客户
+    customer_tier: 金卡客户
     occupation: 测试
     customer_since: 2024-01-01
     kyc_verified: true
@@ -61,3 +61,17 @@ customers:
       time_deposit: 300000
       wealth_products:
         - { code: ZA-C01, amount: 50000 }
+
+  # 场景评估专用：资料与演示客户 B 相同（用于「接近下一等级」等场景）
+  eval_customer_b:
+    display_name: 评估客户 B（虚构）
+    age: 31
+    customer_tier: 金卡客户
+    occupation: 设计师
+    customer_since: 2021-03-02
+    kyc_verified: true
+    assigned_rm: { id: RM002, name: 周经理（虚构）, title: 理财经理 }
+    assets_at_bank:
+      demand_deposit: 80000
+      time_deposit: 0
+      wealth_products: []

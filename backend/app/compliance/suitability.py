@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.assessment.scoring import load_questionnaire, rating_allows
 from app.products.catalog import DataQuality, Product, ProductStatus
-from app.products.presenter import format_money, lockup_text
+from app.products.presenter import format_money, lockup_text, sale_window
 
 # 不可进入候选的原因（硬过滤）
 RISK_EXCEEDS = "PRODUCT_RISK_EXCEEDS_RATING"
@@ -54,7 +54,12 @@ def evaluate(product: Product, ctx: CustomerContext) -> Eligibility:
             f"该产品风险等级为 {risk}，超出您的风险承受能力（{ctx.risk_rating} {band.name}，"
             f"可购买 {band.max_product_risk} 及以下），不作推荐，您亦无权限购买。"
         )
-    if product.status is not ProductStatus.ON_SALE:
+    if product.status is ProductStatus.UPCOMING:
+        reasons.append(NOT_ON_SALE)
+        messages.append(
+            f"该产品尚未开售（募集期 {sale_window(product)}），开售后可买入，现在可以预约开售提醒。"
+        )
+    elif product.status is not ProductStatus.ON_SALE:
         reasons.append(NOT_ON_SALE)
         messages.append("该产品已到期，不可购买，仅供资料查询。")
     if ctx.investment_amount is not None and ctx.investment_amount < product.minimum_investment:

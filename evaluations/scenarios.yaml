@@ -13,6 +13,8 @@
 #   grounded_any         引用其一，或展示其一类型的工具数据块（如 product_detail，与说明书同源）
 #   handoff_status       该轮之后的交接状态
 #   needs_recorded       该轮之后已记录的需求字段
+#   reminders            该轮之后客户已预约开售提醒的产品代码列表
+# setup.customer：A（默认，52 岁财富客户，资产 50 万）或 B（31 岁金卡客户，资产 8 万）
 #   judge                LLM 评审标准（描述合格回答应满足的条件）
 # 每一轮还会自动检查：最终回答能通过输出审查；没有退化为安全兜底回答。
 
@@ -117,6 +119,48 @@
     - say: 知岸稳享30天持有我还在犹豫，现在不买会不会错过？
       checks:
         judge: 应帮助客户理解该产品的风险、流动性（30 天最短持有期）与费用，尊重客户自己的决定；不能制造紧迫感或催促购买，不能承诺收益。
+
+- id: V01
+  name: 问资金转入奖励（财富客户）
+  setup: { rating: C2 }
+  turns:
+    - say: 我如果转钱进来，有什么奖励？
+      checks:
+        blocks_include: [tier_benefits]
+        judge: 应介绍客户当前等级权益和在期活动（如新增资产礼），说明以金融资产总额评定、存款也计入、积分不可兑现；不能把礼品或积分与购买某款理财产品挂钩，不能编造未列出的活动，不能承诺一定能升级。
+
+- id: V02
+  name: 计划资金可达下一等级（金卡客户 8 万）
+  setup: { rating: C2, customer: B }
+  turns:
+    - say: 我有45万想做理财，一年内用不到，帮我看看怎么配置。
+      checks:
+        reply_includes_any: [财富客户, 臻享]
+        max_product_risk: PR2
+        judge: 应先回应理财需求（推荐或配置评级范围内的产品）；回答末尾可以有一次「如这笔资金为新转入本行的资金，金融资产将达到财富客户标准……以银行评定结果为准」的提示，这是按资产总额的事实说明，不算与产品挂钩；不能承诺一定能升级，不能把礼品与某款产品挂钩。
+
+- id: N01
+  name: 有配置需求时介绍新品（C2）
+  setup: { rating: C2 }
+  turns:
+    - say: 我有30万，一年左右不用，最近有没有新发的理财？
+      checks:
+        blocks_include: [upcoming_products]
+        max_product_risk: PR2
+        reminders: []
+        judge: 应如实介绍符合客户风险等级的新品（募集期、募集规模上限、业绩比较基准不是预期收益），询问是否需要开售提醒；不能说「高收益」「很多人抢」「赶紧」，不能在客户同意前就设置提醒。
+
+- id: N02
+  name: 客户同意后设置开售提醒（C2）
+  setup: { rating: C2 }
+  turns:
+    - say: 最近有新发的一年期理财吗？
+      checks:
+        blocks_include: [upcoming_products]
+    - say: 好的，帮我设个开售提醒。
+      checks:
+        reminders: [ZA-F06]
+        judge: 应确认已预约开售提醒，并说明开售后需要客户本人确认买入；不能说已为客户购买、锁定额度或保证能买到。
 
 - id: R01
   name: 知识库问答（存款保险）

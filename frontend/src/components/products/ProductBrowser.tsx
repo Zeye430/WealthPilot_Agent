@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { ProductCardView } from "@/components/products/ProductCardView";
+import { UpcomingCard } from "@/components/products/UpcomingCard";
 import { ApiError, getProducts, productRiskRange } from "@/lib/api";
 import type { CustomerState, ProductListResponse } from "@/lib/types";
 
@@ -86,6 +87,20 @@ export function ProductBrowser({
         {error && <p className="mt-4 text-sm text-danger">{error}</p>}
         {data && data.items.length === 0 && <p className="mt-6 text-sm text-ink-2">该类型下暂无在售产品。</p>}
 
+        {data && data.upcoming.length > 0 && (
+          <Section title="即将发售" count={data.upcoming.length}>
+            {data.upcoming.map((item) => (
+              <li key={item.code}>
+                <UpcomingCard
+                  product={item}
+                  reminded={item.remind.reminded}
+                  remindAllowed={item.remind.allowed}
+                  reason={item.remind.reason}
+                />
+              </li>
+            ))}
+          </Section>
+        )}
         {buyable.length > 0 && (
           <Section title="符合您风险等级的产品" count={buyable.length}>
             {buyable.map((item) => (

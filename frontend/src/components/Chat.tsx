@@ -10,6 +10,7 @@ import { LineChartBlock } from "@/components/blocks/LineChartBlock";
 import { SourceNote, SourcesView } from "@/components/blocks/SourcesView";
 import { AllocationView, NeedsUpdateNote } from "@/components/blocks/AllocationView";
 import { ComparisonTableView, ProductDetailCard, ProductListView } from "@/components/blocks/ProductBlocks";
+import { TierBenefitsView, UpcomingProductsView } from "@/components/blocks/BenefitBlocks";
 import { RmContactCard } from "@/components/blocks/HandoffBlocks";
 import { ApiError, getConversation, sendChat } from "@/lib/api";
 import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
@@ -256,6 +257,10 @@ function Block({ block, onStartAssessment }: { block: UIBlock; onStartAssessment
       return <SourcesView block={block} />;
     case "rm_contact":
       return <RmContactCard block={block} />;
+    case "upcoming_products":
+      return <UpcomingProductsView block={block} />;
+    case "tier_benefits":
+      return <TierBenefitsView block={block} />;
     case "needs_update":
       return <NeedsUpdateNote block={block} />;
     case "allocation":

@@ -6,6 +6,7 @@ import { AssessmentDialog } from "@/components/AssessmentDialog";
 import { Chat, type ChatHandle } from "@/components/Chat";
 import { ProductActionsProvider } from "@/components/products/ProductActions";
 import { ProductBrowser } from "@/components/products/ProductBrowser";
+import { RemindersView } from "@/components/products/RemindersView";
 import {
   listConversations,
   clearNeeds,
@@ -22,6 +23,7 @@ const COMING_SOON = ["我的理财目标"];
 const VIEWS = [
   { id: "chat", label: "对话与测算" },
   { id: "products", label: "理财产品" },
+  { id: "reminders", label: "我的提醒" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
@@ -197,7 +199,12 @@ export function AppShell() {
               </button>
             ))}
           </nav>
-          {view === "products" && (
+          {view === "reminders" && (
+          <div className="min-h-0 flex-1">
+            <RemindersView onBrowse={() => setView("products")} />
+          </div>
+        )}
+        {view === "products" && (
             <div className="min-h-0 flex-1">
               <ProductBrowser state={state} onStartAssessment={startAssessment} />
             </div>

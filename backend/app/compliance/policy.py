@@ -14,7 +14,8 @@ RULE_VERSION = "2026-10-17.1"
 
 # 测评前允许 LLM 使用的工具。只放与具体产品无关的工具；收紧或放开只改这里。
 # search_documents 测评前只检索知识库（工具内部按权限限定范围）；
-# update_needs 只记录需求；request_handoff 未测评也可转人工（人工可协助测评）
+# update_needs 只记录需求；request_handoff 未测评也可转人工（人工可协助测评）；
+# get_customer_benefits 查询客户等级与活动，与具体产品无关
 PRE_ASSESSMENT_ALLOWED_TOOLS = frozenset(
     {
         "start_risk_assessment",
@@ -22,6 +23,7 @@ PRE_ASSESSMENT_ALLOWED_TOOLS = frozenset(
         "search_documents",
         "update_needs",
         "request_handoff",
+        "get_customer_benefits",
     }
 )
 
