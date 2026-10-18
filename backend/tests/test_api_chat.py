@@ -469,3 +469,17 @@ def test_rm_access_control(client):
         ).status_code
         == 409
     )  # 未接单不能回复
+
+
+# ---------- 历史会话 ----------
+
+
+def test_conversation_history_lists_recent_first(client):
+    use_models(main=[AIMessage("您好"), AIMessage("好的")], router=["SERVICE", "SERVICE"])
+    first = client.post("/api/v1/chat", json={"message": "第一个会话"}).json()
+    second = client.post("/api/v1/chat", json={"message": "第二个会话"}).json()
+    rows = client.get("/api/v1/conversations").json()
+    assert [r["id"] for r in rows][:2] == [second["conversation_id"], first["conversation_id"]]
+    assert rows[0]["title"] == "第二个会话" and rows[0]["message_count"] == 2
+    other = client.get("/api/v1/conversations", headers={"X-Demo-User": "demo_customer_1"}).json()
+    assert first["conversation_id"] not in {r["id"] for r in other}

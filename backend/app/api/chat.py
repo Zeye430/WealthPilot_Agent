@@ -14,7 +14,7 @@ from app.assessment.service import latest_confirmed
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
 from app.customers.base import get_customer_info_system
-from app.customers.context import prompt_section
+from app.customers.context import assessed_loss_tolerance, prompt_section
 from app.customers.needs import get_needs
 from app.db.models import Conversation, Message, PolicyDecisionLog, ToolCallLog
 from app.db.session import get_session
@@ -64,6 +64,13 @@ class ConversationOut(BaseModel):
     handoff: dict | None = None
 
 
+class ConversationSummary(BaseModel):
+    id: str
+    title: str | None
+    updated_at: datetime
+    message_count: int
+
+
 class MessagesSince(BaseModel):
     messages: list[MessageOut]
     total: int
@@ -104,6 +111,7 @@ def chat(
     if handoff is not None and handoff.status in AI_PAUSED:
         # 理财经理已接手：AI 暂停回复，客户消息直接转给理财经理
         db.add(Message(conversation_id=conversation.id, role="user", content=req.message))
+        conversation.updated_at = now
         db.commit()
         relay = {"type": "handoff_relay", "rm_name": handoff.assigned_rm_name}
         return ChatResponse(
@@ -115,7 +123,9 @@ def chat(
 
     history = _load_history(db, conversation.id)
     customer_context = prompt_section(
-        get_customer_info_system().get(customer_id), get_needs(db, customer_id)
+        get_customer_info_system().get(customer_id),
+        get_needs(db, customer_id),
+        assessed_loss_tolerance(db, customer_id),
     )
     if handoff is not None:
         customer_context += (
@@ -159,6 +169,7 @@ def chat(
             ui_blocks=result["ui_blocks"],
         )
     )
+    conversation.updated_at = now
     _log_tool_calls(db, conversation.id, current_turn(result["messages"]))
     for d in result["policy_decisions"]:
         db.add(PolicyDecisionLog(conversation_id=conversation.id, **d))
@@ -170,6 +181,25 @@ def chat(
         state=customer_state(db, customer_id, now),
         handoff=handoff_view(latest_handoff(db, conversation.id)),
     )
+
+
+@router.get("/conversations", response_model=list[ConversationSummary])
+def list_conversations(
+    db: Session = Depends(get_session), customer_id: str = Depends(get_customer_id)
+):
+    """历史会话（最近 30 个），按最近活动时间倒序。"""
+    rows = db.scalars(
+        select(Conversation)
+        .where(Conversation.customer_id == customer_id)
+        .order_by(Conversation.updated_at.desc())
+        .limit(30)
+    ).all()
+    return [
+        ConversationSummary(
+            id=c.id, title=c.title, updated_at=c.updated_at, message_count=len(c.messages)
+        )
+        for c in rows
+    ]
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationOut)

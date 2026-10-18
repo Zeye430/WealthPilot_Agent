@@ -19,8 +19,9 @@ class Settings(BaseSettings):
     llm_temperature: float = 1.0
     llm_temperature_no_thinking: float = 0.6
     llm_agent_thinking: bool = False  # 主 Agent 是否开启思考（关闭约快一倍）；话题路由始终关闭
-    llm_timeout_seconds: float = 60
-    llm_max_retries: int = 1
+    # 场景评估中出现过连接被重置：单次超时 30 秒、失败自动重试 2 次（指数退避），避免客户等待过久
+    llm_timeout_seconds: float = 30
+    llm_max_retries: int = 2
 
     agent_max_tool_calls: int = 6
 

@@ -45,3 +45,18 @@ customers:
       demand_deposit: 50000
       time_deposit: 0
       wealth_products: []
+
+  # 场景评估专用（evaluations/run_scenarios.py），资料与演示客户 A 相同
+  eval_customer:
+    display_name: 评估客户（虚构）
+    age: 52
+    customer_tier: 财富客户
+    occupation: 企业职员
+    customer_since: 2015-06-18
+    kyc_verified: true
+    assigned_rm: { id: RM001, name: 李经理（虚构） }
+    assets_at_bank:
+      demand_deposit: 150000
+      time_deposit: 300000
+      wealth_products:
+        - { code: ZA-C01, amount: 50000 }

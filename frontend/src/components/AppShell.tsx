@@ -6,6 +6,7 @@ import { AssessmentDialog } from "@/components/AssessmentDialog";
 import { Chat, type ChatHandle } from "@/components/Chat";
 import { ProductBrowser } from "@/components/products/ProductBrowser";
 import {
+  listConversations,
   clearNeeds,
   DEMO_USERS,
   formatDate,
@@ -14,7 +15,7 @@ import {
   resetDemo,
   setDemoUser as setApiDemoUser,
 } from "@/lib/api";
-import type { CustomerState } from "@/lib/types";
+import type { ConversationSummary, CustomerState } from "@/lib/types";
 
 const COMING_SOON = ["我的理财目标"];
 const VIEWS = [
@@ -29,6 +30,8 @@ export function AppShell() {
   const [state, setState] = useState<CustomerState | null>(null);
   const [assessing, setAssessing] = useState(false);
   const [view, setView] = useState<View>("chat");
+  const [history, setHistory] = useState<ConversationSummary[]>([]);
+  const [openConversation, setOpenConversation] = useState<string | null>(null);
   const chatRef = useRef<ChatHandle>(null);
 
   const refreshState = useCallback(() => {
@@ -37,19 +40,34 @@ export function AppShell() {
       .catch(() => setState(null));
   }, []);
 
+  const refreshHistory = useCallback(() => {
+    listConversations()
+      .then(setHistory)
+      .catch(() => setHistory([]));
+  }, []);
+
   useEffect(() => {
     setApiDemoUser(demoUser);
     refreshState();
-  }, [demoUser, refreshState]);
+    refreshHistory();
+  }, [demoUser, refreshState, refreshHistory]);
 
   function newChat() {
+    setOpenConversation(null);
     setChatKey((k) => k + 1); // 改变 key 会重新挂载 Chat，即开始新对话
+    setView("chat");
+  }
+
+  function openHistory(id: string) {
+    setOpenConversation(id);
+    setChatKey((k) => k + 1);
     setView("chat");
   }
 
   async function reset() {
     await resetDemo();
     refreshState();
+    refreshHistory();
     newChat();
   }
 
@@ -100,6 +118,28 @@ export function AppShell() {
             </li>
           ))}
         </ul>
+
+        {history.length > 0 && (
+          <section className="mt-6 min-h-0 overflow-y-auto" aria-label="最近对话">
+            <p className="px-3 text-xs text-ink-3">最近对话</p>
+            <ul className="mt-1 space-y-0.5 text-sm">
+              {history.slice(0, 8).map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => openHistory(c.id)}
+                    className={`w-full truncate rounded-sm px-3 py-1.5 text-left ${
+                      openConversation === c.id ? "bg-brand-soft" : "text-ink-2 hover:bg-brand-soft/50"
+                    }`}
+                    title={c.title ?? ""}
+                  >
+                    {c.title || "未命名对话"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="mt-auto space-y-2 border-t border-rule pt-4 text-xs text-ink-2">
           <a href="/rm" target="_blank" rel="noreferrer" className="block text-brand underline underline-offset-4">
@@ -165,6 +205,8 @@ export function AppShell() {
           <Chat
             key={`${demoUser}-${chatKey}`}
             ref={chatRef}
+            initialConversationId={openConversation}
+            onActivity={refreshHistory}
             onStartAssessment={startAssessment}
             onStateChange={setState}
           />

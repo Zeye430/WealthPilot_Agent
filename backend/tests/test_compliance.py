@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.compliance.output_guard import check_output
+from app.compliance.output_guard import check_output, describe, remove_steering
 from app.compliance.policy import Permission, evaluate_gate, tool_allowed
 from app.db.models import RiskAssessment
 
@@ -114,6 +114,8 @@ def test_product_mention_before_assessment_is_leak_unless_customer_named_it():
     [
         "如果 5% 收益目标优先，可能需要承担更高波动（PR3 及以上），如需调整需重新测评。",
         "想要更高收益的话，您可以重新评估风险承受能力。",
+        # P7 场景评估 S01：把重新测评当作了解更高等级产品的途径
+        "如果您希望了解权益类产品，需要重新完成风险测评且结果达到相应等级。",
     ],
 )
 def test_reassessment_steering_blocked(text):
@@ -124,6 +126,32 @@ def test_reassessment_steering_blocked(text):
 def test_reassessment_allowed_when_circumstances_change():
     text = "如果您的收入或资产情况发生了变化，可以重新测评。"
     assert check_output(text, Permission.ASSESSED) == []
+
+
+def test_neutral_reassessment_mentions_pass():
+    for text in (
+        "如果您的情况确实发生了变化（如收入、资产规模有重大改变），可以重新进行风险测评。",
+        "如果您希望重新测评，我可以为您打开测评入口。",
+    ):
+        assert check_output(text, Permission.ASSESSED) == []
+
+
+def test_remove_steering_keeps_rest_of_reply():
+    reply = (
+        "您当前评级为 C2，可购买 PR2 及以下产品。\n\n"
+        "如果您希望了解权益类产品，需要重新完成风险测评且结果达到相应等级。"
+        "我可以为您查找 PR2 及以下的产品。"
+    )
+    redacted = remove_steering(reply)
+    assert (
+        redacted == "您当前评级为 C2，可购买 PR2 及以下产品。\n\n我可以为您查找 PR2 及以下的产品。"
+    )
+    assert check_output(redacted, Permission.ASSESSED) == []
+
+
+def test_rewrite_feedback_quotes_steering_sentence():
+    reply = "想要更高收益的话，您可以重新评估风险承受能力。"
+    assert "想要更高收益的话" in describe(["O-REASSESSMENT_STEERING"], reply)
 
 
 def test_personalized_advice_blocked_after_assessment():
@@ -154,3 +182,56 @@ def test_false_handoff_claim_blocked(text):
 )
 def test_accurate_handoff_status_passes(text):
     assert check_output(text, Permission.ASSESSED) == []
+
+
+# ---------- 场景评估中发现的问题（2026-10-17） ----------
+
+
+def test_quoted_warning_is_not_a_claim():
+    text = "如果销售人员说某款产品“保本”“肯定能赚”，这属于违规宣传，不应相信。"
+    assert check_output(text, Permission.ASSESSED) == []
+
+
+def test_quoted_claim_without_warning_is_still_blocked():
+    # 不能靠加引号绕过：没有警示语境的引号内承诺仍然拦截
+    assert "O-PROHIBITED_CLAIM" in check_output("这款产品“稳赚”，放心买。", Permission.ASSESSED)
+
+
+def test_steering_via_rm_to_higher_risk_level_blocked():
+    text = "建议联系理财经理评估是否需要更高的风险等级，以达到 5% 的目标。"
+    assert "O-REASSESSMENT_STEERING" in check_output(text, Permission.ASSESSED)
+
+
+def test_stating_tradeoff_without_steering_passes():
+    text = "若收益目标较为刚性，需承担更高波动风险（PR3 及以上），但这超出当前风险等级。"
+    assert check_output(text, Permission.ASSESSED) == []
+
+
+def test_tradeoff_with_limitation_passes_but_reassessment_option_blocked():
+    ok = "若坚持该收益预期，可能需要考虑更高风险等级的产品，但这与您的风险测评结果不匹配。"
+    assert check_output(ok, Permission.ASSESSED) == []
+    bad = "如果您希望更接近 5% 的目标，可能需要提升风险等级（需重新测评）或接受更大波动。"
+    assert "O-REASSESSMENT_STEERING" in check_output(bad, Permission.ASSESSED)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "目前没有任何一款理财产品是保本保收益的。",
+        "银行理财中不存在保证收益的产品。",
+        "监管禁止机构承诺稳赚不赔。",
+    ],
+)
+def test_distant_negation_in_same_clause_passes(text):
+    assert check_output(text, Permission.ASSESSED) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "这款产品不仅保本保收益，而且流动性好。",  # 「不仅」不是否定
+        "它不会亏，保证收益。",  # 否定词在前一个分句
+    ],
+)
+def test_negation_does_not_leak_across_clauses_or_from_buzhi(text):
+    assert "O-PROHIBITED_CLAIM" in check_output(text, Permission.ASSESSED)

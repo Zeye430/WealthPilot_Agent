@@ -1,6 +1,8 @@
 import type {
   AssessmentResult,
   ChatResponse,
+  ConversationDetail,
+  ConversationSummary,
   CustomerState,
   HandoffView,
   MessagesSince,
@@ -69,6 +71,11 @@ export const confirmAssessment = (assessmentId: string) =>
   request<CustomerState>(`/api/v1/assessment/${assessmentId}/confirm`, { method: "POST" });
 
 export const resetDemo = () => request<void>("/api/v1/demo/reset", { method: "POST" });
+
+export const listConversations = () => request<ConversationSummary[]>("/api/v1/conversations");
+
+export const getConversation = (id: string) =>
+  request<ConversationDetail>(`/api/v1/conversations/${id}`);
 
 export const consentHandoff = (id: string) =>
   request<HandoffView>(`/api/v1/handoffs/${id}/consent`, { method: "POST" });

@@ -159,7 +159,7 @@ def simulate(
                 Check(
                     status=WARN,
                     label="集中度",
-                    message=f"{s.name}占比 {format_rate(s.pct)}，超过 50%，建议适当分散",
+                    message=f"{s.name}占比 {format_rate(s.pct)}，超过 50%，集中度较高",
                 )
             )
 

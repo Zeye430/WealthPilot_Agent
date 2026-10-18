@@ -12,6 +12,7 @@
 - **适当性是硬过滤**：超出评级、已到期、金额或期限不符的产品进不了候选；排序只看期限、流动性和费用，不按收益排序。客户评级由系统注入，模型无法改写。
 - **回答有出处**：金融常识以人工编写、法规原文已核对的知识库为依据，回答标注 [K17] 这类编号并可展开查看原文与官方链接；没有依据的回答标注「一般性说明」。知识库条目过期自动停止引用。
 - **客户画像叠加而不重建**：基础画像来自银行系统、只读；对话中的新需求（金额、期限、流动性、目标收益）另行记录并标注来源，已知信息不再追问。
+- **质量可重复验证**：19 个真实 LLM 多轮场景（门禁、诱导、产品、引用、计算、交接），确定性检查 + LLM 评审，每个场景重复运行统计通过率；CI 每次提交运行全部单元与集成测试。
 - **人工交接是状态机**：客户同意、待接单、处理中等状态都来自真实工作流，界面不会把"待接单"说成"已接入"。
 
 ## 架构
@@ -71,12 +72,15 @@ npm run dev                    # http://localhost:3000
 ## 测试
 
 ```bash
-cd backend && uv run pytest     # 计算、问卷计分、合规规则、Agent 流程（假模型）、API 集成（需数据库）
+cd backend && uv run pytest     # 计算、问卷计分、合规规则、Agent 流程（假模型）、API 集成（自动使用独立测试库 wealthpilot_test）
+cd backend && uv run python ../evaluations/run_scenarios.py --repeat 3   # 真实 Kimi 多轮场景评估，报告写入 evaluations/reports/
 cd backend && uv run python ../evaluations/run_router_eval.py   # 用真实 Kimi 评估话题路由
 cd backend && uv run python ../evaluations/run_rag_eval.py      # 检索命中率（不调用 LLM）
 cd backend && uv run python ../scripts/check_knowledge.py       # 知识库维护检查（核对法规原文）
 cd frontend && npm run lint && npm run build
 ```
+
+CI（`.github/workflows/ci.yml`）在每次 push / PR 时运行后端 ruff + pytest 与前端 lint + build。场景评估调用真实模型、有费用，不在 CI 中运行。
 
 ## 项目结构
 
@@ -104,4 +108,4 @@ docs/                 架构、合规、评估、路线图
 | P4 条款 RAG + 知识库 | ✅ 检索 Hit@1 96%；52 条法规摘录自动核对通过 |
 | P5 客户画像 + 配置情景 | ✅ 基础画像（银行系统）+ 本次需求；主场景跑通 |
 | P6 人工交接 | ✅ 客户同意 → 理财经理看板 → 服务中 AI 暂停，全程留痕 |
-| P7 评估与交付 | 下一步 |
+| P7 质量与完善 | 🔄 场景评估、测试隔离、CI、最近对话 |

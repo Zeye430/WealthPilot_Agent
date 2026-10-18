@@ -207,6 +207,13 @@ generate_return_scenarios = StructuredTool.from_function(
 
 class FeeInput(BaseModel):
     amount: float = Field(description="申购金额（元）")
+    product: str | None = Field(
+        default=None,
+        description="产品代码或名称。填写后申购费、赎回费按该产品说明书的费率计算，不需要也不应自行填写费率",
+    )
+    holding_days: int | None = Field(
+        default=None, description="持有天数；填写 product 时用于确定赎回费档位"
+    )
     subscription_fee_rate: float = Field(default=0, description="申购费率，小数形式，0.3% 填 0.003")
     fee_method: Literal["external", "internal"] = Field(
         default="external", description="申购费计算方式：external=外扣法，internal=内扣法"
@@ -217,13 +224,44 @@ class FeeInput(BaseModel):
     redemption_fee_rate: float = Field(default=0, description="赎回费率，小数形式")
 
 
+def _product_rates(product: str, holding_days: int | None) -> tuple[float, float, str]:
+    """从产品要素读取费率：产品相关的费率不能由模型提供（可能编造）。"""
+    from app.products.catalog import load_catalog
+    from app.products.presenter import format_rate
+
+    found = load_catalog().find_by_name(product)
+    if found is None:
+        raise ToolException(f"未找到产品「{product}」")
+    if found.fees.subscription is None:
+        raise ToolException(f"{found.name}的申购费未核实，无法测算")
+    if holding_days is None:
+        raise ToolException("按产品测算赎回费需要提供持有天数（holding_days）")
+    redemption = _run(
+        lambda: calc.redemption_fee_rate(
+            holding_days, [(t.max_days, t.rate) for t in found.fees.redemption]
+        )
+    )
+    note = (
+        f"费率来自《{found.name}》说明书：申购费 {format_rate(found.fees.subscription)}，"
+        f"持有 {holding_days} 天适用赎回费 {format_rate(redemption)}"
+    )
+    return float(found.fees.subscription), float(redemption), note
+
+
 def _fees(
     amount: float,
+    product: str | None = None,
+    holding_days: int | None = None,
     subscription_fee_rate: float = 0,
     fee_method: str = "external",
     holding_period_return: float = 0,
     redemption_fee_rate: float = 0,
 ):
+    source_note = None
+    if product:
+        subscription_fee_rate, redemption_fee_rate, source_note = _product_rates(
+            product, holding_days
+        )
     result = _run(
         lambda: calc.net_investment_proceeds(
             _d(amount),
@@ -241,6 +279,8 @@ def _fees(
         "持有期收益按净值涨幅计；净值通常已扣除管理费、托管费，此处不重复扣除",
         HYPOTHETICAL_NOTE,
     ]
+    if source_note:
+        assumptions.insert(0, source_note)
     labels = {
         "subscription_fee": "申购费",
         "net_subscription": "净申购金额",
@@ -266,7 +306,8 @@ def _fees(
 calculate_fees = StructuredTool.from_function(
     func=_fees,
     name="calculate_fees",
-    description="计算申购费、赎回费以及一次申购—持有—赎回后的到手金额和净收益。",
+    description="计算申购费、赎回费以及一次申购—持有—赎回后的到手金额和净收益。"
+    "涉及具体产品时填写 product 与 holding_days，费率自动取自产品说明书。",
     args_schema=FeeInput,
     response_format="content_and_artifact",
     handle_tool_error=True,

@@ -218,6 +218,20 @@ export type ChatResponse = {
   handoff: HandoffView | null;
 };
 
+export type ConversationSummary = {
+  id: string;
+  title: string | null;
+  updated_at: string;
+  message_count: number;
+};
+
+export type ConversationDetail = {
+  id: string;
+  title: string | null;
+  messages: { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }[];
+  handoff: HandoffView | null;
+};
+
 export type MessagesSince = {
   messages: { role: "user" | "assistant" | "rm"; content: string; ui_blocks: UIBlock[] }[];
   total: number;

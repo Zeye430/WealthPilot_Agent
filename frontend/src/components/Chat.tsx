@@ -11,7 +11,7 @@ import { SourceNote, SourcesView } from "@/components/blocks/SourcesView";
 import { AllocationView, NeedsUpdateNote } from "@/components/blocks/AllocationView";
 import { ComparisonTableView, ProductDetailCard, ProductListView } from "@/components/blocks/ProductBlocks";
 import { HandoffBanner, HandoffConsentCard, HandoffRelayNote, HandoffStatusNote } from "@/components/blocks/HandoffBlocks";
-import { ApiError, getMessagesSince, sendChat } from "@/lib/api";
+import { ApiError, getConversation, getMessagesSince, sendChat } from "@/lib/api";
 import type { ChatMessage, CustomerState, HandoffView, UIBlock } from "@/lib/types";
 
 const POLL_MS = 3000;
@@ -28,11 +28,14 @@ export type ChatHandle = { addNotice: (text: string) => void; send: (text: strin
 
 type Props = {
   ref?: Ref<ChatHandle>;
+  /** 打开历史会话时传入；新对话为空 */
+  initialConversationId?: string | null;
   onStartAssessment: () => void;
   onStateChange: (state: CustomerState) => void;
+  onActivity?: () => void;
 };
 
-export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
+export function Chat({ ref, initialConversationId, onStartAssessment, onStateChange, onActivity }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -47,6 +50,19 @@ export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
     addNotice: (text) => setMessages((m) => [...m, { role: "notice", content: text, ui_blocks: [] }]),
     send: (text) => submit(text),
   }));
+
+  // 打开历史会话：从服务端恢复消息（含界面块）与交接状态
+  useEffect(() => {
+    if (!initialConversationId) return;
+    getConversation(initialConversationId)
+      .then((c) => {
+        setConversationId(c.id);
+        setMessages(c.messages);
+        setHandoff(c.handoff);
+        syncedRef.current = c.messages.length;
+      })
+      .catch(() => setError("历史会话加载失败"));
+  }, [initialConversationId]);
 
   // 人工服务进行中：定时拉取理财经理回复与最新状态（演示用轮询，生产可换 WebSocket）
   useEffect(() => {
@@ -84,6 +100,7 @@ export function Chat({ ref, onStartAssessment, onStateChange }: Props) {
       setMessages((m) => [...m, { role: "assistant", ...res.reply }]);
       setHandoff(res.handoff);
       onStateChange(res.state);
+      onActivity?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "出现未知错误，请重试。");
       setMessages((m) => m.slice(0, -1));

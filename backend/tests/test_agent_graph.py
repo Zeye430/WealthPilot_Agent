@@ -9,6 +9,7 @@ from app.agent.prompts import (
     SAFE_FALLBACK_REPLY,
     TOOL_LIMIT_REPLY,
 )
+from app.compliance import output_guard
 from app.compliance.policy import Permission
 from app.tools.calculation_tools import HYPOTHETICAL_NOTE
 from tests.fakes import ScriptedChatModel, tool_call
@@ -237,6 +238,37 @@ def test_repeated_violation_falls_back():
     assert [d["decision"] for d in decisions(result, "OUTPUT")] == ["REWRITE", "FALLBACK"]
 
 
+def test_repeated_steering_is_redacted_instead_of_fallback():
+    steer = "想要更高收益的话，您可以重新评估风险承受能力。"
+    model = ScriptedChatModel(
+        responses=[
+            AIMessage(f"您的评级为 C2。{steer}"),
+            AIMessage(f"您的评级为 C2，可购买 PR2 及以下产品。{steer}"),
+        ]
+    )
+    result = run(model, label="FINANCE_KNOWLEDGE", text="我能承受高风险")
+    assert result["reply"] == "您的评级为 C2，可购买 PR2 及以下产品。"
+    assert [d["decision"] for d in decisions(result, "OUTPUT")] == ["REWRITE", "REDACT"]
+
+
+def test_guarantee_question_gets_explicit_denial():
+    evasive = "风险最低的是现金管理类产品。银行存款受存款保险保障。"
+    result = run(
+        ScriptedChatModel(responses=[AIMessage(evasive)]),
+        label="FINANCE_KNOWLEDGE",
+        text="哪款产品是保本保收益的？",
+    )
+    assert result["reply"].endswith(output_guard.NO_GUARANTEE_NOTE)
+
+    explicit = "银行理财产品不保本，也不承诺收益。"
+    result = run(
+        ScriptedChatModel(responses=[AIMessage(explicit)]),
+        label="FINANCE_KNOWLEDGE",
+        text="哪款产品是保本保收益的？",
+    )
+    assert result["reply"] == explicit
+
+
 def test_recommendation_before_assessment_is_rewritten():
     model = ScriptedChatModel(
         responses=[
@@ -250,7 +282,8 @@ def test_recommendation_before_assessment_is_rewritten():
         text="固收理财适合我吗？",
         permission=Permission.ASSESSMENT_REQUIRED,
     )
-    assert decisions(result, "OUTPUT")[0]["reason_codes"] == ["O-PERMISSION_LEAK"]
+    codes = decisions(result, "OUTPUT")[0]["reason_codes"]
+    assert codes == ["O-PERMISSION_LEAK", "片段:建议您购买"]  # 审计记录包含违规片段
     assert "建议您购买" not in result["reply"]
 
 
@@ -305,3 +338,37 @@ def test_made_up_product_is_rewritten():
     )
     result = run(model, label="PRODUCT_OR_ADVICE", text="有什么好产品？")
     assert decisions(result, "OUTPUT")[0]["reason_codes"] == ["O-UNGROUNDED_PRODUCT"]
+
+
+def test_product_fee_rates_come_from_catalog_not_llm():
+    # 模型即使传了错误费率，填写 product 后仍以说明书为准：知岸稳享每日开放持有不足 7 天赎回费 0.5%
+    model = ScriptedChatModel(
+        responses=[
+            tool_call(
+                "calculate_fees",
+                {
+                    "amount": 100000,
+                    "product": "知岸稳享每日开放",
+                    "holding_days": 5,
+                    "redemption_fee_rate": 0.1,
+                },
+            ),
+            AIMessage("赎回费 500 元。"),
+        ]
+    )
+    block = run(model)["ui_blocks"][0]
+    items = {i["label"]: i["value"] for i in block["items"]}
+    assert items["赎回费"] == "500.00"
+    assert block["assumptions"][0].startswith("费率来自《知岸稳享每日开放》说明书")
+
+
+def test_product_fee_requires_holding_days():
+    model = ScriptedChatModel(
+        responses=[
+            tool_call("calculate_fees", {"amount": 100000, "product": "ZA-F01"}),
+            AIMessage("请告诉我持有天数。"),
+        ]
+    )
+    result = run(model)
+    tool_msg = next(m for m in result["messages"] if isinstance(m, ToolMessage))
+    assert tool_msg.status == "error" and "持有天数" in tool_msg.content

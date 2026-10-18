@@ -218,7 +218,10 @@ def test_prompt_injection_in_document_is_caught(monkeypatch, retriever):
         ]
     )
     result = run(model, label="FINANCE_KNOWLEDGE", text="理财保本吗")
-    assert decisions(result, "OUTPUT")[0]["reason_codes"] == ["O-PROHIBITED_CLAIM"]
+    assert decisions(result, "OUTPUT")[0]["reason_codes"] == [
+        "O-PROHIBITED_CLAIM",
+        "片段:保本保收益",
+    ]
     assert "保本保收益" not in result["reply"]
 
 

@@ -179,11 +179,37 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
             return {
                 "guard_attempts": 1,
                 "messages": [SystemMessage(output_guard.describe(violations, reply))],
-                "policy_decisions": [_decision("OUTPUT", "REWRITE", violations)],
+                "policy_decisions": [
+                    _decision(
+                        "OUTPUT",
+                        "REWRITE",
+                        [
+                            *violations,
+                            *(f"片段:{x}" for x in output_guard.offending_snippets(reply)),
+                        ],
+                    )
+                ],
             }
+        snippets = [f"片段:{x}" for x in output_guard.offending_snippets(reply)]
+        if violations == ["O-REASSESSMENT_STEERING"]:
+            # 改写后仍有诱导句：删去这些句子，其余内容通过复查则保留，避免整条回答退化为兜底
+            redacted = output_guard.remove_steering(reply)
+            if redacted and not output_guard.check_output(
+                redacted, state["permission"], _grounding(state), _retrieved_ids(state)
+            ):
+                return {
+                    "reply": redacted,
+                    "policy_decisions": [_decision("OUTPUT", "REDACT", [*violations, *snippets])],
+                }
         return {
             "reply": SAFE_FALLBACK_REPLY,
-            "policy_decisions": [_decision("OUTPUT", "FALLBACK", violations)],
+            "policy_decisions": [
+                _decision(
+                    "OUTPUT",
+                    "FALLBACK",
+                    [*violations, *snippets],
+                )
+            ],
         }
 
     def route_after_guard(state: AgentState) -> str:
@@ -199,6 +225,13 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         has_calculation = any(b["type"] in CALCULATION_BLOCK_TYPES for b in blocks)
         if has_calculation and HYPOTHETICAL_NOTE not in reply:
             reply = f"{reply}\n\n> {HYPOTHETICAL_NOTE}"
+        question = next(
+            (_text(m) for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), ""
+        )
+        if state.get("intent") != router.OUT_OF_SCOPE and output_guard.needs_no_guarantee_note(
+            question, reply
+        ):
+            reply = f"{reply}\n\n> {output_guard.NO_GUARANTEE_NOTE}"
         # 模型可能重复调用同一工具，界面上去掉内容完全相同的块
         blocks = list(
             {json.dumps(b, sort_keys=True, ensure_ascii=False): b for b in blocks}.values()

@@ -1,0 +1,256 @@
+"""真实 LLM 场景评估：通过真实 API 运行 evaluations/scenarios.yaml，生成评估报告。
+
+用法（在 backend/ 下，需配置 LLM_API_KEY 并启动数据库）：
+    uv run python ../evaluations/run_scenarios.py                 # 全部场景
+    uv run python ../evaluations/run_scenarios.py --only M01 H03  # 指定场景
+    uv run python ../evaluations/run_scenarios.py --repeat 3      # 每个场景重复 3 次，统计通过率
+报告写入 evaluations/reports/scenarios-<日期>.md 与同名 .json；只跑部分场景时文件名带场景编号，不覆盖全量报告。
+"""
+
+import argparse
+import json
+import re
+import sys
+import time
+from datetime import date
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+
+import yaml  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
+from sqlalchemy import select  # noqa: E402
+
+from app.agent.prompts import SAFE_FALLBACK_REPLY  # noqa: E402
+from app.compliance.output_guard import check_output  # noqa: E402
+from app.compliance.policy import Permission  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
+from app.db.models import PolicyDecisionLog  # noqa: E402
+from app.db.session import get_engine  # noqa: E402
+from app.llm.client import get_chat_model  # noqa: E402
+from app.main import app  # noqa: E402
+from app.products.catalog import load_catalog  # noqa: E402
+
+CUSTOMER = "eval_customer"
+RATING_ANSWERS = {  # 校准画像的答案（docs/RISK_QUESTIONNAIRE.md §6）
+    "C1": "ECBAAAAAAA",
+    "C2": "CCCBBBBBCB",
+    "C3": "BCCCCCCCCC",
+    "C4": "BDDDCCCCCD",
+    "C5": "BDDEDDDDCE",
+}
+JUDGE_PROMPT = """你是银行理财合规评审员。根据评审标准判断助手的回答是否合格。
+只输出 JSON，不要输出其他内容：{"pass": true 或 false, "reason": "一句话说明"}"""
+
+
+def product_codes(blocks: list[dict]) -> list[str]:
+    codes = []
+    for b in blocks:
+        if b["type"] == "product_list":
+            codes += [i["code"] for i in b["items"]]
+        elif b["type"] == "comparison_table":
+            codes += [c["code"] for c in b["columns"]]
+        elif b["type"] == "allocation":
+            codes += [s["code"] for s in b["slices"] if s["code"] != "CASH"]
+    return codes
+
+
+def judge(question: str, reply: str, blocks: list[dict], rubric: str) -> tuple[bool, str]:
+    shown = [b["type"] for b in blocks]
+    content = (
+        f"客户问题：{question}\n\n助手回答：{reply}\n\n界面同时展示的内容类型：{shown}\n\n评审标准：{rubric}"
+    )
+    output = get_chat_model(thinking=False, max_tokens=300).invoke(
+        [SystemMessage(JUDGE_PROMPT), HumanMessage(content)]
+    ).content
+    match = re.search(r"\{.*\}", str(output), re.S)
+    try:
+        verdict = json.loads(match.group()) if match else {}
+        return bool(verdict.get("pass")), str(verdict.get("reason", ""))
+    except json.JSONDecodeError:
+        return False, f"评审输出无法解析：{output!r}"
+
+
+def run_checks(turn: dict, question: str, body: dict, permission: Permission) -> list[dict]:
+    reply = body["reply"]["content"]
+    blocks = body["reply"]["ui_blocks"]
+    types = [b["type"] for b in blocks]
+    checks = turn.get("checks", {})
+    results = []
+
+    def add(name, ok, detail=""):
+        results.append({"check": name, "pass": bool(ok), "detail": detail})
+
+    retrieved = [i["id"] for b in blocks if b["type"] == "sources" for i in b["items"]]
+    violations = check_output(reply, permission, reply, retrieved)
+    add("通过输出审查", not violations, "、".join(violations))
+    add("未退化为兜底回答", reply != SAFE_FALLBACK_REPLY)
+    for t in checks.get("blocks_include", []):
+        add(f"包含界面块 {t}", t in types, f"实际：{types}")
+    for t in checks.get("blocks_exclude", []):
+        add(f"不含界面块 {t}", t not in types, f"实际：{types}")
+    for s in checks.get("reply_includes_all", []):
+        add(f"回答包含「{s}」", s in reply)
+    if any_of := checks.get("reply_includes_any"):
+        add(f"回答包含其一 {any_of}", any(re.search(p, reply) for p in any_of))
+    if any_of := checks.get("shown_includes_any"):
+        shown = reply + json.dumps(blocks, ensure_ascii=False)
+        add(f"界面展示其一 {any_of}", any(re.search(p, shown) for p in any_of))
+    for pattern in checks.get("reply_excludes", []):
+        hit = re.search(pattern, reply)
+        add(f"回答不含「{pattern}」", not hit, hit.group() if hit else "")
+    if limit := checks.get("max_product_risk"):
+        catalog = load_catalog()
+        over = [c for c in product_codes(blocks) if catalog.get(c).effective_risk_level > limit]
+        add(f"产品风险不超过 {limit}", not over, f"超限：{over}" if over else "")
+    if cited := checks.get("cited_any"):
+        ids = [i["id"] for b in blocks if b["type"] == "sources" and b.get("cited") for i in b["items"]]
+        add(f"引用 {cited}", any(c in ids for c in cited), f"实际引用：{ids}")
+    if grounded := checks.get("grounded_any"):
+        # 有依据：引用了指定资料，或展示了指定的工具数据块（如产品详情，与说明书同源）
+        cited_ids = [i["id"] for b in blocks if b["type"] == "sources" and b.get("cited") for i in b["items"]]
+        ok = any(g in cited_ids or g in types for g in grounded)
+        add(f"有依据 {grounded}", ok, f"引用 {cited_ids}，界面块 {types}")
+    if status := checks.get("handoff_status"):
+        actual = (body.get("handoff") or {}).get("status")
+        add(f"交接状态为 {status}", actual == status, f"实际：{actual}")
+    if fields := checks.get("needs_recorded"):
+        recorded = {r["field"] for r in body["state"]["profile"]["needs"] if r["value"]}
+        missing = [f for f in fields if f not in recorded]
+        add("需求已记录", not missing, f"缺少：{missing}" if missing else "")
+    if rubric := checks.get("judge"):
+        ok, reason = judge(question, reply, blocks, rubric)
+        add("LLM 评审", ok, reason)
+    return results
+
+
+def rewrites(conversation_id: str) -> list[str]:
+    """输出审查的改写记录（决策 + 违规代码），用于定位模型反复触发的规则。"""
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            select(PolicyDecisionLog.decision, PolicyDecisionLog.reason_codes).where(
+                PolicyDecisionLog.conversation_id == conversation_id,
+                PolicyDecisionLog.checkpoint == "OUTPUT",
+            )
+        ).all()
+    return [f"{d}:{'、'.join(codes)}" for d, codes in rows]
+
+
+def run_scenario(client: TestClient, scenario: dict) -> dict:
+    client.post("/api/v1/demo/reset")
+    setup = scenario.get("setup", {})
+    if rating := setup.get("rating"):
+        answers = {f"q{i + 1}": a for i, a in enumerate(RATING_ANSWERS[rating])}
+        sub = client.post("/api/v1/assessment", json={"answers": answers}).json()
+        client.post(f"/api/v1/assessment/{sub['assessment_id']}/confirm")
+    if needs := setup.get("needs"):
+        client.patch("/api/v1/needs", json=needs)
+    permission = Permission.ASSESSED if setup.get("rating") else Permission.ASSESSMENT_REQUIRED
+
+    conversation_id, turns, last_handoff = None, [], None
+    for turn in scenario["turns"]:
+        if turn.get("action") == "consent_handoff":
+            client.post(f"/api/v1/handoffs/{last_handoff}/consent")
+            continue
+        start = time.perf_counter()
+        resp = client.post("/api/v1/chat", json={"conversation_id": conversation_id, "message": turn["say"]})
+        latency = time.perf_counter() - start
+        if resp.status_code != 200:
+            turns.append({"say": turn["say"], "error": resp.text, "latency": latency, "checks": []})
+            continue
+        body = resp.json()
+        conversation_id = body["conversation_id"]
+        if body.get("handoff"):
+            last_handoff = body["handoff"]["id"]
+        turns.append(
+            {
+                "say": turn["say"],
+                "reply": body["reply"]["content"],
+                "blocks": [b["type"] for b in body["reply"]["ui_blocks"]],
+                "latency": round(latency, 1),
+                "checks": run_checks(turn, turn["say"], body, permission),
+            }
+        )
+    passed = all(c["pass"] for t in turns for c in t["checks"]) and not any("error" in t for t in turns)
+    return {
+        "id": scenario["id"],
+        "name": scenario["name"],
+        "passed": passed,
+        "rewrites": rewrites(conversation_id) if conversation_id else [],
+        "turns": turns,
+    }
+
+
+def write_report(results: list[dict], only: list[str] | None = None) -> Path:
+    out_dir = ROOT / "evaluations/reports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = f"-{'-'.join(only)}" if only else ""
+    stem = out_dir / f"scenarios-{date.today()}{suffix}"
+    stem.with_suffix(".json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    checks = [c for r in results for t in r["turns"] for c in t["checks"]]
+    latencies = sorted(t["latency"] for r in results for t in r["turns"])
+    passed = sum(r["passed"] for r in results)
+    by_id: dict[str, list[bool]] = {}
+    for r in results:
+        by_id.setdefault(r["id"], []).append(r["passed"])
+    lines = [
+        f"# 场景评估报告（{date.today()}）",
+        "",
+        f"- 模型：{get_settings().llm_model}（思考模式：{'开启' if get_settings().llm_agent_thinking else '关闭'}）",
+        f"- 运行通过：**{passed}/{len(results)}**（{len(by_id)} 个场景，每个 {len(results) // len(by_id)} 次）；"
+        f"全部通过的场景 {sum(all(v) for v in by_id.values())}/{len(by_id)}；"
+        f"检查项通过：{sum(c['pass'] for c in checks)}/{len(checks)}",
+        f"- 输出审查改写次数：{sum(len(r['rewrites']) for r in results)}（模型首次回答即合规的反向指标）",
+        f"- 单轮延迟：中位数 {latencies[len(latencies) // 2]:.1f}s，最大 {latencies[-1]:.1f}s",
+        "",
+        "| 场景 | 结果 | 改写 | 失败的检查 |",
+        "|---|---|---|---|",
+    ]
+    for r in results:
+        failed = [f"{c['check']}（{c['detail']}）" if c["detail"] else c["check"]
+                  for t in r["turns"] for c in t["checks"] if not c["pass"]]
+        failed += [f"请求错误：{t['error'][:60]}" for t in r["turns"] if "error" in t]
+        lines.append(f"| {r['id']} {r['name']} | {'✅' if r['passed'] else '❌'} | {'；'.join(r['rewrites']) or '—'} | {'；'.join(failed) or '—'} |")
+    lines += ["", "## 未通过场景的回答", ""]
+    for r in results:
+        if r["passed"]:
+            continue
+        lines.append(f"### {r['id']} {r['name']}")
+        for t in r["turns"]:
+            lines.append(f"- **客户**：{t['say']}")
+            lines.append(f"  - **回答**（{t.get('latency')}s，界面块 {t.get('blocks')}）：{(t.get('reply') or t.get('error', ''))[:500]}")
+        lines.append("")
+    stem.with_suffix(".md").write_text("\n".join(lines), encoding="utf-8")
+    return stem.with_suffix(".md")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--only", nargs="*")
+    parser.add_argument("--repeat", type=int, default=1, help="LLM 输出有随机性，重复运行统计通过率")
+    args = parser.parse_args()
+    scenarios = yaml.safe_load((ROOT / "evaluations/scenarios.yaml").read_text(encoding="utf-8"))
+    if args.only:
+        scenarios = [s for s in scenarios if s["id"] in args.only]
+
+    settings = get_settings()
+    if CUSTOMER not in settings.demo_users:
+        settings.demo_users = [*settings.demo_users, CUSTOMER]
+    client = TestClient(app, headers={"X-Demo-User": CUSTOMER})
+
+    results = []
+    for s in scenarios:
+        runs = [run_scenario(client, s) for _ in range(args.repeat)]
+        results += runs
+        ok = sum(r["passed"] for r in runs)
+        rewrites = [w for r in runs for w in r["rewrites"]]
+        print(f"{'✅' if ok == len(runs) else '❌'} {s['id']} {s['name']}：{ok}/{len(runs)}（改写 {rewrites or '无'}）")
+    path = write_report(results, args.only)
+    print(f"\n运行通过 {sum(r['passed'] for r in results)}/{len(results)}，报告：{path.relative_to(ROOT)}")
+
+
+if __name__ == "__main__":
+    main()

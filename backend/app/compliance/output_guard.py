@@ -9,9 +9,26 @@ from collections.abc import Collection
 from app.compliance.policy import Permission
 from app.products.catalog import load_catalog
 
-# 命中前若出现这些否定词（相距不超过 NEGATION_WINDOW 个字），视为否定陈述，不算违规
-NEGATIONS = ("不", "非", "没有", "无法", "不能", "不会", "并非", "绝非", "未")
-NEGATION_WINDOW = 4
+# 命中词所在分句中、位于其之前出现否定词，视为否定陈述，不算违规。
+# 中文否定词常与被否定的词相隔较远（「没有任何一款理财产品是保本保收益的」），
+# 因此看整个分句，最多 20 字。
+NEGATIONS = (
+    "不",
+    "非",
+    "没有",
+    "无法",
+    "不能",
+    "不会",
+    "并非",
+    "绝非",
+    "未",
+    "无任何",
+    "禁止",
+    "杜绝",
+)
+NOT_NEGATION = re.compile(r"不仅|不但|不只|不光|毫不|无不|不可思议")  # 含「不」但不表示否定
+CLAUSE_BREAK = re.compile(r"[，,。！？；;：:\n]")
+NEGATION_WINDOW = 20
 
 PROHIBITED_CLAIMS = [
     re.compile(p)
@@ -71,8 +88,19 @@ REAL_INSTITUTIONS = (
 
 
 # 诱导调高风险评级：为达到收益目标而建议重新测评，是销售适当性中的典型违规（测评应反映客户真实情况）
-REASSESSMENT = re.compile(r"重新(测评|评估)|调(整|高).{0,4}(评级|风险等级)|提高.{0,4}风险承受")
-RISK_OR_RETURN = re.compile(r"收益|更高(的)?风险|高风险|PR[3-5]|波动")
+REASSESSMENT = re.compile(
+    r"重新(完成|进行|做)?(一次)?(风险)?(承受能力)?(测评|评估)"
+    r"|调(整|高).{0,4}(评级|风险等级)|提高.{0,4}风险承受"
+)
+# 与重新测评同句出现即构成诱导：收益、更高风险，或把测评当作「解锁」更高等级产品的途径
+RISK_OR_RETURN = re.compile(
+    r"收益|更高(的)?风险|高风险|PR[3-5]|波动|权益类|相应等级|更高(的)?(风险)?等级"
+)
+# 另一种说法：建议（经由理财经理）评估是否需要更高的风险等级
+RISK_UPGRADE = re.compile(r"(更高|提高|调高|提升)(的)?.{0,2}(风险等级|评级|风险承受)")
+SUGGESTION = re.compile(r"建议|可以|可|考虑|评估|是否需要|如需|若需")
+# 同一句明确说明了限制（与风险等级不匹配、超出评级），是在解释取舍，而不是建议调高评级
+LIMITATION = re.compile(r"不匹配|超出|不符合|无法购买|不能购买|无权")
 SENTENCE_SPLIT = re.compile(r"[。！？；\n]")
 # 个性化推荐结论：MVP 默认不输出（docs/COMPLIANCE_DESIGN.md §8）
 PERSONALIZED = [
@@ -93,17 +121,68 @@ FALSE_HANDOFF = [
 
 def steers_reassessment(text: str) -> bool:
     return any(
-        REASSESSMENT.search(s) and RISK_OR_RETURN.search(s) for s in SENTENCE_SPLIT.split(text)
+        (REASSESSMENT.search(s) and RISK_OR_RETURN.search(s))
+        or (RISK_UPGRADE.search(s) and SUGGESTION.search(s) and not LIMITATION.search(s))
+        for s in SENTENCE_SPLIT.split(text)
     )
+
+
+# 客户直接问「哪款保本 / 保收益」时，回答必须明确否定。
+# 模型有时只说「基准不是承诺」「存款保本」而回避正面回答，容易让客户误以为低风险理财也保本，
+# 因此由代码补充标准说明（P7 场景评估 S02 发现）
+GUARANTEE_QUESTION = re.compile(r"保本|保收益|保证收益|稳赚|零风险|无风险|不会亏|不亏")
+GUARANTEE_DENIED = re.compile(r"不保本|不保证本金|不承诺(保本|收益)|不保证收益|没有.{0,6}保本")
+NO_GUARANTEE_NOTE = (
+    "银行理财产品不保本、不承诺收益，包括低风险的现金管理类产品，均存在本金亏损的可能。"
+)
+
+
+def needs_no_guarantee_note(question: str, reply: str) -> bool:
+    return bool(GUARANTEE_QUESTION.search(question)) and not GUARANTEE_DENIED.search(reply)
+
+
+def remove_steering(reply: str) -> str:
+    """删去诱导调高评级的句子。这类句子是附加建议，删去后回答的其余内容仍然完整。"""
+    parts = re.split(f"({SENTENCE_SPLIT.pattern})", reply)
+    kept = "".join(
+        s + d
+        for s, d in zip(parts[::2], [*parts[1::2], ""], strict=True)
+        if not steers_reassessment(s)
+    )
+    return re.sub(r"\n{3,}", "\n\n", kept).strip()
 
 
 def _negated(text: str, start: int) -> bool:
     window = text[max(0, start - NEGATION_WINDOW) : start]
-    return any(n in window for n in NEGATIONS)
+    breaks = list(CLAUSE_BREAK.finditer(window))
+    clause = window[breaks[-1].end() :] if breaks else window
+    clause = NOT_NEGATION.sub("", clause)
+    return any(n in clause for n in NEGATIONS)
+
+
+# 引号内的表述若出现在提醒、警示语境中（如：销售说「保本」属于违规宣传），是引述而非承诺
+QUOTED = re.compile(r"[「『“\"‘'][^」』”\"’']{1,20}[」』”\"’']")
+WARNING_CONTEXT = re.compile(
+    r"违规|不应|不要|不能|不得|禁止|警惕|谨慎|虚假|误导|所谓|别信|不可信|不实"
+)
+
+
+def _quoted_warning(text: str, start: int, end: int) -> bool:
+    for q in QUOTED.finditer(text):
+        if q.start() <= start and end <= q.end():
+            left = max(text.rfind(c, 0, start) for c in "。！？；\n")
+            right = min([i for c in "。！？；\n" if (i := text.find(c, end)) != -1] or [len(text)])
+            return bool(WARNING_CONTEXT.search(text[left + 1 : right]))
+    return False
 
 
 def _affirmative_hits(text: str, patterns: list[re.Pattern]) -> list[str]:
-    return [m.group() for p in patterns for m in p.finditer(text) if not _negated(text, m.start())]
+    return [
+        m.group()
+        for p in patterns
+        for m in p.finditer(text)
+        if not _negated(text, m.start()) and not _quoted_warning(text, m.start(), m.end())
+    ]
 
 
 def mentioned_products(text: str) -> set[str]:
@@ -162,9 +241,18 @@ def check_output(
     return violations
 
 
+def offending_snippets(reply: str) -> list[str]:
+    """违规片段（写入审计记录，便于事后定位模型反复触发的表述）。"""
+    hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, PERSONALIZED)
+    hits += _affirmative_hits(reply, FALSE_HANDOFF)
+    hits += [s.strip()[:40] for s in SENTENCE_SPLIT.split(reply) if steers_reassessment(s)]
+    return list(dict.fromkeys(hits))[:5]
+
+
 def describe(violations: list[str], reply: str) -> str:
     """给 LLM 的改写反馈。"""
     hits = _affirmative_hits(reply, PROHIBITED_CLAIMS) + _affirmative_hits(reply, RECOMMENDATION)
+    hits += offending_snippets(reply)
     return (
         "你的上一条回答未通过合规审查（"
         + "、".join(violations)
@@ -181,7 +269,8 @@ def describe(violations: list[str], reply: str) -> str:
             else ""
         )
         + (
-            "不得为达到收益目标建议客户重新测评或提高风险等级；只有客户自身情况变化时才可提示重新测评。"
+            "不得为达到收益目标或了解更高等级产品而建议客户重新测评或提高风险等级，"
+            "请删去相关句子；只有客户自身情况变化时才可提示重新测评。"
             if "O-REASSESSMENT_STEERING" in violations
             else ""
         )
