@@ -2,8 +2,10 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.api.deps import get_customer_id
+from app.api.deps import get_current_user, get_customer_id
+from app.auth.service import CurrentUser
 from app.core.config import get_settings
+from app.core.ratelimit import speech_limit
 from app.speech.recognizer import AudioError, decode_wav, get_recognizer, model_installed
 
 router = APIRouter(prefix="/api/v1/speech", tags=["speech"])
@@ -18,7 +20,12 @@ def status():
 
 
 @router.post("/transcribe")
-async def transcribe(request: Request, _customer: str = Depends(get_customer_id)):
+async def transcribe(
+    request: Request,
+    _customer: str = Depends(get_customer_id),
+    user: CurrentUser = Depends(get_current_user),
+):
+    speech_limit(user)
     if not model_installed():
         raise HTTPException(
             status_code=503,

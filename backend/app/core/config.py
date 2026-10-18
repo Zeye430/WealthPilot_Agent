@@ -36,13 +36,44 @@ class Settings(BaseSettings):
     asr_max_seconds: int = 60
     asr_threads: int = 2
 
+    # 允许的前端来源：CORS 与「跨站写请求」检查共用；部署时加入正式域名
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # 演示身份：前端通过 X-Demo-User 请求头切换；demo_mode 允许一键清空演示数据
-    demo_users: list[str] = ["demo_customer_1", "demo_customer_2"]
-    # 演示用理财经理账号 → 理财经理编号（与客户基础画像中的 assigned_rm 对应）
-    demo_rms: dict[str, str] = {"rm_li": "RM001", "rm_zhou": "RM002"}
-    demo_mode: bool = True
+    # 登录与会话（服务端会话 + httpOnly Cookie）
+    session_ttl_hours: int = 12  # 绝对有效期
+    session_idle_minutes: int = 120  # 闲置超时
+    cookie_secure: bool = False  # 部署到 HTTPS 时设为 true
+    # 公开演示访问码：设置后登录需要输入，防止陌生人刷模型额度；本地开发留空
+    demo_access_code: SecretStr | None = None
+
+    # 演示账号（启动时自动创建，密码统一为 demo_password；真实系统对接银行统一身份认证）
+    demo_password: SecretStr = SecretStr("wealthpilot-demo")
+    demo_accounts: list[dict] = [
+        {
+            "username": "wang",
+            "display_name": "王先生（虚构）",
+            "role": "customer",
+            "customer_id": "demo_customer_1",
+        },
+        {
+            "username": "chen",
+            "display_name": "陈女士（虚构）",
+            "role": "customer",
+            "customer_id": "demo_customer_2",
+        },
+        {"username": "li", "display_name": "李经理（虚构）", "role": "rm", "rm_id": "RM001"},
+        {"username": "zhou", "display_name": "周经理（虚构）", "role": "rm", "rm_id": "RM002"},
+    ]
+    demo_mode: bool = True  # 允许客户一键清空自己的演示数据
+    # 登录页显示的演示提示（如演示密码）；公开部署时配合访问码使用，或设为空不显示
+    demo_login_hint: str | None = "演示账号的密码均为 wealthpilot-demo"
+
+    # 限流（单实例内存滑动窗口；多实例部署时应换成 Redis）
+    rate_limit_enabled: bool = True
+    rate_limit_chat_per_minute: int = 20
+    rate_limit_chat_per_day: int = 300
+    rate_limit_speech_per_minute: int = 30
+    rate_limit_login_per_minute: int = 10
 
 
 @lru_cache

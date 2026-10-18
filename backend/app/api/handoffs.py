@@ -5,14 +5,12 @@
 """
 
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_now
-from app.core.config import get_settings
+from app.api.deps import get_now, get_rm_id
 from app.db.models import Handoff, HandoffEvent, Message
 from app.db.session import get_session
 from app.handoff.service import (
@@ -38,14 +36,6 @@ def _act(db: Session, handoff: Handoff, to: str, role: str, actor: str, now: dat
 
 
 # ---------- 理财经理 ----------
-
-
-def get_rm_id(x_demo_user: Annotated[str | None, Header()] = None) -> str:
-    """演示鉴权：只接受配置中的理财经理账号。真实系统应替换为员工登录与权限体系。"""
-    rm_id = get_settings().demo_rms.get(x_demo_user or "")
-    if rm_id is None:
-        raise HTTPException(status_code=403, detail="仅限理财经理访问")
-    return rm_id
 
 
 def _rm_handoff(db: Session, handoff_id: str, rm_id: str) -> Handoff:

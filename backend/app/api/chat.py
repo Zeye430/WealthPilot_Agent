@@ -10,10 +10,18 @@ from sqlalchemy.orm import Session
 
 from app.agent.graph import build_graph, current_turn
 from app.agent.prompts import OUT_OF_SCOPE_REPLY, SAFE_FALLBACK_REPLY, TOOL_LIMIT_REPLY
-from app.api.deps import CustomerState, customer_state, get_customer_id, get_now
+from app.api.deps import (
+    CustomerState,
+    customer_state,
+    get_current_user,
+    get_customer_id,
+    get_now,
+)
 from app.assessment.service import latest_confirmed
+from app.auth.service import CurrentUser
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
+from app.core.ratelimit import chat_limit
 from app.customers.base import get_customer_info_system
 from app.customers.context import (
     age_conflict_note,
@@ -99,9 +107,11 @@ def chat(
     req: ChatRequest,
     db: Session = Depends(get_session),
     customer_id: str = Depends(get_customer_id),
+    user: CurrentUser = Depends(get_current_user),
     now: datetime = Depends(get_now),
     agent=Depends(get_agent),
 ):
+    chat_limit(user)  # 每次调用都消耗模型额度：按用户限流
     conversation = _get_or_create_conversation(db, customer_id, req.conversation_id, req.message)
     # 先提交会话：工具（如生成交接请求）在独立事务中写入，需要会话已存在
     db.commit()

@@ -10,6 +10,9 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import Settings
 
+# 测试默认关闭限流（同一测试账号会在几秒内发出大量请求）；限流本身由 test_auth.py 单独测试
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 _base = make_url(os.environ.get("DATABASE_URL") or Settings().database_url)
 TEST_DB = f"{_base.database}_test" if not _base.database.endswith("_test") else _base.database
 os.environ["DATABASE_URL"] = _base.set(database=TEST_DB).render_as_string(hide_password=False)
@@ -54,3 +57,18 @@ def _prepare_test_database() -> None:
 
 
 _prepare_test_database()
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def test_identity():
+    """默认用请求头身份替身；需要测试真实登录的用例会自行移除这个替换。"""
+    from app.api.deps import get_current_user
+    from app.main import app
+    from tests.identity import header_identity
+
+    app.dependency_overrides[get_current_user] = header_identity
+    yield
+    app.dependency_overrides.pop(get_current_user, None)

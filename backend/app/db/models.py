@@ -168,3 +168,32 @@ class SaleReminder(Base):
     source: Mapped[str] = mapped_column(String(16))  # BUTTON 界面按钮 | CHAT 对话中客户同意
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class User(Base):
+    """登录账号：客户（关联客户编号）或理财经理（关联员工编号）。真实系统中对接银行统一身份认证。"""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(64))
+    password_hash: Mapped[str] = mapped_column(String(256))
+    role: Mapped[str] = mapped_column(String(16))  # customer | rm
+    customer_id: Mapped[str | None] = mapped_column(String(64))
+    rm_id: Mapped[str | None] = mapped_column(String(32))
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AuthSession(Base):
+    """服务端会话：只保存令牌的 SHA-256，数据库泄露也无法直接冒用会话；可随时吊销。"""
+
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # sha256(token)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

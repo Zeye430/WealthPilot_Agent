@@ -12,8 +12,7 @@ from sqlalchemy import select, text
 
 from app.agent.graph import build_graph
 from app.api.chat import get_agent
-from app.api.deps import get_now
-from app.core.config import get_settings
+from app.api.deps import get_current_user, get_now
 from app.db.models import PolicyDecisionLog, ToolCallLog
 from app.db.session import get_engine
 from app.main import app
@@ -38,12 +37,12 @@ pytestmark = pytest.mark.skipif(not _db_available(), reason="数据库未启动"
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(get_settings(), "demo_users", ["demo_customer_1", CUSTOMER])
     c = TestClient(app, headers=HEADERS)
     c.post("/api/v1/demo/reset")
     yield c
     c.post("/api/v1/demo/reset")
-    app.dependency_overrides.clear()
+    for dep in [d for d in app.dependency_overrides if d is not get_current_user]:
+        app.dependency_overrides.pop(dep)  # 保留身份替身，由 conftest 负责清理
 
 
 def use_models(*, main: list, router: list):

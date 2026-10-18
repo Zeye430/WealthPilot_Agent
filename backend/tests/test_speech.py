@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import speech
-from app.core.config import get_settings
 from app.main import app
 from app.speech.lexicon import correct
 from app.speech.recognizer import SAMPLE_RATE, AudioError, clean, decode_wav
@@ -61,11 +60,6 @@ def test_domain_terms_corrected_by_pinyin():
 class FakeRecognizer:
     def transcribe(self, samples):
         return "我有45万，想买一年期的理财"
-
-
-@pytest.fixture(autouse=True)
-def demo_customer(monkeypatch):
-    monkeypatch.setattr(get_settings(), "demo_users", ["pytest_customer"])
 
 
 @pytest.fixture

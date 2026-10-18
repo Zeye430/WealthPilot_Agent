@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AssessmentDialog } from "@/components/AssessmentDialog";
@@ -10,12 +11,13 @@ import { RemindersView } from "@/components/products/RemindersView";
 import {
   listConversations,
   clearNeeds,
-  DEMO_USERS,
   formatDate,
   getMe,
+  getSessionUser,
+  logout,
   productRiskRange,
   resetDemo,
-  setDemoUser as setApiDemoUser,
+  type SessionUser,
 } from "@/lib/api";
 import type { ConversationSummary, CustomerState } from "@/lib/types";
 
@@ -28,7 +30,8 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["id"];
 
 export function AppShell() {
-  const [demoUser, setDemoUser] = useState(DEMO_USERS[0].id);
+  const router = useRouter();
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [chatKey, setChatKey] = useState(0);
   const [state, setState] = useState<CustomerState | null>(null);
   const [assessing, setAssessing] = useState(false);
@@ -50,10 +53,24 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
-    setApiDemoUser(demoUser);
-    refreshState();
-    refreshHistory();
-  }, [demoUser, refreshState, refreshHistory]);
+    // 未登录时接口返回 401，统一跳转登录页；理财经理账号进入看板
+    getSessionUser()
+      .then((u) => {
+        if (u.role === "rm") {
+          router.replace("/rm");
+          return;
+        }
+        setUser(u);
+        refreshState();
+        refreshHistory();
+      })
+      .catch(() => router.replace("/login"));
+  }, [router, refreshState, refreshHistory]);
+
+  async function signOut() {
+    await logout().catch(() => undefined);
+    router.replace("/login");
+  }
 
   function newChat() {
     setOpenConversation(null);
@@ -146,32 +163,22 @@ export function AppShell() {
           )}
 
           <section className="mt-auto space-y-2 border-t border-rule pt-4 text-xs text-ink-2">
-            <a href="/rm" target="_blank" rel="noreferrer" className="block text-brand underline underline-offset-4">
-              打开理财经理看板（演示）
-            </a>
-            <label htmlFor="demo-user" className="block">
-              演示身份
-            </label>
-            <select
-              id="demo-user"
-              value={demoUser}
-              onChange={(e) => {
-                setDemoUser(e.target.value);
-                newChat();
-              }}
-              className="w-full rounded-sm border border-rule bg-surface px-2 py-1.5 text-sm text-ink"
-            >
-              {DEMO_USERS.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={reset} className="text-ink-2 underline underline-offset-4 hover:text-ink">
-              清空该客户的测评和对话
+          {user && (
+            <p>
+              当前登录：<span className="text-ink">{user.display_name}</span>
+            </p>
+          )}
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <button type="button" onClick={signOut} className="underline underline-offset-4 hover:text-ink">
+              退出登录
             </button>
-          </section>
-        </nav>
+            <button type="button" onClick={reset} className="underline underline-offset-4 hover:text-ink">
+              清空我的演示数据
+            </button>
+          </div>
+          <p className="text-ink-3">理财经理看板：退出后用理财经理账号登录。</p>
+        </section>
+      </nav>
 
         <main className="flex min-w-0 flex-1 flex-col">
           <header className="flex items-center justify-between border-b border-rule px-4 py-3 md:hidden">
@@ -212,7 +219,7 @@ export function AppShell() {
           {/* 对话保持挂载，切换到产品页时只隐藏，避免丢失对话内容 */}
           <div className={`min-h-0 flex-1 ${view === "chat" ? "" : "hidden"}`}>
             <Chat
-              key={`${demoUser}-${chatKey}`}
+              key={chatKey}
               ref={chatRef}
               initialConversationId={openConversation}
               onActivity={refreshHistory}

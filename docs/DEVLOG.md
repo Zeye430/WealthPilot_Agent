@@ -949,3 +949,61 @@
 
 **提交**：待产品负责人执行。
 
+
+## 2026-10-18 · 第 24 步：规划 P8「生产化与双语」
+
+**背景**：语音功能验收通过。产品负责人在美国求职，同时投 AI 产品经理、AI 应用 / Agent 工程师、金融科技 AI 解决方案岗位。目标是做出「能解决实际问题、满足实际需求、具备生产思维框架的产品」，让面试官从设计中看到这套能力可以直接用在他们的业务里。
+
+**差距评估**：评估体系、合规防线是强项，大多数 AI demo 都缺这两项；缺口在可靠性验证、可观测性、部署、安全基础和判断力（落地清单）。
+
+**决策**（产品负责人）
+- 五项能力全部补齐，加上界面改版，顺序为：安全基础 → 界面改版（含中英双语）→ 可观测性 → 可靠性验证 → 部署 + CI/CD → 判断力文档。
+- 英文版是同一产品（中国银行理财市场）的全套英文版：界面、AI 回答、英文合规规则、知识库、说明书、评估场景都要有英文。中文规则对英文回答无效，不能只翻译界面。文档补充美国监管映射（FINRA 2111、Reg BI）。
+- 部署：AWS Lightsail（美国）。模型继续用 Kimi，通过配置可切换。
+
+**文件**：✏️ `docs/ROADMAP.md`（v0.5，新增 P8 六项及验收标准，原交付顺延为 P9）
+
+**提交**：随第 25 步一起提交。
+
+## 2026-10-18 · 第 25 步：P8-1 安全基础
+
+**目标**：把演示用的「请求头切换身份」换成真实金融应用标准的认证与防护，每条防护都配自动化测试，并写一份威胁模型。
+
+**发现的真实漏洞**：原来任何人只要在请求头里写 `X-Demo-User: rm_li`，就能以理财经理身份查看客户咨询；写客户编号就能读取任意客户的数据。
+
+**设计决策**（ARCHITECTURE D33–D35）
+- **服务端会话而非 JWT**：金融场景需要即时吊销（退出、停用、风控冻结）。令牌放在 httpOnly Cookie 中，前端脚本读不到；数据库只存 SHA-256。
+- **生产代码只有一条认证路径**：删除请求头身份；测试与离线评估用 FastAPI `dependency_overrides` 注入身份替身。不给生产留「测试后门」。
+- **限流用内存滑动窗口**：单实例足够，接口与 Redis 版一致，多实例时只换存储。
+
+**实现**
+- 账号与会话：`users`、`auth_sessions` 表与迁移；scrypt 加盐哈希（标准库，无新依赖）；常数时间比较；账号不存在时做同等开销校验；12 小时绝对有效期 + 2 小时闲置超时；演示账号启动时按配置创建（wang、chen 客户，li、zhou 理财经理）。
+- 接口：`/api/v1/auth/login`、`logout`、`me`、`config`；可选公开演示访问码；`get_customer_id` / `get_rm_id` 改为从会话取身份并校验角色。
+- 限流：对话每用户每分钟 20 次、每天 300 次；语音每分钟 30 次；登录按 IP 与按账号限流（防暴力破解）；超限返回 429 + Retry-After。
+- HTTP 层：带 Origin 的写请求必须来自允许的前端来源（配合 SameSite 防 CSRF）；安全响应头；CORS 收紧为必要的方法与请求头；日志统一脱敏。
+- CI：新增 `pip-audit` 与 `npm audit --audit-level=high`，当前均为 0 漏洞。
+- 前端：登录页（演示账号快捷选择、访问码）；未登录或会话失效统一跳转登录页；登录后跳转只允许站内地址（防开放重定向）；客户与理财经理各自显示当前用户并可退出；去掉演示身份切换下拉框。
+- 文档：`docs/SECURITY.md` 威胁模型（每条威胁对应防护与测试）、`.env.example` 增加部署时必须修改的安全配置。
+
+**验证**
+- 后端 283 个测试通过（新增 `test_auth.py` 16 个，使用真实会话；`test_security.py` 若干，如工具参数不暴露身份与评级、他人的提醒不能取消、消息长度上限）。
+- 浏览器端到端（Playwright，临时端口）9/9：未登录跳转登录页、错误密码提示、客户登录、Cookie 为 httpOnly + SameSite=Lax、前端脚本读不到令牌、经代理正常取数、客户访问看板被退回、退出后需重新登录、理财经理登录进看板。
+- 场景评估脚本改用身份替身后冒烟运行通过。
+- 前端类型检查、lint、构建通过。
+
+**遇到的问题**
+- 日志脱敏过滤器先把参数转成字符串，破坏了第三方库的 `%d` 格式化（httpx 日志报 TypeError）。改为先拼好完整消息再脱敏，并补测试。
+- 端到端脚本里，Next.js 的路由播报元素也带 `role=alert`，选择器冲突；属于测试脚本问题，改用文本定位。
+
+**文件**
+- 🆕 `backend/app/auth/passwords.py`、`service.py`、`backend/app/api/auth.py`、`backend/app/core/ratelimit.py`、`security.py`
+- 🆕 `backend/migrations/versions/c3e8f1a2b4d5_users_and_sessions.py`
+- 🆕 `backend/tests/identity.py`、`test_auth.py`、`test_security.py`、`docs/SECURITY.md`
+- 🆕 `frontend/src/app/login/page.tsx`、`frontend/src/components/LoginForm.tsx`
+- ✏️ `backend/app/api/deps.py`、`handoffs.py`、`chat.py`、`speech.py`、`backend/app/core/config.py`、`backend/app/db/models.py`、`backend/app/main.py`、`backend/pyproject.toml`、`uv.lock`（pip-audit）
+- ✏️ `backend/tests/conftest.py`、`test_api_chat.py`、`test_speech.py`、`evaluations/run_scenarios.py`
+- ✏️ `frontend/src/lib/api.ts`、`components/AppShell.tsx`、`components/rm/RmDashboard.tsx`
+- ✏️ `.github/workflows/ci.yml`、`.env.example`、`CLAUDE.md`、`docs/ARCHITECTURE.md`、`README.md`
+
+**提交**：待产品负责人执行（含第 24 步规划）。
+

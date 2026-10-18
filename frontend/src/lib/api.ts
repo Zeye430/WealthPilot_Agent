@@ -13,36 +13,43 @@ import type {
   Reminder,
 } from "./types";
 
-export class ApiError extends Error {}
-
-export const DEMO_USERS = [
-  { id: "demo_customer_1", label: "演示客户 A" },
-  { id: "demo_customer_2", label: "演示客户 B" },
-];
-
-// 当前演示身份，随每个请求以 X-Demo-User 发送（真实系统应替换为登录鉴权）
-let demoUser = DEMO_USERS[0].id;
-
-export function setDemoUser(id: string) {
-  demoUser = id;
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
 }
 
-async function request<T>(path: string, init: RequestInit = {}, user = demoUser): Promise<T> {
+/** 会话失效或未登录：回到登录页（会话令牌在 httpOnly Cookie 中，前端脚本读不到，也无需处理）。 */
+function redirectToLogin() {
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    const next = encodeURIComponent(window.location.pathname);
+    // 会话失效时整页跳转，清掉页面中残留的客户数据（这里不在 React 组件内，无法使用 router）
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`/login?next=${next}`);
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
       ...init,
-      headers: { "Content-Type": "application/json", "X-Demo-User": user, ...init.headers },
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...init.headers },
     });
   } catch {
     throw new ApiError("无法连接服务器，请确认后端已启动。");
   }
+  if (res.status === 401 && !path.startsWith("/api/v1/auth/")) redirectToLogin();
   if (!res.ok) {
     const detail = await res
       .json()
       .then((body) => (typeof body.detail === "string" ? body.detail : null))
       .catch(() => null);
-    if (detail) throw new ApiError(detail);
+    if (detail) throw new ApiError(detail, res.status);
     // Next.js 代理连不上后端时返回 500 且没有 detail，最常见的原因是后端未启动
     throw new ApiError(
       res.status >= 500
@@ -52,6 +59,28 @@ async function request<T>(path: string, init: RequestInit = {}, user = demoUser)
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
+
+// ---------- 登录 ----------
+
+export type SessionUser = { username: string; display_name: string; role: "customer" | "rm" };
+
+export type LoginConfig = {
+  access_code_required: boolean;
+  hint: string | null;
+  demo_accounts: SessionUser[];
+};
+
+export const getLoginConfig = () => request<LoginConfig>("/api/v1/auth/config");
+
+export const login = (username: string, password: string, accessCode?: string) =>
+  request<SessionUser>("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password, access_code: accessCode || null }),
+  });
+
+export const logout = () => request<void>("/api/v1/auth/logout", { method: "POST" });
+
+export const getSessionUser = () => request<SessionUser>("/api/v1/auth/me");
 
 export const sendChat = (message: string, conversationId: string | null) =>
   request<ChatResponse>("/api/v1/chat", {
@@ -98,18 +127,20 @@ export async function transcribeSpeech(wav: Blob): Promise<{ text: string }> {
   try {
     res = await fetch("/api/v1/speech/transcribe", {
       method: "POST",
-      headers: { "Content-Type": "audio/wav", "X-Demo-User": demoUser },
+      credentials: "same-origin",
+      headers: { "Content-Type": "audio/wav" },
       body: wav,
     });
   } catch {
     throw new ApiError("无法连接服务器，请确认后端已启动。");
   }
+  if (res.status === 401) redirectToLogin();
   if (!res.ok) {
     const detail = await res
       .json()
       .then((b) => (typeof b.detail === "string" ? b.detail : null))
       .catch(() => null);
-    throw new ApiError(detail ?? `识别失败（${res.status}）`);
+    throw new ApiError(detail ?? `识别失败（${res.status}）`, res.status);
   }
   return res.json();
 }
@@ -163,20 +194,13 @@ export function productRiskRange(maxRisk: string): string {
   return maxRisk === "PR1" ? "PR1" : `PR1–${maxRisk}`;
 }
 
-// ---------- 理财经理看板（演示身份独立于客户） ----------
-
-export const DEMO_RMS = [
-  { id: "rm_li", label: "李经理（虚构）" },
-  { id: "rm_zhou", label: "周经理（虚构）" },
-];
+// ---------- 理财经理看板（理财经理账号登录后访问） ----------
 
 export const rmApi = {
-  list: (rm: string) => request<RmHandoffRow[]>("/api/v1/rm/handoffs", {}, rm),
-  detail: (rm: string, id: string) => request<RmHandoffDetail>(`/api/v1/rm/handoffs/${id}`, {}, rm),
-  accept: (rm: string, id: string) =>
-    request<HandoffView>(`/api/v1/rm/handoffs/${id}/accept`, { method: "POST" }, rm),
-  resolve: (rm: string, id: string) =>
-    request<HandoffView>(`/api/v1/rm/handoffs/${id}/resolve`, { method: "POST" }, rm),
+  list: () => request<RmHandoffRow[]>("/api/v1/rm/handoffs"),
+  detail: (id: string) => request<RmHandoffDetail>(`/api/v1/rm/handoffs/${id}`),
+  accept: (id: string) => request<HandoffView>(`/api/v1/rm/handoffs/${id}/accept`, { method: "POST" }),
+  resolve: (id: string) => request<HandoffView>(`/api/v1/rm/handoffs/${id}/resolve`, { method: "POST" }),
 };
 
 export type RmHandoffRow = HandoffView & {

@@ -31,6 +31,8 @@ from app.db.models import PolicyDecisionLog  # noqa: E402
 from app.db.session import get_engine  # noqa: E402
 from app.llm.client import get_chat_model  # noqa: E402
 from app.main import app  # noqa: E402
+from app.api.deps import get_current_user  # noqa: E402
+from tests.identity import header_identity  # noqa: E402
 from app.products.catalog import load_catalog  # noqa: E402
 
 CUSTOMER = "eval_customer"
@@ -259,8 +261,9 @@ def main():
     if args.only:
         scenarios = [s for s in scenarios if s["id"] in args.only]
 
-    settings = get_settings()
-    settings.demo_users = [*settings.demo_users, *(c for c in CUSTOMERS.values() if c not in settings.demo_users)]
+    # 评估在进程内运行，用与测试相同的身份替身（生产只认会话 Cookie）；评估不受限流影响
+    app.dependency_overrides[get_current_user] = header_identity
+    get_settings().rate_limit_enabled = False
     client = TestClient(app, headers={"X-Demo-User": CUSTOMER})
     client_ref["client"] = client
 
