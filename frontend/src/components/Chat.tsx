@@ -12,6 +12,8 @@ import { AllocationView, NeedsUpdateNote } from "@/components/blocks/AllocationV
 import { ComparisonTableView, ProductDetailCard, ProductListView } from "@/components/blocks/ProductBlocks";
 import { TierBenefitsView, UpcomingProductsView } from "@/components/blocks/BenefitBlocks";
 import { RmContactCard } from "@/components/blocks/HandoffBlocks";
+import { ReadAloud } from "@/components/ReadAloud";
+import { VoiceInput } from "@/components/VoiceInput";
 import { ApiError, getConversation, sendChat } from "@/lib/api";
 import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
 
@@ -40,6 +42,7 @@ export function Chat({ ref, initialConversationId, onStartAssessment, onStateCha
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useImperativeHandle(ref, () => ({
     addNotice: (text) => setMessages((m) => [...m, { role: "notice", content: text, ui_blocks: [] }]),
@@ -131,18 +134,27 @@ export function Chat({ ref, initialConversationId, onStartAssessment, onStateCha
               {error}
             </p>
           )}
-          <div className="flex items-end gap-2 rounded-sm border border-rule bg-surface p-2 focus-within:border-brand">
+          <div className="relative flex items-end gap-2 rounded-sm border border-rule bg-surface p-2 focus-within:border-brand">
+            <VoiceInput
+              disabled={pending}
+              onText={(text) => {
+                // 识别结果填入输入框，客户确认或修改后再发送
+                setInput((prev) => (prev.trim() ? `${prev.trim()}${text}` : text));
+                inputRef.current?.focus();
+              }}
+            />
             <label htmlFor="chat-input" className="sr-only">
               输入您的问题
             </label>
             <textarea
+              ref={inputRef}
               id="chat-input"
               data-focus-ring="off"
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="请输入您的问题"
+              placeholder="请输入您的问题，或按住麦克风说话"
               className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-ink-3"
               maxLength={2000}
             />
@@ -235,6 +247,7 @@ function AssistantMessage({ message, onStartAssessment }: { message: ChatMessage
       {message.ui_blocks.map((block, i) => (
         <Block key={i} block={block} onStartAssessment={onStartAssessment} />
       ))}
+      {message.content && <ReadAloud text={message.content} hasBlocks={message.ui_blocks.length > 0} />}
     </div>
   );
 }

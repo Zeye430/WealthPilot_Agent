@@ -12,6 +12,7 @@ from app.api import (
     products,
     purchases,
     reminders,
+    speech,
 )
 from app.core.config import get_settings
 
@@ -32,3 +33,4 @@ app.include_router(customers.router)
 app.include_router(handoffs.router)
 app.include_router(purchases.router)
 app.include_router(reminders.router)
+app.include_router(speech.router)

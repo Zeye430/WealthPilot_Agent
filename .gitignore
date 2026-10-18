@@ -11,3 +11,6 @@ data/raw_private/
 
 # 真实机构的公开文件仅作本地设计参考，不进入产品、不提交
 data/reference/
+
+# 本地语音识别模型（scripts/download_asr_model.py 下载，约 240MB）
+backend/.models/

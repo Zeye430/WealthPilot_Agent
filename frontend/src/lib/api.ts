@@ -89,6 +89,31 @@ export const getProducts = (productType?: string) =>
 export const getProduct = (code: string) =>
   request<ProductDetail>(`/api/v1/products/${encodeURIComponent(code)}`);
 
+export const speechStatus = () =>
+  request<{ available: boolean; max_seconds: number }>("/api/v1/speech/status");
+
+/** 上传 16 kHz 单声道 WAV，返回识别文字（录音不在服务端保存）。 */
+export async function transcribeSpeech(wav: Blob): Promise<{ text: string }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/v1/speech/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "audio/wav", "X-Demo-User": demoUser },
+      body: wav,
+    });
+  } catch {
+    throw new ApiError("无法连接服务器，请确认后端已启动。");
+  }
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((b) => (typeof b.detail === "string" ? b.detail : null))
+      .catch(() => null);
+    throw new ApiError(detail ?? `识别失败（${res.status}）`);
+  }
+  return res.json();
+}
+
 export const listReminders = () => request<Reminder[]>("/api/v1/reminders");
 
 export const createReminder = (productCode: string) =>

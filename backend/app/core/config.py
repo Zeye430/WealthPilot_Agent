@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,6 +30,11 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     embedding_dim: int = 512
     embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
+
+    # 本地语音识别（SenseVoice，经 sherpa-onnx 运行）：录音在本机转成文字，不发送给第三方，也不保存
+    asr_model_dir: Path = Path(__file__).resolve().parents[2] / ".models/sensevoice-zh"
+    asr_max_seconds: int = 60
+    asr_threads: int = 2
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

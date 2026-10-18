@@ -24,6 +24,9 @@ echo "▶ 同步依赖与数据库迁移"
 
 echo "▶ 同步检索索引（只重新计算有变化的内容）"
 (cd backend && uv run python -W ignore ../scripts/build_index.py)
+
+echo "▶ 检查语音识别模型（首次约下载 240MB；失败不影响启动，只是不显示麦克风按钮）"
+(cd backend && uv run python -W ignore ../scripts/download_asr_model.py) || echo "  ⚠ 语音模型下载失败，可稍后运行 scripts/download_asr_model.py"
 [ -d frontend/node_modules ] || (cd frontend && npm install)
 
 # 退出时结束本脚本启动的所有子进程

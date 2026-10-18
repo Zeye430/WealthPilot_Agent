@@ -902,3 +902,50 @@
 
 **提交**：待产品负责人执行。
 
+## 2026-10-18 · 第 23 步：语音输入与朗读（A 方案）
+
+**背景**：产品负责人询问语音交互的难度。我给了三种做法：A 语音输入 + 朗读（1–2 天）、B 免按键语音对话（约 1 周，需先做流式输出）、C 实时语音助手（2 周以上）。同时说明了理财场景的特殊点：语音不能确认交易、数字听错影响建议、朗读不能代替界面、声音属于个人信息。
+
+**决策**（产品负责人）
+- A 方案：语音识别后填入输入框，确认再发送（「这样任务更加清晰」）。
+- 识别引擎：本地开源模型（录音不离开本机、无 Key、无费用）。
+- 先做语音，再做界面改版。
+
+**实现**
+- **识别**：`app/speech/recognizer.py`，用 sherpa-onnx 运行 SenseVoice（int8，约 240MB，ONNX，不需要 PyTorch），开启逆文本标准化（「四十五万」→「45万」）。接口：`GET /api/v1/speech/status`、`POST /api/v1/speech/transcribe`（只接受 16 kHz 单声道 WAV，限 60 秒；音频只在内存中处理，不保存）。
+- **领域词纠错**：`app/speech/lexicon.py`。虚构品牌不在模型词汇里（实测「知岸稳享」→「挚爱文享」、「活钱宝」→「活钱保」）。从产品目录和等级数据生成词表，拼音相同或非常接近时替换；只收录 3 字以上的词，并要求首字读音一致，避免把「定向」「治安」等常用词改掉。
+- **模型下载**：`scripts/download_asr_model.py`（可设置 HF_ENDPOINT 镜像，下载完整后才替换，避免留下损坏文件）；`dev.sh` 首次启动自动下载，失败不影响启动；模型目录不入库、不打进 Docker 镜像，docker compose 以只读方式挂载。
+- **前端**：
+  - `lib/recorder.ts`：用 AudioWorklet 采集 PCM，降采样为 16 kHz WAV，后端不需要 ffmpeg。
+  - `VoiceInput`：按住说话、松开结束，短按则「再点一下结束」；录音时显示计时和「录音只在本机转成文字，不保存」，可取消；识别结果填入输入框。
+  - `ReadAloud`：用浏览器语音合成朗读，去掉表格、Markdown 和资料编号；有卡片时结尾提示「详细内容请看屏幕」。
+  - 浏览器不支持录音或后端未安装模型时，不显示麦克风按钮。
+
+**验证**
+- 后端 253 个测试通过（新增 WAV 校验、标签清理、拼音纠错、接口与鉴权；CI 不下载模型，用假识别器）。
+- 用 macOS 合成的中文语音直接调用接口：3 句识别正确，热启动约 0.1 秒（首次加载模型约 1.2 秒）。
+- **浏览器端到端**（Playwright，用 WAV 文件模拟麦克风，另起 8100 / 3100 临时服务，测试后关闭）：
+  - 发现：短按时录音无法结束。开启麦克风是异步的，手指松开时录音还没开始，松开事件被忽略。修复：用 ref 记录按压状态，录音开始时已经松开则自动进入「再点一下结束」。
+  - 发现：开头约半秒被截掉（「我有45万」→「15万」）。修复：先加载采集模块，再打开麦克风。
+  - 修复后 3 句全部正确：「我有45万一年内用不到，帮我看看怎么配置」「知岸稳享30天持有和活钱宝有什么区别」「我买了10万元，持有5天就赎回……」。
+- 前端类型检查、lint、构建通过。
+
+**文件**
+- 🆕 `backend/app/speech/recognizer.py`、`lexicon.py`、`backend/app/api/speech.py`、`backend/tests/test_speech.py`、`scripts/download_asr_model.py`
+- 🆕 `frontend/src/lib/recorder.ts`、`frontend/src/components/VoiceInput.tsx`、`ReadAloud.tsx`
+- ✏️ `backend/pyproject.toml`、`uv.lock`（sherpa-onnx、sherpa-onnx-core、numpy、pypinyin）、`backend/app/core/config.py`、`backend/app/main.py`、`backend/.dockerignore`
+- ✏️ `frontend/src/components/Chat.tsx`、`src/lib/api.ts`
+- ✏️ `scripts/dev.sh`、`docker-compose.yml`、`.gitignore`
+- ✏️ `CLAUDE.md`、`docs/ARCHITECTURE.md`（D32）、`COMPLIANCE_DESIGN.md`（§6.1）、`EVALUATION_PLAN.md`、`ROADMAP.md`、`README.md`
+
+**遇到的问题**
+- `uv add sherpa-onnx` 后无法加载：锁文件按源码包的元数据解析，漏掉了实际包含 ONNX Runtime 的依赖 `sherpa-onnx-core`。改为显式声明并固定两者版本一致。
+- 测试时发现产品负责人终端里的开发服务再次处于「暂停」状态（Ctrl+Z）。没有动这些进程，另起临时端口完成测试。
+
+**限制**
+- 识别效果受口音、环境噪音影响；只用合成语音和模拟麦克风测试过，真人录音待产品负责人试用。
+- 朗读音色取决于操作系统自带的中文语音。
+- 免按键语音对话（B 方案）需要先做流式输出。
+
+**提交**：待产品负责人执行。
+
