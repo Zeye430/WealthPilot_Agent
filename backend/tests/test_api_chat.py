@@ -199,6 +199,7 @@ def test_other_customer_cannot_read_conversation(client):
 
 
 def test_empty_message_rejected(client):
+    use_models(main=[], router=[])  # 不依赖本地是否配置了 Kimi Key（CI 中没有）
     assert client.post("/api/v1/chat", json={"message": ""}).status_code == 422
 
 
