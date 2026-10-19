@@ -14,10 +14,13 @@ import yaml
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.assessment.scoring import PRODUCT_RISK_ORDER
+from app.core.i18n import L
 
 CATALOG_PATH = Path(__file__).resolve().parents[3] / "data/products/products.yaml"
 ISSUER_PREFIX = {"知岸理财": "ZA", "鸿屿理财": "HY"}
+ISSUER_EN = {"知岸理财": "Zhian Wealth Management", "鸿屿理财": "Hongyu Wealth Management"}
 DISTRIBUTOR = "知岸银行"
+DISTRIBUTOR_EN = "Zhian Bank"
 MAX_ANNUAL_FEE = Decimal("0.03")
 
 
@@ -45,6 +48,13 @@ PRODUCT_TYPE_LABELS = {
     ProductType.FIXED_INCOME_PLUS: "固收+",
     ProductType.MIXED: "混合类",
     ProductType.EQUITY: "权益类",
+}
+PRODUCT_TYPE_LABELS_EN = {
+    ProductType.CASH_MANAGEMENT: "Cash management",
+    ProductType.FIXED_INCOME: "Fixed income",
+    ProductType.FIXED_INCOME_PLUS: "Fixed income plus",
+    ProductType.MIXED: "Mixed assets",
+    ProductType.EQUITY: "Equity",
 }
 
 
@@ -79,6 +89,20 @@ METRIC_LABELS = {
     MetricType.PERFORMANCE_BENCHMARK: "业绩比较基准",
     MetricType.ANNUAL_PERFORMANCE: "过往年度业绩",
 }
+METRIC_LABELS_EN = {
+    MetricType.SEVEN_DAY_ANNUALIZED: "7-day annualized yield",
+    MetricType.TEN_THOUSAND_UNIT_INCOME: "Income per 10,000 units",
+    MetricType.PERFORMANCE_BENCHMARK: "Performance benchmark",
+    MetricType.ANNUAL_PERFORMANCE: "Past annual performance",
+}
+
+
+def metric_label(metric_type: MetricType) -> str:
+    return L(METRIC_LABELS[metric_type], METRIC_LABELS_EN[metric_type])
+
+
+def issuer_label(issuer: str) -> str:
+    return L(issuer, ISSUER_EN.get(issuer, issuer))
 
 
 class RedemptionTier(BaseModel):
@@ -91,6 +115,11 @@ class RedemptionTier(BaseModel):
 class PerformanceFee(BaseModel):
     rate: Decimal
     condition: str
+    condition_en: str | None = None
+
+    @property
+    def display_condition(self) -> str:
+        return L(self.condition, self.condition_en or self.condition)
 
     _rate = field_validator("rate", mode="before")(parse_rate)
 
@@ -131,11 +160,16 @@ class Fees(BaseModel):
 
 class PerformancePeriod(BaseModel):
     label: str
+    label_en: str | None = None
     start: date
     end: date
     value: Decimal
 
     _value = field_validator("value", mode="before")(parse_rate)
+
+    @property
+    def display_label(self) -> str:
+        return L(self.label, self.label_en or self.label)
 
 
 class Metric(BaseModel):
@@ -146,8 +180,18 @@ class Metric(BaseModel):
     low: Decimal | None = None  # 业绩比较基准区间
     high: Decimal | None = None
     formula: str | None = None  # 指数组合型业绩比较基准
+    formula_en: str | None = None
     basis: str | None = None  # 业绩比较基准的测算依据（信披办法第十三条要求说明）
+    basis_en: str | None = None
     periods: list[PerformancePeriod] | None = None
+
+    @property
+    def display_formula(self) -> str | None:
+        return L(self.formula, self.formula_en or self.formula) if self.formula else None
+
+    @property
+    def display_basis(self) -> str | None:
+        return L(self.basis, self.basis_en or self.basis) if self.basis else None
 
     _rates = field_validator("value", "low", "high", mode="before")(parse_rate)
 
@@ -171,6 +215,7 @@ class Metric(BaseModel):
 class Product(BaseModel):
     code: str
     name: str
+    name_en: str  # 英文界面使用的直译名称（虚构）
     issuer: str
     product_type: ProductType
     operation_mode: OperationMode
@@ -188,7 +233,9 @@ class Product(BaseModel):
     sale_end: date | None = None
     raise_limit: Decimal | None = None
     investment_scope: str
+    investment_scope_en: str
     strategy: str
+    strategy_en: str
     fees: Fees
     metrics: list[Metric]
     data_origin: str = "SYNTHETIC"
@@ -233,7 +280,23 @@ class Product(BaseModel):
 
     @property
     def type_label(self) -> str:
-        return PRODUCT_TYPE_LABELS[self.product_type]
+        return L(PRODUCT_TYPE_LABELS[self.product_type], PRODUCT_TYPE_LABELS_EN[self.product_type])
+
+    @property
+    def display_name(self) -> str:
+        return L(self.name, self.name_en)
+
+    @property
+    def display_issuer(self) -> str:
+        return issuer_label(self.issuer)
+
+    @property
+    def display_scope(self) -> str:
+        return L(self.investment_scope, self.investment_scope_en)
+
+    @property
+    def display_strategy(self) -> str:
+        return L(self.strategy, self.strategy_en)
 
     def metric(self, metric_type: MetricType) -> Metric | None:
         return next((m for m in self.metrics if m.type is metric_type), None)
@@ -259,8 +322,16 @@ class Catalog(BaseModel):
         """按名称或代码模糊匹配（客户常说「活钱宝」而不是完整名称）。"""
         if product := self.get(text):
             return product
-        text = text.replace(" ", "")
-        return next((p for p in self.products if text and text in p.name.replace(" ", "")), None)
+        text = text.replace(" ", "").lower()
+        return next(
+            (
+                p
+                for p in self.products
+                if text
+                and (text in p.name.replace(" ", "") or text in p.name_en.replace(" ", "").lower())
+            ),
+            None,
+        )
 
 
 @lru_cache

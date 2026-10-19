@@ -8,6 +8,7 @@ from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
 from app.auth.service import CUSTOMER, RM, CurrentUser, resolve_session
 from app.compliance.policy import evaluate_gate
+from app.core.i18n import L
 from app.customers.context import customer_profile
 from app.db.session import get_session
 
@@ -28,21 +29,23 @@ def get_current_user(
     token = request.cookies.get(SESSION_COOKIE)
     user = resolve_session(db, token, now) if token else None
     if user is None:
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail=L("请先登录", "Please sign in"))
     return user
 
 
 def get_customer_id(user: CurrentUser = Depends(get_current_user)) -> str:
     """客户接口：只允许客户角色，且只能访问自己的数据（客户编号来自会话，而非请求参数）。"""
     if user.role != CUSTOMER or not user.customer_id:
-        raise HTTPException(status_code=403, detail="仅限客户访问")
+        raise HTTPException(status_code=403, detail=L("仅限客户访问", "Customers only"))
     return user.customer_id
 
 
 def get_rm_id(user: CurrentUser = Depends(get_current_user)) -> str:
     """理财经理接口：只允许理财经理角色，只能看到分配给自己的客户咨询。"""
     if user.role != RM or not user.rm_id:
-        raise HTTPException(status_code=403, detail="仅限理财经理访问")
+        raise HTTPException(
+            status_code=403, detail=L("仅限理财经理访问", "Relationship managers only")
+        )
     return user.rm_id
 
 
@@ -71,7 +74,7 @@ def customer_state(db: Session, customer_id: str, now: datetime) -> CustomerStat
         band = load_questionnaire(record.questionnaire_version).band(record.rating)
         summary = AssessmentSummary(
             rating=record.rating,
-            rating_name=band.name,
+            rating_name=band.display_name,
             max_product_risk=band.max_product_risk,
             score=record.score,
             confirmed_at=record.confirmed_at,

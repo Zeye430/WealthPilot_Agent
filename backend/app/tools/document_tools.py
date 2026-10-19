@@ -7,13 +7,17 @@
 
 import json
 from datetime import date
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
+import yaml
 from langchain_core.tools import ToolException, tool
 from langgraph.prebuilt import InjectedState
 from pydantic import Field
 
 from app.compliance.policy import Permission
+from app.core.i18n import L, is_en
 from app.knowledge.kb import load_knowledge_base
 from app.products.catalog import load_catalog
 from app.rag.corpus import Chunk, ChunkKind
@@ -26,13 +30,42 @@ DATA_NOTICE = (
 )
 
 
+KB_TITLES_EN_PATH = Path(__file__).resolve().parents[3] / "data/knowledge/titles_en.yaml"
+SOURCE_LABELS_EN = {
+    "法规原文": "Regulation",
+    "本系统说明": "System note",
+    "产品说明书": "Prospectus",
+}
+
+
+@lru_cache
+def _kb_titles_en() -> dict[str, str]:
+    return yaml.safe_load(KB_TITLES_EN_PATH.read_text(encoding="utf-8"))
+
+
+def _title(chunk: Chunk) -> str:
+    if not is_en():
+        return chunk.title
+    if chunk.kind is ChunkKind.KNOWLEDGE:
+        return (
+            f"Knowledge base {chunk.chunk_id}: {_kb_titles_en().get(chunk.chunk_id, chunk.title)}"
+        )
+    product = load_catalog().get(chunk.product_code or "")
+    return f"{product.name_en} prospectus" if product else chunk.title
+
+
 def _source_item(chunk: Chunk) -> dict:
-    """前端展示用的出处：知识库条目附法规摘录与链接，说明书章节附正文节选。"""
+    """前端展示用的出处：知识库条目附法规摘录与链接，说明书章节附正文节选。
+
+    英文界面只翻译标题和来源类型；摘录保持中文原文（source_language=zh，界面标注），
+    不机器翻译法规条文，避免译文被当作原文引用。
+    """
     item = {
         "id": chunk.chunk_id,
-        "title": chunk.title,
+        "title": _title(chunk),
         "section": chunk.section,
-        "source_label": chunk.source_label,
+        "source_label": L(chunk.source_label, SOURCE_LABELS_EN.get(chunk.source_label, "")),
+        "source_language": "zh",
         "version": chunk.version,
     }
     if chunk.kind is ChunkKind.KNOWLEDGE:
@@ -75,7 +108,9 @@ def search_documents(
         else:
             found = load_catalog().find_by_name(product)
             if found is None:
-                raise ToolException(f"未找到产品「{product}」。")
+                raise ToolException(
+                    L(f"未找到产品「{product}」。", f'Product "{product}" not found.')
+                )
             product_code = found.code
 
     result = get_retriever(date.today()).search(query, product_code)

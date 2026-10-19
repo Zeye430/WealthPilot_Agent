@@ -1042,5 +1042,61 @@
 - ✏️ `backend/app/customers/context.py`（`overview`）
 - ✏️ `docs/ARCHITECTURE.md`（D36–D38）、`ROADMAP.md`、`README.md`
 
-**提交**：待产品负责人执行。
+**提交**：已提交（f26aea9）。
 
+
+## 2026-10-18 · 第 27 步：P8-2b AI 回答与后端数据双语
+
+**目标**：英文界面下，AI 回答、产品数据、测评问卷、等级权益、错误提示、理财经理看板全部为英文，且合规要求与中文完全相同。
+
+**关键决策**
+- **语言如何传到后端深处**：中间件从 Cookie `wp_locale` 读出语言，放进请求级上下文变量（ContextVar）；展示层用 `L(中文, English)` 取文字。Agent、工具、代码追加的说明在同一请求上下文里自动跟随，不必给每个函数加参数（D39）。有端到端测试确认语言能传到 Agent 内部执行的工具。
+- **英文数据与中文同源**：在原 YAML 中加 `*_en` 字段（产品名意译，如「知岸活钱宝」→ Zhian Ready Cash），模型校验要求英文字段必填，漏写启动即报错（D40）。问卷 v1 只加译文、不改题目和分值。
+- **英文合规规则叠加而不是替换**：中文界面只用中文规则，行为与之前完全一致（零回归风险）；英文界面中英文规则同时生效（D41）。
+- **资料原文不翻译**：知识库与说明书保持中文，英文界面只翻译出处标题，摘录标注 "Source text in Chinese"。避免机器译文被当作法规原文引用；检索仍用中文查询，模型用英文转述。
+- **交接摘要存两份**：创建时同时生成中英文摘要，理财经理看板按查看者语言显示（D42）。
+
+**做了什么**
+1. 语言基础：`app/core/i18n.py`（ContextVar、`L()`、`use_locale`、`LocaleMiddleware`、常量的英文对照 `register/localized`）。
+2. 固定话术与代码追加的说明双语：超范围、需测评、兜底、工具上限、不保本、假设情景、年龄以登记为准（识别 "I'm 35"）、等级升级提示、测评卡片；英文界面下系统提示追加 Language 一节（英文回答、使用工具结果中的英文产品名、检索仍用中文、全部合规规则同样适用、不臆测理财经理性别）。
+3. 英文数据：18 个产品（名称、投资范围、策略、基准测算依据、指数公式、业绩报酬条件）、问卷（题目、选项、评级名称与说明）、等级权益与活动、客户与理财经理姓名、演示账号与登录提示、30 条知识库标题（`data/knowledge/titles_en.yaml`）。
+4. 展示层与工具双语：产品卡片 / 详情 / 对比表、适当性原因、排序理由、测算结果与图表、配置模拟检查、本次需求、买入确认、开售提醒、交接名片与看板、出处卡片、全部 API 错误提示、限流与语音错误。英文金额写法：¥10,000、¥500 million。
+5. 产品详情「需要先测评」改用原因字段 `needs_assessment`，不再解析中文原因文字。
+6. 合规规则：13 条输出规则全部有英文版；新增 O-FALSE_ACTION_CLAIM（没调用工具却说「已预约提醒」、任何「已为您买入」），O-RETURN_PITCH 覆盖软性收益比较（中英文）；客户已有的开售提醒写入模型上下文；英文否定判断（45 字符窗口，not / no / never / n't…）、英文分句（不把小数点当句末）、英文引号警示语豁免、英文产品名匹配、真实理财公司英文名。
+7. 语音：英文界面用英文识别（英文识别器首次使用时才加载），拼音纠错只用于中文。
+8. 前端：切换语言时先写 Cookie 再刷新数据；分隔符与标点随语言（；/ ; ，/ , ：/ :）；头像取姓氏首字母；名称后的「（虚构）/ (fictional)」统一处理。
+9. 评估：`evaluations/scenarios_en.yaml`（与中文 25 个场景一一对应），`run_scenarios.py --suite en`；英文套件自动检查「回答使用英文」。
+
+**验证**
+- 后端 347 个测试通过（新增 `test_compliance_en.py` 54 个：每条英文规则的违规句与合规否定句、中文模式下英文规则不生效；`test_api_chat.py` 新增 4 个英文端到端：固定话术与测评卡片、工具输出与代码追加说明、产品与问卷、交接摘要随看板语言切换）。ruff、前端类型检查、lint、构建通过。
+- 浏览器视觉检查（Playwright，临时端口 8100/3100，临时测试账号映射到 `pytest_customer`，检查后已删除账号并清空其数据）：英文登录、对话（真实 Kimi 推荐 + 配置模拟）、产品详情、产品页、「我的」、电脑端转人工、理财经理看板。修复：配置卡片中的中文逗号与冒号、两句之间缺空格、「¥5 hundred million」改为「¥500 million」、"Valid until" 大小写。
+- 场景评估（真实 Kimi，每场景 3 次）：见下方「评估结果」。
+
+**遇到的问题**
+- **Next.js 代理默认 30 秒超时**：浏览器检查中一轮多工具对话超过 30 秒，前端代理断开连接，客户会看到请求失败。这是生产可靠性问题，不只是测试问题。`proxyTimeout` 调到 120 秒；单轮总时长上限（超时降级）放到 P8-4 可靠性阶段由后端控制。
+- 模型在英文回答中用 "him" 指代理财经理（演示数据没有性别），在英文规则中要求用姓名或 "your relationship manager"。
+- 浏览器检查一开始会重置王先生的演示数据（与产品负责人共用数据库），改用临时测试账号。
+
+**限制**
+- 历史数据（本步之前创建的交接摘要、历史对话）仍是创建时的语言。
+- 知识库与说明书摘录为中文原文（有意为之，见上）。
+- 英文合规规则基于正则，覆盖常见句式；软性收益比较（"more upside"）与中文同样尚未覆盖。
+
+**文件**
+- 🆕 `backend/app/core/i18n.py`、`backend/tests/test_compliance_en.py`、`evaluations/reports/scenarios-en-2026-10-18.md/.json`、`data/knowledge/titles_en.yaml`、`evaluations/scenarios_en.yaml`
+- ✏️ 数据：`data/products/products.yaml`、`data/benefits/benefits.yaml`、`data/customers/base_profiles.yaml`、`backend/app/assessment/questionnaire_v1.yaml`
+- ✏️ 后端：`app/main.py`、`app/agent/graph.py`、`prompts.py`、`app/api/{auth,chat,deps,handoffs,products,purchases,reminders,speech}.py`、`app/assessment/scoring.py`、`app/benefits/service.py`、`app/compliance/{output_guard,suitability}.py`、`app/core/{config,ratelimit,security}.py`、`app/customers/{base,context,needs}.py`、`app/handoff/service.py`、`app/products/{allocation,catalog,presenter,ranking,service}.py`、`app/purchases/service.py`、`app/reminders/service.py`、`app/speech/recognizer.py`、`app/tools/*.py`、`tests/test_api_chat.py`、`tests/test_compliance.py`
+- ✏️ 前端：`next.config.ts`（代理超时）、`lib/i18n.tsx`、`lib/types.ts`、`components/{AppShell,LoginForm,MeView,Profile}.tsx`、`blocks/{AllocationView,HandoffBlocks,ProductBlocks,SourcesView}.tsx`、`products/{ProductCardView,ProductDetailDialog,ProductDetailView,PurchaseFlow}.tsx`、`rm/RmDashboard.tsx`
+- ✏️ 评估与文档：`evaluations/run_scenarios.py`、`evaluations/reports/scenarios-2026-10-18.md/.json`、`docs/COMPLIANCE_DESIGN.md`（§4.1，v0.5）、`ARCHITECTURE.md`（D39–D42）、`EVALUATION_PLAN.md`、`ROADMAP.md`、`README.md`
+
+**评估结果**（真实 Kimi，每场景 3 次，中英文各 25 个场景）
+
+| 轮次 | 中文 | 英文 | 发现与修复 |
+|---|---|---|---|
+| 第一轮 | 73/75 | 73/75（**虚高**） | 英文 G02、S02 六次全部兜底却被判通过：兜底回答后面追加了「理财不保本」说明，评估的「未兜底」检查按全文比对而漏检（改为按开头判断）。兜底原因是英文规则误拦合规句：否定词距离超过 45 字符、"non-principal-protected"、无引号的警示语（"any product claiming guaranteed returns would be non-compliant"）、描述客户目标的 "with no risk"。中文 N02：模型没调用工具就说「已为您预约开售提醒」→ 新增 O-FALSE_ACTION_CLAIM。中英文 P05：软性收益比较（「争取稍高一些的收益空间」「highest-yielding」）→ 扩展 O-RETURN_PITCH |
+| 第二轮 | 72/75 | 70/75 | N02 中英文失败是评估复查的误判：复查只拿回答本身作依据，没有提醒记录（生产审查没有改写），改为与生产相同的依据。英文 S02 仍有 1 次兜底：否定在短语之后（"Principal-protected products no longer exist"）→ 新增英文后置否定判断。S01 "I'll highlight… somewhat higher returns" → 补充推荐动词 |
+| **第三轮（最终）** | **74/75** | **73/75** | **两种语言均零兜底**；中文与 2b 之前的 74/75 持平（无回归）；中文中位延迟 6.6 秒，英文 10.3 秒（英文输出更长）。遗留：英文 P04 模型自己算「到手金额」算错（¥95,500，应为 ¥99,500，两轮都出现）、中文 C01 一次未调用计算工具 → P8-4 增加「回答中的金额必须来自工具结果」的代码检查；英文 P05 "a bit more return potential" 已补规则与单测，未重跑全量 |
+
+报告：`evaluations/reports/scenarios-2026-10-18.md`、`scenarios-en-2026-10-18.md`（及同名 .json）。
+
+**提交**：待产品负责人执行。

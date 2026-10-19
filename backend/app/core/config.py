@@ -52,21 +52,36 @@ class Settings(BaseSettings):
         {
             "username": "wang",
             "display_name": "王先生（虚构）",
+            "display_name_en": "Mr. Wang (fictional)",
             "role": "customer",
             "customer_id": "demo_customer_1",
         },
         {
             "username": "chen",
             "display_name": "陈女士（虚构）",
+            "display_name_en": "Ms. Chen (fictional)",
             "role": "customer",
             "customer_id": "demo_customer_2",
         },
-        {"username": "li", "display_name": "李经理（虚构）", "role": "rm", "rm_id": "RM001"},
-        {"username": "zhou", "display_name": "周经理（虚构）", "role": "rm", "rm_id": "RM002"},
+        {
+            "username": "li",
+            "display_name": "李经理（虚构）",
+            "display_name_en": "RM Li (fictional)",
+            "role": "rm",
+            "rm_id": "RM001",
+        },
+        {
+            "username": "zhou",
+            "display_name": "周经理（虚构）",
+            "display_name_en": "RM Zhou (fictional)",
+            "role": "rm",
+            "rm_id": "RM002",
+        },
     ]
     demo_mode: bool = True  # 允许客户一键清空自己的演示数据
     # 登录页显示的演示提示（如演示密码）；公开部署时配合访问码使用，或设为空不显示
     demo_login_hint: str | None = "演示账号的密码均为 wealthpilot-demo"
+    demo_login_hint_en: str | None = "All demo accounts use the password wealthpilot-demo"
 
     # 限流（单实例内存滑动窗口；多实例部署时应换成 Redis）
     rate_limit_enabled: bool = True

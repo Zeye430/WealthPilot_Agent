@@ -13,6 +13,7 @@ from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
 from app.compliance.policy import Permission, evaluate_gate
 from app.compliance.suitability import CustomerContext, evaluate
+from app.core.i18n import L
 from app.db.session import get_session
 from app.products import presenter
 from app.products.catalog import ProductStatus, ProductType, load_catalog
@@ -36,9 +37,19 @@ def customer_rating(
 def _remind_state(product, rating: str | None, reminded: set[str]) -> dict:
     try:
         check_remindable(product, rating)
-        return {"allowed": True, "reminded": product.code in reminded, "reason": None}
+        return {
+            "allowed": True,
+            "reminded": product.code in reminded,
+            "reason": None,
+            "needs_assessment": False,
+        }
     except ReminderError as exc:
-        return {"allowed": False, "reminded": False, "reason": str(exc)}
+        return {
+            "allowed": False,
+            "reminded": False,
+            "reason": str(exc),
+            "needs_assessment": rating is None and product.status is ProductStatus.UPCOMING,
+        }
 
 
 @router.get("")
@@ -60,7 +71,7 @@ def list_products(
         "catalog_version": catalog.catalog_version,
         "rating": {
             "code": band.rating,
-            "name": band.name,
+            "name": band.display_name,
             "max_product_risk": band.max_product_risk,
         }
         if band
@@ -88,7 +99,10 @@ def list_products(
             for p in upcoming(catalog, None)
             if not product_type or p.product_type in product_type
         ],
-        "ranking_note": "排序依据：流动性、费用；不按收益排序。",
+        "ranking_note": L(
+            "排序依据：流动性、费用；不按收益排序。",
+            "Ranked by liquidity and fees, never by returns.",
+        ),
     }
 
 
@@ -102,14 +116,18 @@ def product_detail(
     """产品详情对所有客户开放（客观条款）；能否买入由代码判断并说明原因。"""
     product = load_catalog().get(code)
     if product is None:
-        raise HTTPException(status_code=404, detail="产品不存在")
+        raise HTTPException(status_code=404, detail=L("产品不存在", "Product not found"))
     blocked = blocking_reasons(product, rating)
     eligibility = evaluate(product, CustomerContext(risk_rating=rating)) if rating else None
     return {
         **presenter.detail(product),
         "eligible": eligibility.eligible if eligibility else False,
         "eligibility_messages": eligibility.messages if eligibility else [],
-        "purchase": {"allowed": not blocked, "reasons": blocked},
+        "purchase": {
+            "allowed": not blocked,
+            "reasons": blocked,
+            "needs_assessment": rating is None,
+        },
         "remind": _remind_state(product, rating, reminded_codes(db, customer_id))
         if product.status is ProductStatus.UPCOMING
         else None,

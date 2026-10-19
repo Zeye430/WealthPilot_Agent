@@ -2,22 +2,23 @@
 
 import { useProductActions } from "@/components/products/ProductActions";
 import { Chip } from "@/components/ui";
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, useCopy, useSeparators } from "@/lib/i18n";
 import type { ProductCard } from "@/lib/types";
 
 const COPY = defineCopy({
-  zh: { open: "查看详情 / 买入", viewOnly: "仅可查看", fictional: (code: string) => `虚构演示产品 ${code}` },
-  en: { open: "View / Buy", viewOnly: "View only", fictional: (code: string) => `Fictional demo product ${code}` },
+  zh: { open: "查看详情 / 买入", viewOnly: "仅可查看", fictional: (code: string) => `虚构演示产品 ${code}`, asOf: (d: string) => `（${d}）` },
+  en: { open: "View / Buy", viewOnly: "View only", fictional: (code: string) => `Fictional demo product ${code}`, asOf: (d: string) => ` (${d})` },
 });
 
 /** 产品卡片：对话中的产品列表与「理财产品」页共用，点击打开详情与买入。收益数字始终带口径标签。 */
 export function ProductCardView({ product }: { product: ProductCard }) {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   const { open } = useProductActions();
   const viewOnly = product.purchasable === false;
   const showWarnings = viewOnly || product.data_quality === "UNVERIFIED";
-  // 「1.42%（截至 10-16）」：大字只放数值，截止日期并入口径标签
-  const [, value = product.metric.text, asOf] = product.metric.text.match(/^(.+?)（(.+)）$/) ?? [];
+  // 「1.42%（截至 10-16）」/「1.42% (as of Oct 16)」：大字只放数值，截止日期并入口径标签
+  const [, value = product.metric.text, asOf] = product.metric.text.match(/^(.+?)\s*[（(](.+)[）)]$/) ?? [];
 
   return (
     <button
@@ -34,12 +35,12 @@ export function ProductCardView({ product }: { product: ProductCard }) {
       <span className="flex flex-col gap-0.5">
         <span className="text-xs text-ink-3">
           {product.metric.label}
-          {asOf && `（${asOf}）`}
+          {asOf && c.asOf(asOf)}
         </span>
         <span className="figures text-[26px] leading-tight font-extrabold tracking-tight">{value}</span>
       </span>
       <span className="text-xs text-ink-2">
-        {product.type_label}；{product.lockup}；{product.minimum}
+        {[product.type_label, product.lockup, product.minimum].join(sep.semi)}
       </span>
       {product.highlights && product.highlights.length > 0 && (
         <span className="flex flex-wrap gap-1.5">

@@ -13,6 +13,7 @@ from typing import Protocol
 import yaml
 from pydantic import BaseModel
 
+from app.core.i18n import L
 from app.products.catalog import load_catalog
 from app.products.presenter import format_money
 
@@ -54,15 +55,25 @@ class AssetsAtBank(BaseModel):
 class RelationshipManager(BaseModel):
     id: str
     name: str
+    name_en: str | None = None
     title: str = "理财经理"
+    title_en: str = "Relationship Manager"
     # 联系方式来自银行员工系统；演示数据为空，界面点击时提示「演示环境」，不拨打真实号码
     phone: str | None = None
     wecom_url: str | None = None
 
+    @property
+    def display_name(self) -> str:
+        return L(self.name, self.name_en or self.name)
+
+    @property
+    def display_title(self) -> str:
+        return L(self.title, self.title_en)
+
     def contact_card(self) -> dict:
         return {
-            "rm_name": self.name,
-            "rm_title": self.title,
+            "rm_name": self.display_name,
+            "rm_title": self.display_title,
             "phone": self.phone,
             "wecom_url": self.wecom_url,
         }
@@ -71,13 +82,25 @@ class RelationshipManager(BaseModel):
 class BaseProfile(BaseModel):
     customer_id: str
     display_name: str
+    display_name_en: str | None = None
     age: int
     customer_tier: str
     occupation: str
+    occupation_en: str | None = None
     customer_since: date
     kyc_verified: bool
     assigned_rm: RelationshipManager
     assets_at_bank: AssetsAtBank
+
+    @property
+    def localized_name(self) -> str:
+        return L(self.display_name, self.display_name_en or self.display_name)
+
+    @property
+    def localized_tier(self) -> str:
+        from app.benefits.service import tier_label
+
+        return tier_label(self.customer_tier)
 
     def summary(self) -> dict:
         """提供给前端与 LLM 的摘要：只含理财服务需要的信息。"""
@@ -85,17 +108,17 @@ class BaseProfile(BaseModel):
         holdings = [
             {
                 "code": h.code,
-                "name": p.name if (p := catalog.get(h.code)) else h.code,
+                "name": p.display_name if (p := catalog.get(h.code)) else h.code,
                 "amount": format_money(h.amount),
             }
             for h in self.assets_at_bank.wealth_products
         ]
         return {
-            "display_name": self.display_name,
+            "display_name": self.localized_name,
             "age": self.age,
-            "customer_tier": self.customer_tier,
+            "customer_tier": self.localized_tier,
             "kyc_verified": self.kyc_verified,
-            "assigned_rm": self.assigned_rm.name,
+            "assigned_rm": self.assigned_rm.display_name,
             "assets": {
                 "demand_deposit": format_money(self.assets_at_bank.demand_deposit),
                 "time_deposit": format_money(self.assets_at_bank.time_deposit),
@@ -103,7 +126,7 @@ class BaseProfile(BaseModel):
                 "liquid_total": format_money(self.assets_at_bank.liquid_total()),
                 "total": format_money(self.assets_at_bank.total),
             },
-            "source": "知岸银行客户信息系统（模拟）",
+            "source": L("知岸银行客户信息系统（模拟）", "Zhian Bank customer system (simulated)"),
         }
 
 

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Avatar, Button } from "@/components/ui";
 import { ApiError, getLoginConfig, login, type LoginConfig } from "@/lib/api";
-import { defineCopy, LocaleToggle, useCopy } from "@/lib/i18n";
+import { defineCopy, LocaleToggle, useCopy, stripFictional, initial } from "@/lib/i18n";
 
 const COPY = defineCopy({
   zh: {
@@ -99,9 +99,9 @@ export function LoginForm({ next }: { next: string | null }) {
                         username === a.username ? "bg-brand-soft ring-2 ring-brand" : "bg-fill hover:bg-line"
                       }`}
                     >
-                      <Avatar text={a.display_name.slice(0, 1)} tone={a.role === "rm" ? "navy" : "brand"} />
+                      <Avatar text={initial(a.display_name)} tone={a.role === "rm" ? "navy" : "brand"} />
                       <span className="min-w-0">
-                        <span className="block truncate font-bold">{a.display_name.replace(/（虚构）$/, "")}</span>
+                        <span className="block truncate font-bold">{stripFictional(a.display_name)}</span>
                         <span className="text-xs text-ink-3">{c.roles[a.role]}</span>
                       </span>
                     </button>

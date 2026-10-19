@@ -13,6 +13,7 @@ from langgraph.prebuilt import InjectedState
 from pydantic import Field
 
 from app.benefits.service import benefits_block, tier_status
+from app.core.i18n import L
 from app.customers.base import get_customer_info_system
 from app.tools.product_tools import _recorded_needs
 
@@ -38,7 +39,12 @@ def get_customer_benefits(
     customer_id = state.get("customer_id")
     base = get_customer_info_system().get(customer_id) if customer_id else None
     if base is None:
-        raise ToolException("未找到客户资料，无法查询等级与权益。")
+        raise ToolException(
+            L(
+                "未找到客户资料，无法查询等级与权益。",
+                "Customer records not found, so tier and benefits can't be checked.",
+            )
+        )
     if planned_amount is None and (needs := _recorded_needs(customer_id)):
         planned_amount = float(needs.investment_amount) if needs.investment_amount else None
     status = tier_status(base, Decimal(str(planned_amount)) if planned_amount else None)

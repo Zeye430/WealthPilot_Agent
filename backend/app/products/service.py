@@ -33,8 +33,11 @@ def _matches(product: Product, filters: SearchFilters) -> bool:
     if filters.max_lockup_days is not None and product.lockup_days > filters.max_lockup_days:
         return False
     if filters.keyword:
-        haystack = f"{product.name}{product.issuer}{product.type_label}{product.investment_scope}"
-        if filters.keyword not in haystack:
+        haystack = (
+            f"{product.name}{product.issuer}{product.type_label}{product.investment_scope}"
+            f"{product.name_en}{product.investment_scope_en}"
+        ).lower()
+        if filters.keyword.lower() not in haystack:
             return False
     return True
 

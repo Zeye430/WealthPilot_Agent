@@ -51,7 +51,7 @@ export type ProductCard = {
   raise_limit?: string | null;
 };
 
-export type RemindState = { allowed: boolean; reminded: boolean; reason: string | null };
+export type RemindState = { allowed: boolean; reminded: boolean; reason: string | null; needs_assessment?: boolean };
 
 export type UpcomingProductsBlock = {
   type: "upcoming_products";
@@ -106,7 +106,8 @@ export type ProductDetail = ProductCard & {
   metrics: { label: string; text: string; basis: string | null }[];
   eligible: boolean;
   eligibility_messages: string[];
-  purchase?: { allowed: boolean; reasons: string[] };
+  /** needs_assessment：未测评导致不能买入（界面据此显示「去测评」，不解析原因文字） */
+  purchase?: { allowed: boolean; reasons: string[]; needs_assessment?: boolean };
   remind?: RemindState | null;
 };
 
@@ -153,6 +154,8 @@ export type SourceItem = {
   title: string;
   section: string | null;
   source_label: string;
+  /** 摘录原文的语言：知识库与说明书均为中文，英文界面会标注「原文为中文」 */
+  source_language?: "zh" | "en";
   version: string;
   excerpt: string;
   citations?: string[];

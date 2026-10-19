@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import SESSION_COOKIE, get_current_user, get_now
 from app.auth.service import CurrentUser, authenticate, create_session, revoke_session
 from app.core.config import get_settings
+from app.core.i18n import L
 from app.core.ratelimit import login_limit
 from app.db.session import get_session
 
@@ -22,10 +23,18 @@ class LoginRequest(BaseModel):
     access_code: str | None = Field(default=None, max_length=64)
 
 
+def _display_name(username: str, fallback: str) -> str:
+    """演示账号的显示名按当前语言返回（账号表只存中文名）。"""
+    account = next((a for a in get_settings().demo_accounts if a["username"] == username), None)
+    if account is None:
+        return fallback
+    return L(account["display_name"], account.get("display_name_en") or account["display_name"])
+
+
 def user_view(user: CurrentUser) -> dict:
     return {
         "username": user.username,
-        "display_name": user.display_name,
+        "display_name": _display_name(user.username, user.display_name),
         "role": user.role,
     }
 
@@ -36,9 +45,15 @@ def login_config():
     settings = get_settings()
     return {
         "access_code_required": settings.demo_access_code is not None,
-        "hint": settings.demo_login_hint,
+        "hint": L(settings.demo_login_hint, settings.demo_login_hint_en)
+        if settings.demo_login_hint
+        else None,
         "demo_accounts": [
-            {"username": a["username"], "display_name": a["display_name"], "role": a["role"]}
+            {
+                "username": a["username"],
+                "display_name": _display_name(a["username"], a["display_name"]),
+                "role": a["role"],
+            }
             for a in settings.demo_accounts
         ],
     }
@@ -57,11 +72,13 @@ def login(
     if settings.demo_access_code is not None:
         expected = settings.demo_access_code.get_secret_value()
         if not hmac.compare_digest((req.access_code or "").strip(), expected):
-            raise HTTPException(status_code=401, detail="访问码不正确")
+            raise HTTPException(status_code=401, detail=L("访问码不正确", "Incorrect access code"))
     user = authenticate(db, req.username, req.password)
     if user is None:
         # 不区分「账号不存在」和「密码错误」，避免被用来探测账号
-        raise HTTPException(status_code=401, detail="账号或密码不正确")
+        raise HTTPException(
+            status_code=401, detail=L("账号或密码不正确", "Incorrect username or password")
+        )
     token = create_session(db, user, now)
     response.set_cookie(
         SESSION_COOKIE,

@@ -12,6 +12,7 @@ from fastapi import HTTPException, Request
 
 from app.auth.service import CurrentUser
 from app.core.config import get_settings
+from app.core.i18n import L
 
 
 class SlidingWindowLimiter:
@@ -47,7 +48,7 @@ def enforce(bucket: str, key: str, rules: list[tuple[int, int]]) -> None:
         if (wait := limiter.check(bucket, key, limit, window)) is not None:
             raise HTTPException(
                 status_code=429,
-                detail="操作太频繁，请稍后再试",
+                detail=L("操作太频繁，请稍后再试", "Too many requests. Please try again shortly."),
                 headers={"Retry-After": str(wait)},
             )
 

@@ -6,7 +6,7 @@ import { useProductActions } from "@/components/products/ProductActions";
 import { ProductCardView } from "@/components/products/ProductCardView";
 import { ProductDetailView } from "@/components/products/ProductDetailView";
 import { Button, Chip } from "@/components/ui";
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, useCopy, useSeparators } from "@/lib/i18n";
 import type { ComparisonTableBlock, ProductDetailBlock, ProductListBlock } from "@/lib/types";
 
 /** 对话中先展示匹配度最高的 3 款，其余折叠，避免一次给客户太多选择。 */
@@ -124,12 +124,13 @@ export function ComparisonTableView({ block }: { block: ComparisonTableBlock }) 
 
 function Footnotes({ excluded = [], lines }: { excluded?: { reason: string; count: number }[]; lines: string[] }) {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   return (
     <div className="flex flex-col gap-0.5 text-xs leading-5 text-ink-3">
       {excluded.length > 0 && (
         <p>
           {c.notShown}
-          {excluded.map((e) => `${e.reason} ${c.count(e.count)}`).join("；")}
+          {excluded.map((e) => `${e.reason} ${c.count(e.count)}`).join(sep.semi)}
         </p>
       )}
       {lines.map((l) => (

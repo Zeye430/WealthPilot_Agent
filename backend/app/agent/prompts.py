@@ -1,5 +1,6 @@
 from app.assessment.scoring import load_questionnaire
 from app.compliance.policy import Permission
+from app.core.i18n import is_en, register
 
 SYSTEM_PROMPT = """你是 WealthPilot AI，一个面向中国银行理财客户的智能财富助手（演示系统）。
 
@@ -107,30 +108,59 @@ def system_prompt(
     if permission is Permission.ASSESSED and risk_rating:
         band = load_questionnaire().band(risk_rating)
         status = ASSESSED_STATUS.format(
-            rating=band.rating, name=band.name, max_risk=band.max_product_risk
+            rating=band.rating, name=band.display_name, max_risk=band.max_product_risk
         )
     else:
         status = PRE_ASSESSMENT_STATUS
-    return SYSTEM_PROMPT + HANDOFF_RULES + BENEFIT_RULES + status + customer_context
+    language = LANGUAGE_RULES_EN if is_en() else ""
+    return SYSTEM_PROMPT + HANDOFF_RULES + BENEFIT_RULES + status + customer_context + language
 
 
-OUT_OF_SCOPE_REPLY = (
+OUT_OF_SCOPE_REPLY = register(
     "抱歉，我是理财助手，只能回答理财、投资和财务测算相关的问题。"
-    "您可以问我理财产品的风险和费用、收益测算等。"
+    "您可以问我理财产品的风险和费用、收益测算等。",
+    "Sorry, I'm a wealth assistant and can only help with wealth management, investing and "
+    "financial calculations. Try asking about a product's risks and fees, or a return estimate.",
 )
 
-ASSESSMENT_REQUIRED_REPLY = (
+ASSESSMENT_REQUIRED_REPLY = register(
     "根据理财产品销售的适当性要求，在为您推荐或比较具体产品之前，需要先完成风险承受能力测评。"
-    "测评约 3 分钟，共 10 道题，完成后我就能在您的风险等级范围内为您筛选产品。"
+    "测评约 3 分钟，共 10 道题，完成后我就能在您的风险等级范围内为您筛选产品。",
+    "Suitability rules for wealth products require a risk tolerance profile before I can recommend "
+    "or compare specific products. It takes about 3 minutes (10 questions); afterwards I can match "
+    "products within your risk level.",
 )
 
-SAFE_FALLBACK_REPLY = "这个问题我暂时无法给出合适的回答。如需进一步帮助，您可以咨询理财经理。"
+SAFE_FALLBACK_REPLY = register(
+    "这个问题我暂时无法给出合适的回答。如需进一步帮助，您可以咨询理财经理。",
+    "I can't give a suitable answer to this right now. For more help, please contact your "
+    "relationship manager.",
+)
 
 TOOL_LIMIT_INSTRUCTION = (
     "本轮工具调用次数已达上限，不能再调用工具。请只根据上面已有的工具结果，直接给客户一个完整、简洁的回答；"
     "界面已展示的列表和图表不必重复，没有完成的部分如实说明，可建议客户继续追问。"
 )
 
-TOOL_LIMIT_REPLY = (
-    "这个问题需要的计算步骤较多，我先停在这里。您可以把问题拆小一些，或联系理财经理协助。"
+TOOL_LIMIT_REPLY = register(
+    "这个问题需要的计算步骤较多，我先停在这里。您可以把问题拆小一些，或联系理财经理协助。",
+    "This question needs more steps than I can take at once, so I'll stop here. Try breaking it "
+    "into smaller questions, or contact your relationship manager.",
 )
+
+LANGUAGE_RULES_EN = """
+## Language
+The customer is using the English interface. Always reply in clear, plain US English, even though
+these instructions, tool results and the knowledge base may be in Chinese.
+- Use the English product names and terms given in tool results; write amounts as ¥200,000.
+- Refer to the relationship manager by name or as "your relationship manager"; their gender is
+  not recorded, so never write he/she for them (use "they" if needed).
+- search_documents queries must be written in Chinese (the knowledge base is in Chinese). Keep the
+  citation markers exactly as given, e.g. [K17] or [ZA-F03#四].
+- Every rule above applies equally in English: never promise returns or principal ("guaranteed",
+  "risk-free", "can't lose"); no pressure ("limited time", "act now", "don't miss out"); never
+  suggest retaking the risk profile to reach a return target; recommend only products within the
+  customer's risk level, with reasons based on term, liquidity, fees and minimums, never on returns;
+  never compare a performance benchmark with a 7-day annualized yield; a benchmark is not an
+  expected return.
+"""

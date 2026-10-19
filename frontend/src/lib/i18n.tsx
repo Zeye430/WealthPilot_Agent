@@ -16,6 +16,10 @@ type Ctx = { locale: Locale; setLocale: (l: Locale) => void };
 
 const LocaleContext = createContext<Ctx>({ locale: "zh", setLocale: () => {} });
 
+function writeCookie(locale: Locale) {
+  document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
+}
+
 function readStored(): Locale | null {
   try {
     const v = window.localStorage.getItem(STORAGE_KEY);
@@ -31,16 +35,18 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 首次渲染在服务端（默认中文），挂载后恢复客户的语言偏好
     const stored = readStored();
+    if (stored) writeCookie(stored);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored) setLocaleState(stored);
   }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale === "en" ? "en" : "zh-CN";
-    document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
   }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
+    // 先写 Cookie 再更新状态：子组件随语言重新请求数据时，后端已能读到新语言
+    writeCookie(l);
     setLocaleState(l);
     try {
       window.localStorage.setItem(STORAGE_KEY, l);
@@ -61,6 +67,30 @@ export function defineCopy<T>(copy: { zh: T; en: T }) {
 
 export function useCopy<T>(copy: { zh: T; en: T }): T {
   return copy[useContext(LocaleContext).locale];
+}
+
+/** 标点：中文用全角「；」「、」「：」「（）」，英文用半角并带空格 */
+export function useSeparators() {
+  const en = useContext(LocaleContext).locale === "en";
+  return {
+    semi: en ? "; " : "；",
+    comma: en ? ", " : "、",
+    clause: en ? ", " : "，",
+    colon: en ? ": " : "：",
+    sentence: en ? " " : "",
+    paren: (s: string) => (en ? ` (${s})` : `（${s}）`),
+  };
+}
+
+/** 去掉演示数据名称后的「（虚构）」/ " (fictional)" 标注，界面其他位置已统一说明 */
+export function stripFictional(name: string) {
+  return name.replace(/\s*[（(](虚构|fictional)[）)]$/, "");
+}
+
+/** 头像上的字：中文取姓，英文跳过 Mr. / Ms. / RM 等称谓取姓氏首字母 */
+export function initial(name: string) {
+  const bare = stripFictional(name).replace(/^(Mr\.|Ms\.|Mrs\.|RM)\s+/, "");
+  return bare.slice(0, 1).toUpperCase() || "?";
 }
 
 export function intlLocale(locale: Locale) {

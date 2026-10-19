@@ -31,7 +31,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             and origin
             and origin not in get_settings().cors_origins
         ):
-            return JSONResponse({"detail": "来源不被允许"}, status_code=403)
+            return JSONResponse({"detail": "来源不被允许 / Origin not allowed"}, status_code=403)
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)

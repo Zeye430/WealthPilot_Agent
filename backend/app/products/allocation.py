@@ -10,11 +10,12 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 from app.compliance.suitability import CustomerContext, evaluate
+from app.core.i18n import L
 from app.customers.needs import Needs
 from app.products.catalog import Catalog, MetricType, Product
 from app.products.presenter import format_money, format_rate, lockup_text
 
-CASH_NAMES = {"活期存款", "活期", "现金", "存款", "CASH"}
+CASH_NAMES = {"活期存款", "活期", "现金", "存款", "CASH", "cash", "deposit", "demand deposit"}
 CONCENTRATION_LIMIT = Decimal("0.5")
 TOLERANCE = Decimal("1")  # 合计金额允许 1 元误差
 
@@ -61,17 +62,19 @@ def simulate(
     existing_liquid: Decimal | None = None,
 ) -> AllocationResult:
     if not 1 <= len(items) <= 8:
-        raise AllocationError("请提供 1 到 8 个配置项")
+        raise AllocationError(L("请提供 1 到 8 个配置项", "Provide 1 to 8 items"))
     resolved: list[tuple[Product | None, Decimal]] = []
     for name, amount in items:
         if amount <= 0:
-            raise AllocationError(f"「{name}」的金额必须大于 0")
-        if name.strip() in CASH_NAMES:
+            raise AllocationError(
+                L(f"「{name}」的金额必须大于 0", f'The amount for "{name}" must be above 0')
+            )
+        if name.strip() in CASH_NAMES or name.strip().lower() in CASH_NAMES:
             resolved.append((None, amount))
             continue
         product = catalog.find_by_name(name)
         if product is None:
-            raise AllocationError(f"未找到产品「{name}」")
+            raise AllocationError(L(f"未找到产品「{name}」", f'Product "{name}" not found'))
         resolved.append((product, amount))
 
     total = sum((a for _, a in resolved), Decimal(0))
@@ -85,11 +88,11 @@ def simulate(
             slices.append(
                 Slice(
                     code="CASH",
-                    name="活期存款",
+                    name=L("活期存款", "Demand deposit"),
                     amount=amount,
                     pct=pct,
                     risk_level=None,
-                    lockup="随时支取",
+                    lockup=L("随时支取", "Withdraw anytime"),
                     liquid=True,
                 )
             )
@@ -97,7 +100,7 @@ def simulate(
         slices.append(
             Slice(
                 code=product.code,
-                name=product.name,
+                name=product.display_name,
                 amount=amount,
                 pct=pct,
                 risk_level=product.effective_risk_level,
@@ -114,7 +117,9 @@ def simulate(
         if not result.eligible:
             checks.append(
                 Check(
-                    status=FAIL, label=f"{product.name}不可配置", message="；".join(result.messages)
+                    status=FAIL,
+                    label=L(f"{product.name}不可配置", f"{product.name_en} not allowed"),
+                    message=L("；", " ").join(result.messages),
                 )
             )
 
@@ -122,14 +127,25 @@ def simulate(
         checks.append(
             Check(
                 status=FAIL,
-                label="合计金额",
-                message=f"组合合计 {format_money(total)}，与计划投资金额 "
-                f"{format_money(needs.investment_amount)} 不一致",
+                label=L("合计金额", "Total"),
+                message=L(
+                    f"组合合计 {format_money(total)}，与计划投资金额 "
+                    f"{format_money(needs.investment_amount)} 不一致",
+                    f"The mix totals {format_money(total)}, which doesn't match the planned "
+                    f"{format_money(needs.investment_amount)}",
+                ),
             )
         )
     else:
         checks.append(
-            Check(status=OK, label="合计金额", message=f"合计 {format_money(total)}，比例合计 100%")
+            Check(
+                status=OK,
+                label=L("合计金额", "Total"),
+                message=L(
+                    f"合计 {format_money(total)}，比例合计 100%",
+                    f"Total {format_money(total)}, shares add up to 100%",
+                ),
+            )
         )
 
     liquid_amount = sum((s.amount for s in slices if s.liquid), Decimal(0))
@@ -138,18 +154,26 @@ def simulate(
             checks.append(
                 Check(
                     status=OK,
-                    label="流动性",
-                    message=f"可随时支取 {format_money(liquid_amount)}，满足随时可能动用的 "
-                    f"{format_money(needs.liquidity_reserve)}",
+                    label=L("流动性", "Liquidity"),
+                    message=L(
+                        f"可随时支取 {format_money(liquid_amount)}，满足随时可能动用的 "
+                        f"{format_money(needs.liquidity_reserve)}",
+                        f"{format_money(liquid_amount)} available anytime, covering the "
+                        f"{format_money(needs.liquidity_reserve)} you may need on short notice",
+                    ),
                 )
             )
         else:
             checks.append(
                 Check(
                     status=FAIL,
-                    label="流动性",
-                    message=f"可随时支取仅 {format_money(liquid_amount)}，低于随时可能动用的 "
-                    f"{format_money(needs.liquidity_reserve)}",
+                    label=L("流动性", "Liquidity"),
+                    message=L(
+                        f"可随时支取仅 {format_money(liquid_amount)}，低于随时可能动用的 "
+                        f"{format_money(needs.liquidity_reserve)}",
+                        f"Only {format_money(liquid_amount)} available anytime, less than the "
+                        f"{format_money(needs.liquidity_reserve)} you may need on short notice",
+                    ),
                 )
             )
 
@@ -158,8 +182,11 @@ def simulate(
             checks.append(
                 Check(
                     status=WARN,
-                    label="集中度",
-                    message=f"{s.name}占比 {format_rate(s.pct)}，超过 50%，集中度较高",
+                    label=L("集中度", "Concentration"),
+                    message=L(
+                        f"{s.name}占比 {format_rate(s.pct)}，超过 50%，集中度较高",
+                        f"{s.name} is {format_rate(s.pct)} of the mix, above 50%",
+                    ),
                 )
             )
 
@@ -170,11 +197,18 @@ def simulate(
             checks.append(
                 Check(
                     status=WARN,
-                    label="目标收益",
-                    message=f"所选产品的收益指标上限最高为 {format_rate(max(ceilings))}，"
-                    f"低于您的目标 {format_rate(needs.target_annual_return)}。"
-                    "目标收益只是您的期望，不是承诺；业绩比较基准不是预期收益率，"
-                    "在您的风险等级内，较低风险与较高收益通常难以兼得",
+                    label=L("目标收益", "Return target"),
+                    message=L(
+                        f"所选产品的收益指标上限最高为 {format_rate(max(ceilings))}，"
+                        f"低于您的目标 {format_rate(needs.target_annual_return)}。"
+                        "目标收益只是您的期望，不是承诺；业绩比较基准不是预期收益率，"
+                        "在您的风险等级内，较低风险与较高收益通常难以兼得",
+                        f"The highest yield figure among these products is "
+                        f"{format_rate(max(ceilings))}, below your target of "
+                        f"{format_rate(needs.target_annual_return)}. A target is your hope, "
+                        "not a promise; a performance benchmark is not an expected return, and "
+                        "within your risk level lower risk and higher returns rarely go together",
+                    ),
                 )
             )
 
@@ -185,20 +219,37 @@ def simulate(
         checks.append(
             Check(
                 status=OK,
-                label="固定费用",
-                message=f"按年化固定费率估算，每年约 {format_money(annual_fee)}（已体现在净值中）",
+                label=L("固定费用", "Fixed fees"),
+                message=L(
+                    f"按年化固定费率估算，每年约 {format_money(annual_fee)}（已体现在净值中）",
+                    f"About {format_money(annual_fee)} a year at the fixed annual fee rates "
+                    "(already reflected in NAV)",
+                ),
             )
         )
     elif fees:
-        checks.append(Check(status=WARN, label="固定费用", message="部分产品费用未核实，无法估算"))
+        checks.append(
+            Check(
+                status=WARN,
+                label=L("固定费用", "Fixed fees"),
+                message=L(
+                    "部分产品费用未核实，无法估算",
+                    "Some product fees are unverified, so fees can't be estimated",
+                ),
+            )
+        )
 
     if existing_liquid:
         checks.append(
             Check(
                 status=OK,
-                label="在本行的其他资产",
-                message=f"此外，您在本行还有可随时支取的资产约 {format_money(existing_liquid)}"
-                "（来自银行系统记录，未计入本次配置）",
+                label=L("在本行的其他资产", "Other assets with us"),
+                message=L(
+                    f"此外，您在本行还有可随时支取的资产约 {format_money(existing_liquid)}"
+                    "（来自银行系统记录，未计入本次配置）",
+                    f"You also have about {format_money(existing_liquid)} available anytime "
+                    "with us (from bank records, not part of this mix)",
+                ),
             )
         )
 

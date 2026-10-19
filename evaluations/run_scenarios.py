@@ -4,7 +4,9 @@
     uv run python ../evaluations/run_scenarios.py                 # 全部场景
     uv run python ../evaluations/run_scenarios.py --only M01 H03  # 指定场景
     uv run python ../evaluations/run_scenarios.py --repeat 3      # 每个场景重复 3 次，统计通过率
-报告写入 evaluations/reports/scenarios-<日期>.md 与同名 .json；只跑部分场景时文件名带场景编号，不覆盖全量报告。
+    uv run python ../evaluations/run_scenarios.py --suite en      # 英文界面套件（scenarios_en.yaml）
+报告写入 evaluations/reports/scenarios-<日期>.md 与同名 .json（英文套件为 scenarios-en-<日期>）；
+只跑部分场景时文件名带场景编号，不覆盖全量报告。
 """
 
 import argparse
@@ -24,6 +26,7 @@ from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from app.agent.prompts import SAFE_FALLBACK_REPLY  # noqa: E402
+from app.core.i18n import all_versions, use_locale  # noqa: E402
 from app.compliance.output_guard import _negated, check_output  # noqa: E402
 from app.compliance.policy import Permission  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
@@ -36,6 +39,13 @@ from tests.identity import header_identity  # noqa: E402
 from app.products.catalog import load_catalog  # noqa: E402
 
 CUSTOMER = "eval_customer"
+SUITES = {"zh": "scenarios.yaml", "en": "scenarios_en.yaml"}
+CJK = re.compile(r"[\u4e00-\u9fff]")
+
+
+def cjk_ratio(text: str) -> float:
+    letters = [c for c in text if c.isalpha()]
+    return len(CJK.findall(text)) / len(letters) if letters else 0.0
 CUSTOMERS = {"A": "eval_customer", "B": "eval_customer_b"}  # setup.customer 可选，默认 A
 RATING_ANSWERS = {  # 校准画像的答案（docs/RISK_QUESTIONNAIRE.md §6）
     "C1": "ECBAAAAAAA",
@@ -74,10 +84,11 @@ def shown_text(blocks: list[dict]) -> str:
     return "\n".join(lines)[:1500]
 
 
-def judge(question: str, reply: str, blocks: list[dict], rubric: str) -> tuple[bool, str]:
+def judge(question: str, reply: str, blocks: list[dict], rubric: str, locale: str = "zh") -> tuple[bool, str]:
+    note = "\n（客户使用英文界面，回答与界面内容为英文；按同样的标准评审。）" if locale == "en" else ""
     content = (
         f"客户问题：{question}\n\n助手回答：{reply}\n\n界面同时展示的内容：\n{shown_text(blocks)}"
-        f"\n\n评审标准：{rubric}"
+        f"\n\n评审标准：{rubric}{note}"
     )
     output = get_chat_model(thinking=False, max_tokens=300).invoke(
         [SystemMessage(JUDGE_PROMPT), HumanMessage(content)]
@@ -97,7 +108,13 @@ def judge(question: str, reply: str, blocks: list[dict], rubric: str) -> tuple[b
 client_ref: dict = {}
 
 
-def run_checks(turn: dict, question: str, body: dict, permission: Permission) -> list[dict]:
+def run_checks(turn: dict, question: str, body: dict, permission: Permission, locale: str = "zh") -> list[dict]:
+    # 输出审查与否定判断按客户的界面语言运行（英文界面中英文规则同时生效）
+    with use_locale(locale):
+        return _run_checks(turn, question, body, permission, locale)
+
+
+def _run_checks(turn: dict, question: str, body: dict, permission: Permission, locale: str) -> list[dict]:
     reply = body["reply"]["content"]
     blocks = body["reply"]["ui_blocks"]
     types = [b["type"] for b in blocks]
@@ -109,9 +126,16 @@ def run_checks(turn: dict, question: str, body: dict, permission: Permission) ->
 
     retrieved = [i["id"] for b in blocks if b["type"] == "sources" for i in b["items"]]
     rating = (body["state"].get("assessment") or {}).get("rating")
-    violations = check_output(reply, permission, reply, retrieved, rating)
+    # 复查时与生产一致：客户已有的开售提醒（系统记录）算作「已预约」的依据（生产中写在客户资料里）
+    reminders = client_ref["client"].get("/api/v1/reminders").json() if rating else []
+    evidence = "\n已预约开售提醒" if reminders else ""
+    violations = check_output(reply, permission, reply + evidence, retrieved, rating)
     add("通过输出审查", not violations, "、".join(violations))
-    add("未退化为兜底回答", reply != SAFE_FALLBACK_REPLY)
+    # 兜底回答后面可能还有代码追加的说明（如「理财不保本」），按开头判断（英文评估中发现的漏检）
+    add("未退化为兜底回答", not any(reply.startswith(v) for v in all_versions(SAFE_FALLBACK_REPLY)))
+    if locale == "en":
+        ratio = cjk_ratio(reply)
+        add("回答使用英文", ratio < 0.05, f"中文字符占比 {ratio:.0%}")
     for t in checks.get("blocks_include", []):
         add(f"包含界面块 {t}", t in types, f"实际：{types}")
     for t in checks.get("blocks_exclude", []):
@@ -150,7 +174,7 @@ def run_checks(turn: dict, question: str, body: dict, permission: Permission) ->
         missing = [f for f in fields if f not in recorded]
         add("需求已记录", not missing, f"缺少：{missing}" if missing else "")
     if rubric := checks.get("judge"):
-        ok, reason = judge(question, reply, blocks, rubric)
+        ok, reason = judge(question, reply, blocks, rubric, locale)
         add("LLM 评审", ok, reason)
     return results
 
@@ -167,9 +191,10 @@ def rewrites(conversation_id: str) -> list[str]:
     return [f"{d}:{'、'.join(codes)}" for d, codes in rows]
 
 
-def run_scenario(client: TestClient, scenario: dict) -> dict:
+def run_scenario(client: TestClient, scenario: dict, locale: str = "zh") -> dict:
     setup = scenario.get("setup", {})
     client.headers["X-Demo-User"] = CUSTOMERS[setup.get("customer", "A")]
+    client.cookies.set("wp_locale", locale)
     client.post("/api/v1/demo/reset")
     if rating := setup.get("rating"):
         answers = {f"q{i + 1}": a for i, a in enumerate(RATING_ANSWERS[rating])}
@@ -195,7 +220,7 @@ def run_scenario(client: TestClient, scenario: dict) -> dict:
                 "reply": body["reply"]["content"],
                 "blocks": [b["type"] for b in body["reply"]["ui_blocks"]],
                 "latency": round(latency, 1),
-                "checks": run_checks(turn, turn["say"], body, permission),
+                "checks": run_checks(turn, turn["say"], body, permission, locale),
             }
         )
     passed = all(c["pass"] for t in turns for c in t["checks"]) and not any("error" in t for t in turns)
@@ -208,11 +233,12 @@ def run_scenario(client: TestClient, scenario: dict) -> dict:
     }
 
 
-def write_report(results: list[dict], only: list[str] | None = None) -> Path:
+def write_report(results: list[dict], only: list[str] | None = None, suite: str = "zh") -> Path:
     out_dir = ROOT / "evaluations/reports"
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = f"-{'-'.join(only)}" if only else ""
-    stem = out_dir / f"scenarios-{date.today()}{suffix}"
+    prefix = "scenarios-en" if suite == "en" else "scenarios"
+    stem = out_dir / f"{prefix}-{date.today()}{suffix}"
     stem.with_suffix(".json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
 
     checks = [c for r in results for t in r["turns"] for c in t["checks"]]
@@ -222,7 +248,7 @@ def write_report(results: list[dict], only: list[str] | None = None) -> Path:
     for r in results:
         by_id.setdefault(r["id"], []).append(r["passed"])
     lines = [
-        f"# 场景评估报告（{date.today()}）",
+        f"# 场景评估报告{'（英文界面）' if suite == 'en' else ''}（{date.today()}）",
         "",
         f"- 模型：{get_settings().llm_model}（思考模式：{'开启' if get_settings().llm_agent_thinking else '关闭'}）",
         f"- 运行通过：**{passed}/{len(results)}**（{len(by_id)} 个场景，每个 {len(results) // len(by_id)} 次）；"
@@ -256,8 +282,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", nargs="*")
     parser.add_argument("--repeat", type=int, default=1, help="LLM 输出有随机性，重复运行统计通过率")
+    parser.add_argument("--suite", choices=sorted(SUITES), default="zh", help="zh 中文界面 / en 英文界面")
     args = parser.parse_args()
-    scenarios = yaml.safe_load((ROOT / "evaluations/scenarios.yaml").read_text(encoding="utf-8"))
+    scenarios = yaml.safe_load((ROOT / "evaluations" / SUITES[args.suite]).read_text(encoding="utf-8"))
     if args.only:
         scenarios = [s for s in scenarios if s["id"] in args.only]
 
@@ -269,12 +296,12 @@ def main():
 
     results = []
     for s in scenarios:
-        runs = [run_scenario(client, s) for _ in range(args.repeat)]
+        runs = [run_scenario(client, s, args.suite) for _ in range(args.repeat)]
         results += runs
         ok = sum(r["passed"] for r in runs)
         rewrites = [w for r in runs for w in r["rewrites"]]
         print(f"{'✅' if ok == len(runs) else '❌'} {s['id']} {s['name']}：{ok}/{len(runs)}（改写 {rewrites or '无'}）")
-    path = write_report(results, args.only)
+    path = write_report(results, args.only, args.suite)
     print(f"\n运行通过 {sum(r['passed'] for r in results)}/{len(results)}，报告：{path.relative_to(ROOT)}")
 
 

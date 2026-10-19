@@ -10,6 +10,7 @@ from langgraph.prebuilt import InjectedState
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import sessionmaker
 
+from app.core.i18n import L, localized, register
 from app.customers.base import get_customer_info_system
 from app.customers.needs import CONVERSATION, FIELD_LABELS, NeedsError, NeedsUpdate, get_needs
 from app.customers.needs import update_needs as save_needs
@@ -18,7 +19,11 @@ from app.products.allocation import AllocationError, simulate
 from app.products.catalog import load_catalog
 from app.products.presenter import format_money, format_rate
 
-ALLOCATION_NOTE = "配置模拟仅用于理解组合的比例、流动性与费用，不测算收益，不构成投资建议。"
+ALLOCATION_NOTE = register(
+    "配置模拟仅用于理解组合的比例、流动性与费用，不测算收益，不构成投资建议。",
+    "This simulation only shows the mix's shares, liquidity and fees. It does not estimate "
+    "returns and is not investment advice.",
+)
 
 
 def _session():
@@ -28,7 +33,7 @@ def _session():
 def _customer_id(state: dict) -> str:
     customer_id = state.get("customer_id")
     if not customer_id:
-        raise ToolException("无法识别客户身份。")
+        raise ToolException(L("无法识别客户身份。", "Customer not identified."))
     return customer_id
 
 
@@ -70,7 +75,7 @@ def update_needs(
         try:
             needs = save_needs(db, _customer_id(state), update, CONVERSATION, datetime.now(UTC))
         except NeedsError as exc:
-            raise ToolException(f"需求信息有误：{exc}") from exc
+            raise ToolException(L(f"需求信息有误：{exc}", f"Invalid goal details: {exc}")) from exc
         db.commit()
     updated = [r for r in needs.display() if r["field"] in update.provided()]
     content = json.dumps(
@@ -113,12 +118,21 @@ def simulate_allocation(
     """
     rating = state.get("risk_rating")
     if not rating:
-        raise ToolException("客户尚未完成有效的风险测评，无法模拟配置。")
+        raise ToolException(
+            L(
+                "客户尚未完成有效的风险测评，无法模拟配置。",
+                "The customer has no valid risk profile, so a mix can't be simulated.",
+            )
+        )
     if _simulations_this_turn(state) > MAX_SIMULATIONS_PER_TURN:
         # 场景评估 V02：模型反复调整组合，耗尽本轮工具调用次数
         raise ToolException(
-            f"本轮已模拟 {MAX_SIMULATIONS_PER_TURN} 次配置，"
-            "请根据最后一次的检查结果回答客户，不要再模拟。"
+            L(
+                f"本轮已模拟 {MAX_SIMULATIONS_PER_TURN} 次配置，"
+                "请根据最后一次的检查结果回答客户，不要再模拟。",
+                f"Already simulated {MAX_SIMULATIONS_PER_TURN} times this turn. Answer from the "
+                "last check results; don't simulate again.",
+            )
         )
     customer_id = _customer_id(state)
     with _session() as db:
@@ -133,7 +147,7 @@ def simulate_allocation(
             existing_liquid=base.assets_at_bank.liquid_total() if base else None,
         )
     except AllocationError as exc:
-        raise ToolException(f"配置参数有误：{exc}") from exc
+        raise ToolException(L(f"配置参数有误：{exc}", f"Invalid mix: {exc}")) from exc
 
     slices = [
         {
@@ -152,19 +166,19 @@ def simulate_allocation(
     content = json.dumps(
         {
             "passed": result.passed,
-            "slices": [f"{s['name']} {s['amount_text']}（{s['pct_text']}）" for s in slices],
-            "checks": [f"[{c['status']}] {c['label']}：{c['message']}" for c in checks],
+            "slices": [f"{s['name']} {s['amount_text']} ({s['pct_text']})" for s in slices],
+            "checks": [f"[{c['status']}] {c['label']}: {c['message']}" for c in checks],
             "rules": "如实说明检查结果；未通过的项必须说明原因；不要测算或承诺组合收益。",
         },
         ensure_ascii=False,
     )
     artifact = {
         "type": "allocation",
-        "title": "配置情景模拟",
+        "title": L("配置情景模拟", "Allocation simulation"),
         "passed": result.passed,
         "slices": slices,
         "checks": checks,
-        "disclaimer": ALLOCATION_NOTE,
+        "disclaimer": localized(ALLOCATION_NOTE),
     }
     return content, [artifact]
 

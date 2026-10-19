@@ -31,7 +31,8 @@ from app.agent.prompts import (
 )
 from app.compliance import output_guard
 from app.compliance.policy import RULE_VERSION, Permission, tool_allowed
-from app.tools.assessment_tools import ASSESSMENT_PROMPT_BLOCK, ASSESSMENT_TOOLS
+from app.core.i18n import L, localized
+from app.tools.assessment_tools import ASSESSMENT_TOOLS, assessment_prompt_block
 from app.tools.benefit_tools import BENEFIT_TOOLS
 from app.tools.calculation_tools import CALCULATION_TOOLS, HYPOTHETICAL_NOTE
 from app.tools.document_tools import DOCUMENT_TOOLS
@@ -48,7 +49,6 @@ ALL_TOOLS = [
     *PROFILE_TOOLS,
     *HANDOFF_TOOLS,
 ]
-REMINDER_BLOCK = {**ASSESSMENT_PROMPT_BLOCK, "variant": "reminder"}
 CALCULATION_BLOCK_TYPES = {"calculation_result", "line_chart"}
 EVIDENCE_BLOCK_TYPES = {
     "calculation_result",
@@ -59,7 +59,16 @@ EVIDENCE_BLOCK_TYPES = {
 }
 # 流程性结果（转人工、测评入口、记录需求）不含事实陈述，不需要标注「一般性说明」
 PROCEDURAL_BLOCK_TYPES = {"rm_contact", "assessment_prompt", "needs_update"}
-GENERAL_NOTE = {"type": "source_note", "variant": "general", "text": "一般性说明，未引用资料"}
+
+
+def general_note() -> dict:
+    return {
+        "type": "source_note",
+        "variant": "general",
+        "text": L("一般性说明，未引用资料", "General information, no source cited"),
+    }
+
+
 CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 
 
@@ -117,12 +126,12 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         return "agent"
 
     def out_of_scope(state: AgentState):
-        return {"reply": OUT_OF_SCOPE_REPLY}
+        return {"reply": localized(OUT_OF_SCOPE_REPLY)}
 
     def assessment_required(state: AgentState):
         return {
-            "reply": ASSESSMENT_REQUIRED_REPLY,
-            "ui_blocks": [ASSESSMENT_PROMPT_BLOCK],
+            "reply": localized(ASSESSMENT_REQUIRED_REPLY),
+            "ui_blocks": [assessment_prompt_block()],
             "policy_decisions": [
                 _decision("GATE", "BLOCK_PRODUCT_REQUEST", state.get("gate_reasons"))
             ],
@@ -192,7 +201,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         )
         if getattr(summary, "tool_calls", None) or not text or violations:
             return {
-                "reply": TOOL_LIMIT_REPLY,
+                "reply": localized(TOOL_LIMIT_REPLY),
                 "policy_decisions": [_decision("TOOL", "TOOL_LIMIT", violations)],
             }
         return {"reply": text, "policy_decisions": [_decision("TOOL", "TOOL_LIMIT_SUMMARY")]}
@@ -229,7 +238,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
                     "policy_decisions": [_decision("OUTPUT", "REDACT", [*violations, *snippets])],
                 }
         return {
-            "reply": SAFE_FALLBACK_REPLY,
+            "reply": localized(SAFE_FALLBACK_REPLY),
             "policy_decisions": [_decision("OUTPUT", "FALLBACK", [*violations, *snippets])],
         }
 
@@ -244,15 +253,15 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         reply = state.get("reply") or _text(state["messages"][-1])
         # 免责声明和测评提醒由代码追加，而不是依赖 LLM 自己记得写
         has_calculation = any(b["type"] in CALCULATION_BLOCK_TYPES for b in blocks)
-        if has_calculation and HYPOTHETICAL_NOTE not in reply:
-            reply = f"{reply}\n\n> {HYPOTHETICAL_NOTE}"
+        if has_calculation and localized(HYPOTHETICAL_NOTE) not in reply:
+            reply = f"{reply}\n\n> {localized(HYPOTHETICAL_NOTE)}"
         question = next(
             (_text(m) for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), ""
         )
         if state.get("intent") != router.OUT_OF_SCOPE and output_guard.needs_no_guarantee_note(
             question, reply
         ):
-            reply = f"{reply}\n\n> {output_guard.NO_GUARANTEE_NOTE}"
+            reply = f"{reply}\n\n> {localized(output_guard.NO_GUARANTEE_NOTE)}"
         blocks = latest_allocation_only(blocks)
         # 模型可能重复调用同一工具，界面上去掉内容完全相同的块
         blocks = list(
@@ -265,7 +274,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
             and not any(b["type"] == "assessment_prompt" for b in blocks)
         )
         if needs_reminder:
-            blocks.append(REMINDER_BLOCK)
+            blocks.append(assessment_prompt_block("reminder"))
         return {"reply": reply, "ui_blocks": blocks, "policy_decisions": [evidence]}
 
     graph = StateGraph(AgentState)
@@ -345,7 +354,7 @@ def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple
         and not procedural
         and intent in (router.FINANCE_KNOWLEDGE, router.PRODUCT_OR_ADVICE)
     ):
-        labelled.append(GENERAL_NOTE)
+        labelled.append(general_note())
     if not codes and has_evidence:
         decision = "TOOL_DATA"
     return labelled, _decision("EVIDENCE", decision, codes)

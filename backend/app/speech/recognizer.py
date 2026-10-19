@@ -17,6 +17,7 @@ from typing import Protocol
 import numpy as np
 
 from app.core.config import get_settings
+from app.core.i18n import L, current
 from app.speech.lexicon import correct
 
 SAMPLE_RATE = 16000
@@ -42,16 +43,31 @@ def decode_wav(data: bytes, max_seconds: int) -> np.ndarray:
     try:
         with wave.open(io.BytesIO(data)) as w:
             if w.getnchannels() != 1 or w.getsampwidth() != 2 or w.getframerate() != SAMPLE_RATE:
-                raise AudioError("录音格式应为 16 kHz、16 位、单声道 WAV")
+                raise AudioError(
+                    L(
+                        "录音格式应为 16 kHz、16 位、单声道 WAV",
+                        "Audio must be 16 kHz, 16-bit, mono WAV",
+                    )
+                )
             frames = w.readframes(w.getnframes())
     except (wave.Error, EOFError) as exc:
-        raise AudioError("无法解析录音文件") from exc
+        raise AudioError(L("无法解析录音文件", "Couldn't read the recording")) from exc
     samples = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768
     seconds = len(samples) / SAMPLE_RATE
     if seconds < 0.3:
-        raise AudioError("录音太短，请按住按钮说完再松开")
+        raise AudioError(
+            L(
+                "录音太短，请按住按钮说完再松开",
+                "Too short. Hold the button until you finish speaking.",
+            )
+        )
     if seconds > max_seconds:
-        raise AudioError(f"录音超过 {max_seconds} 秒，请分段说")
+        raise AudioError(
+            L(
+                f"录音超过 {max_seconds} 秒，请分段说",
+                f"Recording is over {max_seconds} seconds. Please say it in shorter parts.",
+            )
+        )
     return samples
 
 
@@ -60,14 +76,15 @@ def clean(text: str) -> str:
 
 
 class SenseVoiceRecognizer:
-    def __init__(self, model_dir: Path, threads: int):
+    def __init__(self, model_dir: Path, threads: int, language: str = "zh"):
         import sherpa_onnx  # 延迟导入：未使用语音时不加载
 
+        self._language = language
         self._recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
             model=str(model_dir / "model.int8.onnx"),
             tokens=str(model_dir / "tokens.txt"),
             num_threads=threads,
-            language="zh",
+            language=language,
             use_itn=True,
         )
 
@@ -75,10 +92,17 @@ class SenseVoiceRecognizer:
         stream = self._recognizer.create_stream()
         stream.accept_waveform(SAMPLE_RATE, samples)
         self._recognizer.decode_stream(stream)
-        return correct(clean(stream.result.text))
+        text = clean(stream.result.text)
+        # 领域词表是中文品牌与产品名的同音纠错，只用于中文识别
+        return correct(text) if self._language == "zh" else text
+
+
+def get_recognizer() -> Recognizer:
+    """按当前界面语言取识别器。英文识别器在第一次用英文语音时才加载（同一模型再占一份内存）。"""
+    return _recognizer_for(current())
 
 
 @lru_cache
-def get_recognizer() -> Recognizer:
+def _recognizer_for(language: str) -> Recognizer:
     settings = get_settings()
-    return SenseVoiceRecognizer(settings.asr_model_dir, settings.asr_threads)
+    return SenseVoiceRecognizer(settings.asr_model_dir, settings.asr_threads, language)

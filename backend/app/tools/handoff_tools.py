@@ -12,12 +12,13 @@ from langgraph.prebuilt import InjectedState
 from pydantic import Field
 from sqlalchemy.orm import sessionmaker
 
+from app.core.i18n import L
 from app.db.session import get_engine
 from app.handoff.service import (
-    STATUS_LABELS,
     HandoffError,
     create_request,
     rm_contact_card,
+    status_label,
 )
 
 Reason = Literal[
@@ -56,7 +57,7 @@ def request_handoff(
     """
     customer_id, conversation_id = state.get("customer_id"), state.get("conversation_id")
     if not customer_id or not conversation_id:
-        raise ToolException("无法识别客户或会话。")
+        raise ToolException(L("无法识别客户或会话。", "Customer or conversation not identified."))
     with sessionmaker(bind=get_engine(), expire_on_commit=False)() as db:
         try:
             handoff = create_request(
@@ -66,13 +67,14 @@ def request_handoff(
             raise ToolException(str(exc)) from exc
         db.commit()
 
+    card = rm_contact_card(handoff)
     content = {
-        "status": STATUS_LABELS[handoff.status],
-        "rm": handoff.assigned_rm_name,
+        "status": status_label(handoff.status),
+        "rm": card["rm_name"],
         "next_step": "界面已展示理财经理名片，客户可通过企业微信或电话直接联系；"
         "咨询要点已同步给理财经理。不要说理财经理已接入、已联系客户或正在服务。",
     }
-    return json.dumps(content, ensure_ascii=False), [rm_contact_card(handoff)]
+    return json.dumps(content, ensure_ascii=False), [card]
 
 
 request_handoff.handle_tool_error = True

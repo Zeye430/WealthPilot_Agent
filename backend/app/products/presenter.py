@@ -2,12 +2,15 @@
 
 from decimal import Decimal
 
+from app.core.i18n import L, is_en
 from app.products.catalog import (
-    METRIC_LABELS,
+    DISTRIBUTOR,
+    DISTRIBUTOR_EN,
     MetricType,
     OperationMode,
     Product,
     ProductStatus,
+    metric_label,
 )
 
 CURRENT_METRIC_ORDER = [
@@ -19,7 +22,7 @@ CURRENT_METRIC_ORDER = [
 
 def format_rate(rate: Decimal | None) -> str:
     if rate is None:
-        return "未核实"
+        return L("未核实", "Unverified")
     if rate == 0:
         return "0%"
     # 金融文件惯例保留两位小数：0.40%、4.00%
@@ -27,6 +30,12 @@ def format_rate(rate: Decimal | None) -> str:
 
 
 def format_money(amount: Decimal) -> str:
+    if is_en():
+        # 英文习惯按 million / billion 读大额（5 亿元 → ¥500 million）
+        for unit, name in ((Decimal(10) ** 9, "billion"), (Decimal(10) ** 6, "million")):
+            if amount >= unit and amount % (unit / 10) == 0:
+                return f"¥{(amount / unit).normalize():f} {name}"
+        return f"¥{amount.normalize():,f}"
     if amount >= 100000000 and amount % 10000000 == 0:
         return f"{(amount / 100000000).normalize():f} 亿元"
     if amount >= 10000 and amount % 10000 == 0:
@@ -39,6 +48,8 @@ def sale_window(product: Product) -> str | None:
     if product.sale_start is None or product.sale_end is None:
         return None
     start, end = product.sale_start, product.sale_end
+    if is_en():
+        return f"{start:%b} {start.day} – {end:%b} {end.day}"
     return f"{start.month} 月 {start.day} 日–{end.month} 月 {end.day} 日"
 
 
@@ -46,19 +57,34 @@ def lockup_text(product: Product) -> str:
     days = product.lockup_days
     match product.operation_mode:
         case OperationMode.OPEN:
-            return "每日开放"
+            return L("每日开放", "Open daily")
         case OperationMode.MIN_HOLDING:
-            return f"最短持有 {days} 天"
+            return L(f"最短持有 {days} 天", f"{days}-day minimum holding")
         case OperationMode.CLOSED:
-            return f"封闭 {days} 天"
+            return L(f"封闭 {days} 天", f"Closed for {days} days")
         case OperationMode.PERIODIC_OPEN:
-            return f"每 {days} 天开放一次"
+            return L(f"每 {days} 天开放一次", f"Opens every {days} days")
+
+
+def settlement_text(product: Product) -> str:
+    """赎回到账时间，如「到期后 T+2 兑付」。"""
+    text = product.redemption_settlement
+    if not is_en():
+        return text
+    t = text.split()[-2] if text.endswith("兑付") else text.split()[-1]
+    if text.startswith("到期后"):
+        return f"Paid {t} after maturity"
+    if text.startswith("开放日后"):
+        return f"{t} after the open day"
+    return text
 
 
 def redemption_fee_text(product: Product) -> str:
     tiers = [t for t in product.fees.redemption if t.rate > 0]
     if not tiers:
-        return "无"
+        return L("无", "None")
+    if is_en():
+        return "; ".join(f"{format_rate(t.rate)} if held under {t.max_days} days" for t in tiers)
     return "；".join(f"持有不足 {t.max_days} 天 {format_rate(t.rate)}" for t in tiers)
 
 
@@ -69,22 +95,29 @@ def metric_text(product: Product, metric_type: MetricType) -> str | None:
         return None
     match metric_type:
         case MetricType.SEVEN_DAY_ANNUALIZED:
-            return f"{format_rate(m.value)}（截至 {m.as_of:%m-%d}）"
+            return L(
+                f"{format_rate(m.value)}（截至 {m.as_of:%m-%d}）",
+                f"{format_rate(m.value)} (as of {m.as_of:%b} {m.as_of.day})",
+            )
         case MetricType.TEN_THOUSAND_UNIT_INCOME:
-            return f"{m.value_yuan} 元（截至 {m.as_of:%m-%d}）"
+            return L(
+                f"{m.value_yuan} 元（截至 {m.as_of:%m-%d}）",
+                f"¥{m.value_yuan} (as of {m.as_of:%b} {m.as_of.day})",
+            )
         case MetricType.PERFORMANCE_BENCHMARK:
             if m.formula:
-                return m.formula
+                return m.display_formula
             return f"{format_rate(m.low)}–{format_rate(m.high)}"
         case MetricType.ANNUAL_PERFORMANCE:
-            return "；".join(f"{p.label} {format_rate(p.value)}" for p in m.periods)
+            sep = L("；", "; ")
+            return sep.join(f"{p.display_label} {format_rate(p.value)}" for p in m.periods)
 
 
 def headline_metric(product: Product) -> dict:
     """卡片上展示的主要收益指标：始终带口径标签。"""
     for t in CURRENT_METRIC_ORDER:
         if (text := metric_text(product, t)) is not None:
-            return {"type": t.value, "label": METRIC_LABELS[t], "text": text}
+            return {"type": t.value, "label": metric_label(t), "text": text}
     raise AssertionError(f"{product.code} 没有可展示的收益指标")
 
 
@@ -92,14 +125,16 @@ def card(product: Product) -> dict:
     risk = product.effective_risk_level
     risk_note = None
     if product.distributor_risk_level and risk != product.issuer_risk_level:
-        risk_note = (
-            f"发行机构评级 {product.issuer_risk_level}，知岸银行销售评级 "
-            f"{product.distributor_risk_level}，按较高者认定为 {risk}"
+        risk_note = L(
+            f"发行机构评级 {product.issuer_risk_level}，{DISTRIBUTOR}销售评级 "
+            f"{product.distributor_risk_level}，按较高者认定为 {risk}",
+            f"Issuer rating {product.issuer_risk_level}, {DISTRIBUTOR_EN} rating "
+            f"{product.distributor_risk_level}; the higher one applies: {risk}",
         )
     return {
         "code": product.code,
-        "name": product.name,
-        "issuer": product.issuer,
+        "name": product.display_name,
+        "issuer": product.display_issuer,
         "type_label": product.type_label,
         "risk_level": risk,
         "risk_note": risk_note,
@@ -125,30 +160,43 @@ def detail(product: Product) -> dict:
     """产品详情：卡片字段 + 投资范围、费用明细、各口径收益指标（含业绩比较基准测算依据）。"""
     fees = product.fees
     fee_rows = [
-        {"label": "固定管理费（年化）", "value": format_rate(fees.management)},
-        {"label": "托管费（年化）", "value": format_rate(fees.custody)},
-        {"label": "销售服务费（年化）", "value": format_rate(fees.sales_service)},
-        {"label": "申购费", "value": format_rate(fees.subscription)},
-        {"label": "赎回费", "value": redemption_fee_text(product)},
+        {
+            "label": L("固定管理费（年化）", "Management fee (annual)"),
+            "value": format_rate(fees.management),
+        },
+        {"label": L("托管费（年化）", "Custody fee (annual)"), "value": format_rate(fees.custody)},
+        {
+            "label": L("销售服务费（年化）", "Sales service fee (annual)"),
+            "value": format_rate(fees.sales_service),
+        },
+        {"label": L("申购费", "Subscription fee"), "value": format_rate(fees.subscription)},
+        {"label": L("赎回费", "Redemption fee"), "value": redemption_fee_text(product)},
     ]
     if fees.performance_fee:
+        pf = fees.performance_fee
         fee_rows.append(
             {
-                "label": "业绩报酬",
-                "value": f"{fees.performance_fee.condition}的"
-                f" {format_rate(fees.performance_fee.rate)}",
+                "label": L("业绩报酬", "Performance fee"),
+                "value": L(
+                    f"{pf.condition}的 {format_rate(pf.rate)}",
+                    f"{format_rate(pf.rate)} of {pf.display_condition}",
+                ),
             }
         )
     return {
         **card(product),
-        "investment_scope": product.investment_scope,
-        "strategy": product.strategy,
-        "redemption_settlement": product.redemption_settlement,
+        "investment_scope": product.display_scope,
+        "strategy": product.display_strategy,
+        "redemption_settlement": settlement_text(product),
         "inception_date": str(product.inception_date),
         "maturity_date": str(product.maturity_date) if product.maturity_date else None,
         "fees": fee_rows,
         "metrics": [
-            {"label": METRIC_LABELS[m.type], "text": metric_text(product, m.type), "basis": m.basis}
+            {
+                "label": metric_label(m.type),
+                "text": metric_text(product, m.type),
+                "basis": m.display_basis,
+            }
             for m in product.metrics
         ],
     }

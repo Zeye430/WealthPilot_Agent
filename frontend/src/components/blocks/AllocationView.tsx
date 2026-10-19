@@ -2,7 +2,7 @@
 
 import { useProductActions } from "@/components/products/ProductActions";
 import { Chip } from "@/components/ui";
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, useCopy, useSeparators } from "@/lib/i18n";
 import type { AllocationBlock, NeedsUpdateBlock } from "@/lib/types";
 
 const COLORS = [1, 2, 3, 4, 5].map((i) => `var(--series-${i})`);
@@ -29,10 +29,11 @@ const COPY = defineCopy({
 /** 对话中记录需求后的一个标签，让客户知道系统记住了什么。 */
 export function NeedsUpdateNote({ block }: { block: NeedsUpdateBlock }) {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   return (
     <span className="inline-flex w-fit max-w-full items-center rounded-full bg-fill px-3 py-1.5 text-xs leading-5 font-semibold text-ink-2">
       {c.saved}
-      {block.items.map((i) => `${i.label} ${i.value}`).join("；")}
+      {block.items.map((i) => `${i.label} ${i.value}`).join(sep.semi)}
     </span>
   );
 }
@@ -40,6 +41,7 @@ export function NeedsUpdateNote({ block }: { block: NeedsUpdateBlock }) {
 /** 配置情景：比例条 + 明细 + 约束检查。不展示任何收益测算。 */
 export function AllocationView({ block }: { block: AllocationBlock }) {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   const { open } = useProductActions();
   const color = (i: number) => COLORS[Math.min(i, COLORS.length - 1)];
   const tone = { OK: "ok", WARN: "notice", FAIL: "danger" } as const;
@@ -54,7 +56,7 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
       <div
         className="flex h-3 gap-0.5 overflow-hidden rounded-full"
         role="img"
-        aria-label={c.shares(block.slices.map((s) => `${s.name} ${s.pct_text}`).join("，"))}
+        aria-label={c.shares(block.slices.map((s) => `${s.name} ${s.pct_text}`).join(sep.clause))}
       >
         {block.slices.map((s, i) => (
           <span key={s.code} style={{ flex: s.amount, background: color(i) }} />
@@ -76,7 +78,7 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
                   <span className="font-bold">{s.name}</span>
                 )}
                 <span className="ml-1.5 text-xs text-ink-3">
-                  {s.risk_level ? `${s.risk_level}，` : ""}
+                  {s.risk_level ? `${s.risk_level}${sep.clause}` : ""}
                   {s.lockup}
                 </span>
               </td>
@@ -94,7 +96,10 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
               {c.status[check.status]}
             </Chip>
             <span>
-              <span className="font-bold">{check.label}：</span>
+              <span className="font-bold">
+                {check.label}
+                {sep.colon}
+              </span>
               <span className="text-ink-2">{check.message}</span>
             </span>
           </li>
@@ -102,6 +107,7 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
       </ul>
       <p className="text-xs leading-5 text-ink-3">
         {c.clickHint}
+        {sep.sentence}
         {block.disclaimer}
       </p>
     </figure>

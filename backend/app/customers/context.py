@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
 from app.benefits.service import tier_status
+from app.core.i18n import L, is_en
 from app.customers.base import BaseProfile, get_customer_info_system
 from app.customers.needs import Needs, get_needs
 from app.products.presenter import format_money
@@ -21,7 +22,7 @@ def assessed_loss_tolerance(db: Session, customer_id: str) -> str | None:
         q for q in load_questionnaire(record.questionnaire_version).questions if q.id == "q10"
     )
     option = question.option(record.answers.get("q10", ""))
-    return option.text if option else None
+    return L(option.text, option.text_en) if option else None
 
 
 def customer_profile(db: Session, customer_id: str) -> dict:
@@ -32,7 +33,7 @@ def customer_profile(db: Session, customer_id: str) -> dict:
     for row in needs:
         # 本次需求未单独提供时，展示测评中已回答的结果（标注来源，不写入本次需求）
         if row["field"] == "max_acceptable_loss" and row["value"] is None and loss:
-            row["value"], row["source"] = loss, "来自风险测评"
+            row["value"], row["source"] = loss, L("来自风险测评", "From risk profile")
     return {
         "base": base.summary() if base else None,
         "needs": needs,
@@ -49,9 +50,9 @@ def overview(base: BaseProfile) -> dict:
         "total": float(assets.total),
         "liquid": float(assets.liquid_total()),
         "wealth": float(sum((h.amount for h in assets.wealth_products), start=0)),
-        "tier": {"name": status.tier.name, "card_name": status.tier.card_name},
+        "tier": {"name": status.tier.display_name, "card_name": status.tier.display_card},
         "next_tier": {
-            "name": nxt.name,
+            "name": nxt.display_name,
             "threshold": float(nxt.min_aum),
             "gap": float(status.gap),
             "progress": float(min(status.aum / nxt.min_aum, 1)),
@@ -83,7 +84,10 @@ def tier_lines(base: BaseProfile, needs: Needs) -> list[str]:
 
 
 def prompt_section(
-    base: BaseProfile | None, needs: Needs, loss_tolerance: str | None = None
+    base: BaseProfile | None,
+    needs: Needs,
+    loss_tolerance: str | None = None,
+    reminders: list[str] | None = None,
 ) -> str:
     lines = ["", "## 客户资料（来自知岸银行客户信息系统，只读）"]
     if base:
@@ -108,6 +112,13 @@ def prompt_section(
         if row["field"] == "max_acceptable_loss" and value is None and loss_tolerance:
             value = f"{loss_tolerance}（风险测评中已回答，无需再问）"
         lines.append(f"- {row['label']}：{value or '未提供'}")
+    if reminders:
+        # 「已预约开售提醒」同时是输出审查的依据：回答说「已预约」必须有系统记录（场景评估 N02）
+        lines += [
+            "",
+            "## 已预约开售提醒（系统记录）",
+            *(f"- 已预约开售提醒：{r}" for r in reminders),
+        ]
     lines += [
         "",
         "## 客户资料使用规则",
@@ -121,6 +132,9 @@ def prompt_section(
 
 
 SELF_REPORTED_AGE = re.compile(r"我(今年|现在|已经)?\s*(\d{2})\s*(周)?岁")
+SELF_REPORTED_AGE_EN = re.compile(
+    r"\b(?:I am|I'm|Im)\s+(?:now\s+)?(\d{2})(?:\s*(?:years?\s*old|yrs?|yo))?\b", re.I
+)
 
 
 def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str | None:
@@ -129,13 +143,19 @@ def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str
     年龄影响适当性判断，以银行登记（KYC）为准；对话不能改写基础画像。
     """
     match = SELF_REPORTED_AGE.search(message)
-    if base is None or match is None or int(match.group(2)) == base.age:
+    age = int(match.group(2)) if match else None
+    if match is None and (en := SELF_REPORTED_AGE_EN.search(message)):
+        age = int(en.group(1))
+    if base is None or age is None or age == base.age:
         return None
     if f"{base.age}" in reply:  # 回答已经提到登记年龄
         return None
-    return (
+    return L(
         f"根据银行登记信息，您的年龄为 {base.age} 岁，产品匹配以登记信息和风险测评结果为准；"
-        "如信息有变化，可携带有效证件到网点更新。"
+        "如信息有变化，可携带有效证件到网点更新。",
+        f"According to bank records, your age is {base.age}. Product matching is based on bank "
+        "records and your risk profile; if your details have changed, you can update them at a "
+        "branch with valid ID.",
     )
 
 
@@ -152,11 +172,20 @@ def tier_upgrade_note(
     if not status.reaches_next_with_plan:
         return None
     target = status.projected_tier
-    if target.name in reply or target.name in history:
+    if any(n in reply or n in history for n in (target.name, target.name_en)):
         return None
+    amount = format_money(needs.investment_amount)
+    if is_en():
+        perks = "; ".join(b[:1].lower() + b[1:] for b in target.benefits_en[:2])
+        return (
+            f"Also note: if this {amount} is new money moved to our bank, your financial assets "
+            f"would reach the {target.name_en} tier ({target.card_name_en}), with benefits such "
+            f"as {perks}. Tiers are based on average daily financial assets each month, as "
+            "assessed by the bank."
+        )
     perks = "、".join(target.benefits[:2])
     return (
-        f"另外提示：如这笔 {format_money(needs.investment_amount)} 为新转入本行的资金，"
+        f"另外提示：如这笔 {amount} 为新转入本行的资金，"
         f"您的金融资产将达到{target.name}（{target.card_name}）标准，可享{perks}等权益；"
         "等级按月日均金融资产评定，以银行评定结果为准。"
     )

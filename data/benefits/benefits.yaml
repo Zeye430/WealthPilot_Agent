@@ -8,19 +8,26 @@
 
 as_of: 2026-10-18
 evaluation_rule: 按近 3 个月月日均金融资产（含存款、理财、基金、保险等）评定，每月初自动更新；以银行评定结果为准。
+evaluation_rule_en: "Based on average daily financial assets over the last 3 months (deposits, wealth products, funds, insurance, etc.), updated automatically at the start of each month; the bank's assessment prevails."
 
 tiers:
   - code: STANDARD
     name: 普通客户
+    name_en: "Standard"
     card_name: 知岸借记卡
+    card_name_en: "Zhian Debit Card"
     min_aum: 0
+    benefits_en: ["No fees on mobile banking transfers"]
     benefits:
       - 手机银行转账免手续费
 
   - code: GOLD
     name: 金卡客户
+    name_en: "Gold"
     card_name: 知岸金卡
+    card_name_en: "Zhian Gold Card"
     min_aum: 50000
+    benefits_en: ["No fees on interbank transfers or out-of-town ATM withdrawals", "Dedicated service hotline with priority access", "500 bonus points in your birthday month"]
     benefits:
       - 跨行转账、异地取现手续费全免
       - 专属客服热线，优先接入
@@ -28,8 +35,11 @@ tiers:
 
   - code: WEALTH
     name: 财富客户
+    name_en: "Wealth"
     card_name: 知岸臻享卡
+    card_name_en: "Zhian Premier Card"
     min_aum: 500000
+    benefits_en: ["One-on-one service from a dedicated relationship manager", "VIP wealth lounge at branches", "6 airport / high-speed rail lounge visits a year", "1 health checkup a year", "Redeem points for selected gifts (points can't be exchanged for cash)"]
     benefits:
       - 专属理财经理一对一服务
       - 网点贵宾理财室
@@ -39,8 +49,11 @@ tiers:
 
   - code: PRIVATE
     name: 私人银行客户
+    name_en: "Private Banking"
     card_name: 知岸私人银行卡
+    card_name_en: "Zhian Private Banking Card"
     min_aum: 6000000
+    benefits_en: ["Private banking advisory team", "Family trust and wealth transfer consulting", "Unlimited airport / high-speed rail lounge visits", "Priority access to premium healthcare"]
     benefits:
       - 私人银行顾问团队服务
       - 家族信托与财富传承咨询
@@ -50,16 +63,22 @@ tiers:
 campaigns:
   - id: NEW_ASSET_2026Q4
     name: 新增资产礼
+    name_en: "New Assets Bonus"
     start: 2026-10-01
     end: 2026-12-31
     reward: 新增 10 万元及以上可获 2,000 积分；新增 50 万元及以上可获 8,000 积分
+    reward_en: "2,000 points for adding ¥100,000 or more; 8,000 points for adding ¥500,000 or more"
     rule: 活动期内月日均金融资产较 2026 年 9 月新增达标即可参与，存款、理财等均计入，不限定购买某款产品；每位客户限领一次，积分可兑换礼品，不可兑换现金。
+    rule_en: "Qualify when your average daily financial assets during the campaign exceed your September 2026 level by the threshold. Deposits, wealth products and more all count, with no specific product required. One reward per customer; points can be redeemed for gifts, not cash."
     eligible_tiers: [STANDARD, GOLD, WEALTH, PRIVATE]
 
   - id: FIRST_WEALTH_2026Q4
     name: 首次晋级臻享礼
+    name_en: "First Premier Upgrade Gift"
     start: 2026-10-01
     end: 2026-12-31
     reward: 赠送 1 次机场贵宾厅服务和 1 次健康体检
+    reward_en: "1 airport lounge visit and 1 health checkup"
     rule: 活动期内首次评定为财富客户（月日均金融资产 50 万元及以上）即可获得，以银行评定结果为准。
+    rule_en: "Awarded when you're rated a Wealth customer for the first time during the campaign (average daily financial assets of ¥500,000 or more), as assessed by the bank."
     eligible_tiers: [STANDARD, GOLD]

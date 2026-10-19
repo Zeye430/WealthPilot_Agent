@@ -12,13 +12,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.assessment.scoring import rating_allows
+from app.core.i18n import L
 from app.db.models import SaleReminder
 from app.products import presenter
 from app.products.catalog import Product, ProductStatus, load_catalog
 
 BUTTON = "BUTTON"
 CHAT = "CHAT"
-DELIVERY_NOTE = "开售当天将通过短信和 App 推送提醒您（演示环境不发送）。"
+
+
+def delivery_note() -> str:
+    return L(
+        "开售当天将通过短信和 App 推送提醒您（演示环境不发送）。",
+        "We'll remind you by SMS and app notification on the opening day (not sent in this demo).",
+    )
 
 
 class ReminderError(ValueError):
@@ -27,13 +34,28 @@ class ReminderError(ValueError):
 
 def check_remindable(product: Product, rating: str | None) -> None:
     if product.status is not ProductStatus.UPCOMING:
-        raise ReminderError(f"{product.name}不是即将发售的新品，无需预约提醒。")
+        raise ReminderError(
+            L(
+                f"{product.name}不是即将发售的新品，无需预约提醒。",
+                f"{product.name_en} isn't an upcoming product, so no reminder is needed.",
+            )
+        )
     if rating is None:
-        raise ReminderError("请先完成风险承受能力测评，测评有效后才能预约和买入新品。")
+        raise ReminderError(
+            L(
+                "请先完成风险承受能力测评，测评有效后才能预约和买入新品。",
+                "Complete your risk tolerance profile first. Once it's valid you can set "
+                "reminders and buy new products.",
+            )
+        )
     if not rating_allows(rating, product.effective_risk_level):
         raise ReminderError(
-            f"{product.name}风险等级为 {product.effective_risk_level}，"
-            "超出您的风险承受能力，无法预约。"
+            L(
+                f"{product.name}风险等级为 {product.effective_risk_level}，"
+                "超出您的风险承受能力，无法预约。",
+                f"{product.name_en} is rated {product.effective_risk_level}, above your risk "
+                "tolerance, so you can't set a reminder.",
+            )
         )
 
 
@@ -70,7 +92,9 @@ def create_reminder(
 def cancel_reminder(db: Session, customer_id: str, reminder_id: str, now: datetime) -> None:
     reminder = db.get(SaleReminder, reminder_id)
     if reminder is None or reminder.customer_id != customer_id or reminder.cancelled_at:
-        raise ReminderError("提醒不存在或已取消。")
+        raise ReminderError(
+            L("提醒不存在或已取消。", "This reminder doesn't exist or was already cancelled.")
+        )
     reminder.cancelled_at = now
 
 
@@ -80,5 +104,5 @@ def reminder_view(reminder: SaleReminder) -> dict:
         "id": reminder.id,
         "product": presenter.card(product) if product else {"code": reminder.product_code},
         "created_at": reminder.created_at,
-        "delivery_note": DELIVERY_NOTE,
+        "delivery_note": delivery_note(),
     }

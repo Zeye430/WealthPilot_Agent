@@ -11,9 +11,10 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import get_customer_id
 from app.api.products import customer_rating
+from app.core.i18n import L
 from app.customers.base import get_customer_info_system
 from app.products.catalog import Product, load_catalog
-from app.purchases.service import DEMO_RESULT, DOCUMENTS, check_purchase, confirmation_view
+from app.purchases.service import check_purchase, confirmation_view, demo_result, documents
 
 router = APIRouter(prefix="/api/v1/purchases", tags=["purchases"])
 
@@ -30,7 +31,7 @@ class ConfirmRequest(PurchaseRequest):
 def _product(code: str) -> Product:
     product = load_catalog().get(code)
     if product is None:
-        raise HTTPException(status_code=404, detail="产品不存在")
+        raise HTTPException(status_code=404, detail=L("产品不存在", "Product not found"))
     return product
 
 
@@ -59,13 +60,16 @@ def confirm(
     product = _product(req.product_code)
     check = check_purchase(product, req.amount, rating, _available_balance(customer_id))
     if not check.allowed:
-        raise HTTPException(status_code=409, detail="；".join(check.errors))
-    missing = [d["name"] for d in DOCUMENTS if d["id"] not in req.acknowledged]
+        raise HTTPException(status_code=409, detail=L("；", " ").join(check.errors))
+    missing = [d["name"] for d in documents() if d["id"] not in req.acknowledged]
     if missing:
-        raise HTTPException(status_code=422, detail=f"请先阅读并确认：{'、'.join(missing)}")
+        raise HTTPException(
+            status_code=422,
+            detail=L("请先阅读并确认：", "Please read and confirm: ") + L("、", ", ").join(missing),
+        )
     return {
         "status": "DEMO_NOT_PLACED",
-        "message": DEMO_RESULT,
+        "message": demo_result(),
         **confirmation_view(check, product),
         "confirmed_at": datetime.now().astimezone().isoformat(timespec="seconds"),
     }

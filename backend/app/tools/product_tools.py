@@ -13,13 +13,15 @@ from langgraph.prebuilt import InjectedState
 from pydantic import Field
 
 from app.assessment.scoring import load_questionnaire
-from app.compliance.suitability import REASON_LABELS, RISK_EXCEEDS, CustomerContext, evaluate
+from app.compliance.suitability import RISK_EXCEEDS, CustomerContext, evaluate, reason_label
+from app.core.i18n import L
 from app.products import presenter
 from app.products.catalog import (
-    METRIC_LABELS,
     MetricType,
     ProductType,
+    issuer_label,
     load_catalog,
+    metric_label,
 )
 from app.products.service import SearchFilters, search, upcoming
 from app.reminders.service import CHAT, ReminderError, create_reminder, reminded_codes
@@ -43,15 +45,20 @@ def _reminded(customer_id: str | None) -> set[str]:
         return set()
 
 
-UPCOMING_NOTE = "新品尚未开售，可预约开售提醒；开售后需由您本人确认买入。"
+def upcoming_note() -> str:
+    return L(
+        "新品尚未开售，可预约开售提醒；开售后需由您本人确认买入。",
+        "Not on sale yet. You can set a sale reminder; once it opens, you confirm any "
+        "purchase yourself.",
+    )
 
 
 def upcoming_block(products, reminded: set[str]) -> dict:
     return {
         "type": "upcoming_products",
         "items": [{**presenter.card(p), "reminded": p.code in reminded} for p in products],
-        "note": UPCOMING_NOTE,
-        "disclaimer": PRODUCT_DISCLAIMER,
+        "note": upcoming_note(),
+        "disclaimer": product_disclaimer(),
     }
 
 
@@ -75,10 +82,16 @@ TYPE_HELP = (
     "产品类型，可多选：CASH_MANAGEMENT 现金管理类、FIXED_INCOME 固定收益类、"
     "FIXED_INCOME_PLUS 固收+、MIXED 混合类、EQUITY 权益类"
 )
-PRODUCT_DISCLAIMER = (
-    "理财非存款、产品有风险、投资须谨慎。匹配依据为您的风险等级、期限和流动性需求，不构成收益承诺；"
-    "业绩比较基准不是预期收益率，不代表实际收益。"
-)
+
+
+def product_disclaimer() -> str:
+    return L(
+        "理财非存款、产品有风险、投资须谨慎。匹配依据为您的风险等级、期限和流动性需求，"
+        "不构成收益承诺；业绩比较基准不是预期收益率，不代表实际收益。",
+        "Wealth products are not deposits and carry risk; invest with care. Matches are based "
+        "on your risk level, time horizon and liquidity needs, not a promise of returns. A "
+        "performance benchmark is not an expected return.",
+    )
 
 
 def _context(state: dict, amount: float | None = None, horizon_months: int | None = None):
@@ -155,10 +168,13 @@ def search_products(
         {**presenter.card(p), "rank": None, "warnings": e.messages, "purchasable": True}
         for p, e in result.unranked
     ]
-    excluded = [{"reason": REASON_LABELS[code], "count": n} for code, n in result.excluded.items()]
+    excluded = [{"reason": reason_label(code), "count": n} for code, n in result.excluded.items()]
     band = load_questionnaire().band(ctx.risk_rating)
     content = {
-        "customer_rating": f"{ctx.risk_rating} {band.name}，可购买 {band.max_product_risk} 及以下",
+        "customer_rating": L(
+            f"{ctx.risk_rating} {band.name}，可购买 {band.max_product_risk} 及以下",
+            f"{ctx.risk_rating} {band.name_en}, eligible for {band.max_product_risk} and below",
+        ),
         "products": [
             {k: item[k] for k in ("code", "name", "type_label", "risk_level", "lockup", "minimum")}
             | {
@@ -183,11 +199,17 @@ def search_products(
     }
     artifact = {
         "type": "product_list",
-        "title": f"为您匹配的产品（{band.max_product_risk} 及以下）",
+        "title": L(
+            f"为您匹配的产品（{band.max_product_risk} 及以下）",
+            f"Matched for you ({band.max_product_risk} and below)",
+        ),
         "items": items,
         "excluded": excluded,
-        "ranking_note": "排序依据：期限匹配、流动性、费用；不按收益排序。",
-        "disclaimer": PRODUCT_DISCLAIMER,
+        "ranking_note": L(
+            "排序依据：期限匹配、流动性、费用；不按收益排序。",
+            "Ranked by horizon fit, liquidity and fees, never by returns.",
+        ),
+        "disclaimer": product_disclaimer(),
     }
     artifacts = [artifact]
     if upcoming_matches:
@@ -208,13 +230,18 @@ def get_product_details(
     found = load_catalog().find_by_name(product)
     if found is None:
         raise ToolException(
-            f"未找到产品「{product}」。产品目录中只有知岸理财、鸿屿理财的虚构产品。"
+            L(
+                f"未找到产品「{product}」。产品目录中只有知岸理财、鸿屿理财的虚构产品。",
+                f'Product "{product}" not found. The catalog only has fictional products from '
+                "Zhian Wealth Management and Hongyu Wealth Management.",
+            )
         )
     eligibility = evaluate(found, ctx)
     detail = {
         **presenter.detail(found),
         "eligible": eligibility.eligible,
         "eligibility_messages": eligibility.messages,
+        "reason_codes": eligibility.reason_codes,
     }
     content = {
         **{
@@ -253,20 +280,31 @@ def compare_products(
     ctx = _context(state)
     catalog = load_catalog()
     if not 2 <= len(products) <= 4:
-        raise ToolException("请提供 2 到 4 个产品进行对比。")
+        raise ToolException(
+            L("请提供 2 到 4 个产品进行对比。", "Provide 2 to 4 products to compare.")
+        )
     found, missing, left_out = [], [], []
     for name in products:
         p = catalog.find_by_name(name)
         if p is None:
             missing.append(name)
         elif RISK_EXCEEDS in evaluate(p, ctx).reason_codes:
-            left_out.append(f"{p.name}（{p.effective_risk_level}，超出您的风险等级）")
+            left_out.append(
+                L(
+                    f"{p.name}（{p.effective_risk_level}，超出您的风险等级）",
+                    f"{p.name_en} ({p.effective_risk_level}, above your risk level)",
+                )
+            )
         else:
             found.append(p)
+    sep = L("；", "; ")
     if missing:
-        raise ToolException(f"未找到产品：{'、'.join(missing)}")
+        raise ToolException(L("未找到产品：", "Products not found: ") + L("、", ", ").join(missing))
     if len(found) < 2:
-        raise ToolException("可对比的产品不足 2 款：" + "；".join(left_out))
+        raise ToolException(
+            L("可对比的产品不足 2 款：", "Fewer than 2 products can be compared: ")
+            + sep.join(left_out)
+        )
 
     metric_rows = [
         t
@@ -278,22 +316,25 @@ def compare_products(
         if any(p.metric(t) for p in found)
     ]
     rows = [
-        {"label": "发行机构", "values": [p.issuer for p in found]},
-        {"label": "产品类型", "values": [p.type_label for p in found]},
-        {"label": "风险等级", "values": [p.effective_risk_level for p in found]},
-        {"label": "流动性", "values": [presenter.lockup_text(p) for p in found]},
+        {"label": L("发行机构", "Issuer"), "values": [issuer_label(p.issuer) for p in found]},
+        {"label": L("产品类型", "Type"), "values": [p.type_label for p in found]},
+        {"label": L("风险等级", "Risk level"), "values": [p.effective_risk_level for p in found]},
+        {"label": L("流动性", "Liquidity"), "values": [presenter.lockup_text(p) for p in found]},
         {
-            "label": "起购金额",
+            "label": L("起购金额", "Minimum"),
             "values": [presenter.format_money(p.minimum_investment) for p in found],
         },
         {
-            "label": "年化固定费用合计",
+            "label": L("年化固定费用合计", "Total annual fees"),
             "values": [presenter.format_rate(p.fees.annual_total) for p in found],
         },
-        {"label": "赎回费", "values": [presenter.redemption_fee_text(p) for p in found]},
+        {
+            "label": L("赎回费", "Redemption fee"),
+            "values": [presenter.redemption_fee_text(p) for p in found],
+        },
     ] + [
         {
-            "label": METRIC_LABELS[t],
+            "label": metric_label(t),
             "values": [presenter.metric_text(p, t) or "—" for p in found],
             "metric": True,
         }
@@ -302,18 +343,28 @@ def compare_products(
     mixed = len({p.product_type is ProductType.CASH_MANAGEMENT for p in found}) > 1
     notes = []
     if mixed:
-        notes.append("七日年化收益率与业绩比较基准口径不同，不能直接比较高低。")
+        notes.append(
+            L(
+                "七日年化收益率与业绩比较基准口径不同，不能直接比较高低。",
+                "A 7-day annualized yield and a performance benchmark are different measures "
+                "and can't be compared directly.",
+            )
+        )
     if left_out:
-        notes.append("未纳入对比：" + "；".join(left_out) + "。可单独查看其条款。")
+        notes.append(
+            L("未纳入对比：", "Not compared: ")
+            + sep.join(left_out)
+            + L("。可单独查看其条款。", ". You can still view their terms separately.")
+        )
     artifact = {
         "type": "comparison_table",
-        "columns": [{"code": p.code, "name": p.name} for p in found],
+        "columns": [{"code": p.code, "name": p.display_name} for p in found],
         "rows": rows,
         "notes": notes,
-        "disclaimer": PRODUCT_DISCLAIMER,
+        "disclaimer": product_disclaimer(),
     }
     content = {
-        "columns": [p.name for p in found],
+        "columns": [p.display_name for p in found],
         "rows": {r["label"]: r["values"] for r in rows},
         "notes": notes,
         "rules": "如实转述对比结果；不同收益口径不得比较高低；不要给出「哪款更好」的结论。",
@@ -332,10 +383,10 @@ def set_sale_reminder(
     """
     found = load_catalog().find_by_name(product)
     if found is None:
-        raise ToolException(f"未找到产品「{product}」。")
+        raise ToolException(L(f"未找到产品「{product}」。", f'Product "{product}" not found.'))
     customer_id = state.get("customer_id")
     if not customer_id:
-        raise ToolException("无法识别客户。")
+        raise ToolException(L("无法识别客户。", "Customer not identified."))
     from datetime import UTC, datetime
 
     with _session() as db:
@@ -347,8 +398,8 @@ def set_sale_reminder(
             raise ToolException(str(exc)) from exc
         db.commit()
     content = {
-        "status": "已预约开售提醒",
-        "product": found.name,
+        "status": L("已预约开售提醒", "Sale reminder set"),
+        "product": found.display_name,
         "sale_window": presenter.sale_window(found),
         "metric": "{label} {text}".format(**presenter.headline_metric(found)),
         "next_step": "开售当天会提醒客户；购买需客户本人在开售后确认，"

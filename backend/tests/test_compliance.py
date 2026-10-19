@@ -341,3 +341,29 @@ def test_distant_negation_in_same_clause_passes(text):
 )
 def test_negation_does_not_leak_across_clauses_or_from_buzhi(text):
     assert "O-PROHIBITED_CLAIM" in check_output(text, Permission.ASSESSED)
+
+
+# ---------- 宣称未发生的操作、软性收益比较（P8-2b 场景评估 N02、P05） ----------
+
+
+def test_reminder_claim_needs_evidence():
+    reply = "好的，已为您预约 **知岸定享 365 天第 15 期（ZA-F06）** 的开售提醒。"
+    grounding = "知岸定享 365 天第 15 期 ZA-F06"
+    assert "O-FALSE_ACTION_CLAIM" in check_output(reply, Permission.ASSESSED, grounding)
+    with_tool = grounding + '{"status": "已预约开售提醒", "product": "知岸定享 365 天第 15 期"}'
+    assert check_output(reply, Permission.ASSESSED, with_tool) == []
+
+
+def test_purchase_claim_is_always_false():
+    reply = "已为您买入知岸活钱宝 1 万元。"
+    found = check_output(reply, Permission.ASSESSED, "知岸活钱宝", risk_rating="C2")
+    assert "O-FALSE_ACTION_CLAIM" in found
+    honest = "我不能为您买入，请在产品卡片中由您本人确认。"
+    assert check_output(honest, Permission.ASSESSED) == []
+
+
+def test_soft_return_pitch():
+    reply = "一部分放在活钱宝保证流动性，另一部分放在稳享每日开放争取稍高一些的收益空间。"
+    assert "O-RETURN_PITCH" in check_output(reply, Permission.ASSESSED)
+    tradeoff = "如果想要更高的收益，就需要承担更高的风险，这超出了您的风险等级。"
+    assert check_output(tradeoff, Permission.ASSESSED) == []

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_customer_id, get_now
 from app.api.products import customer_rating
+from app.core.i18n import L
 from app.db.session import get_session
 from app.products.catalog import load_catalog
 from app.reminders.service import (
@@ -41,7 +42,7 @@ def create(
 ):
     product = load_catalog().get(req.product_code)
     if product is None:
-        raise HTTPException(status_code=404, detail="产品不存在")
+        raise HTTPException(status_code=404, detail=L("产品不存在", "Product not found"))
     try:
         reminder = create_reminder(db, customer_id, product, rating, BUTTON, now)
     except ReminderError as exc:

@@ -9,12 +9,14 @@ as_of: 2026-10-16
 customers:
   demo_customer_1:
     display_name: 王先生（虚构）
+    display_name_en: "Mr. Wang (fictional)"
     age: 52
     customer_tier: 财富客户
     occupation: 企业职员
+    occupation_en: "Office employee"
     customer_since: 2015-06-18
     kyc_verified: true
-    assigned_rm: { id: RM001, name: 李经理（虚构）, title: 高级理财经理 }
+    assigned_rm: { id: RM001, name: 李经理（虚构）, name_en: "RM Li (fictional)", title: 高级理财经理, title_en: "Senior Relationship Manager" }
     assets_at_bank:
       demand_deposit: 150000
       time_deposit: 300000
@@ -23,12 +25,14 @@ customers:
 
   demo_customer_2:
     display_name: 陈女士（虚构）
+    display_name_en: "Ms. Chen (fictional)"
     age: 31
     customer_tier: 金卡客户
     occupation: 设计师
+    occupation_en: "Designer"
     customer_since: 2021-03-02
     kyc_verified: true
-    assigned_rm: { id: RM002, name: 周经理（虚构）, title: 理财经理 }
+    assigned_rm: { id: RM002, name: 周经理（虚构）, name_en: "RM Zhou (fictional)", title: 理财经理, title_en: "Relationship Manager" }
     assets_at_bank:
       demand_deposit: 80000
       time_deposit: 0
@@ -36,12 +40,14 @@ customers:
 
   pytest_customer:
     display_name: 测试客户（虚构）
+    display_name_en: "Test Customer (fictional)"
     age: 40
     customer_tier: 金卡客户
     occupation: 测试
+    occupation_en: "Test"
     customer_since: 2024-01-01
     kyc_verified: true
-    assigned_rm: { id: RM001, name: 李经理（虚构）, title: 高级理财经理 }
+    assigned_rm: { id: RM001, name: 李经理（虚构）, name_en: "RM Li (fictional)", title: 高级理财经理, title_en: "Senior Relationship Manager" }
     assets_at_bank:
       demand_deposit: 50000
       time_deposit: 0
@@ -50,12 +56,14 @@ customers:
   # 场景评估专用（evaluations/run_scenarios.py），资料与演示客户 A 相同
   eval_customer:
     display_name: 评估客户（虚构）
+    display_name_en: "Eval Customer (fictional)"
     age: 52
     customer_tier: 财富客户
     occupation: 企业职员
+    occupation_en: "Office employee"
     customer_since: 2015-06-18
     kyc_verified: true
-    assigned_rm: { id: RM001, name: 李经理（虚构）, title: 高级理财经理 }
+    assigned_rm: { id: RM001, name: 李经理（虚构）, name_en: "RM Li (fictional)", title: 高级理财经理, title_en: "Senior Relationship Manager" }
     assets_at_bank:
       demand_deposit: 150000
       time_deposit: 300000
@@ -65,12 +73,14 @@ customers:
   # 场景评估专用：资料与演示客户 B 相同（用于「接近下一等级」等场景）
   eval_customer_b:
     display_name: 评估客户 B（虚构）
+    display_name_en: "Eval Customer B (fictional)"
     age: 31
     customer_tier: 金卡客户
     occupation: 设计师
+    occupation_en: "Designer"
     customer_since: 2021-03-02
     kyc_verified: true
-    assigned_rm: { id: RM002, name: 周经理（虚构）, title: 理财经理 }
+    assigned_rm: { id: RM002, name: 周经理（虚构）, name_en: "RM Zhou (fictional)", title: 理财经理, title_en: "Relationship Manager" }
     assets_at_bank:
       demand_deposit: 80000
       time_deposit: 0

@@ -11,15 +11,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_now, get_rm_id
+from app.core.i18n import L
 from app.db.models import Handoff, HandoffEvent, Message
 from app.db.session import get_session
 from app.handoff.service import (
     ACCEPTED,
     RESOLVED,
     RM_VISIBLE,
-    STATUS_LABELS,
     HandoffError,
     handoff_view,
+    status_label,
+    summary_view,
+    sync_scope_view,
     transition,
 )
 
@@ -42,7 +45,9 @@ def _rm_handoff(db: Session, handoff_id: str, rm_id: str) -> Handoff:
     """理财经理只能访问分配给自己的交接。"""
     handoff = db.get(Handoff, handoff_id)
     if handoff is None or handoff.assigned_rm_id != rm_id or handoff.status not in RM_VISIBLE:
-        raise HTTPException(status_code=404, detail="交接请求不存在")
+        raise HTTPException(
+            status_code=404, detail=L("交接请求不存在", "Handoff request not found")
+        )
     return handoff
 
 
@@ -56,7 +61,9 @@ def rm_list(db: Session = Depends(get_session), rm_id: str = Depends(get_rm_id))
     return [
         {
             **handoff_view(h),
-            "customer_name": (h.summary.get("customer") or {}).get("display_name", h.customer_id),
+            "customer_name": (summary_view(h.summary).get("customer") or {}).get(
+                "display_name", h.customer_id
+            ),
             "synced_at": h.created_at,
             "updated_at": h.updated_at,
         }
@@ -77,12 +84,10 @@ def rm_detail(handoff_id: str, db: Session = Depends(get_session), rm_id: str = 
     ).all()
     return {
         **handoff_view(handoff),
-        "summary": handoff.summary,
-        "sync_scope": handoff.consent_scope,
+        "summary": summary_view(handoff.summary),
+        "sync_scope": sync_scope_view(handoff.consent_scope),
         "messages": [{"role": m.role, "content": m.content} for m in messages],
-        "events": [
-            {"to": STATUS_LABELS[e.to_status], "actor": e.actor, "at": e.at} for e in events
-        ],
+        "events": [{"to": status_label(e.to_status), "actor": e.actor, "at": e.at} for e in events],
     }
 
 

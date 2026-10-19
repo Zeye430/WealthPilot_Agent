@@ -69,7 +69,7 @@ export function ProductDetailDialog({
   }, [code, c.loadFailed]);
 
   const purchase = product?.purchase;
-  const needsAssessment = purchase?.reasons.some((r) => r.includes("测评")) ?? false;
+  const needsAssessment = purchase?.needs_assessment ?? false;
 
   return (
     <dialog

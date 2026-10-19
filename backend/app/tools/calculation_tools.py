@@ -13,9 +13,12 @@ from langchain_core.tools import StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
 from app.calculations import core as calc
+from app.core.i18n import L, all_versions, localized, register
 
-HYPOTHETICAL_NOTE = (
-    "假设情景：按固定收益率测算，未考虑税费与市场波动，不代表任何产品的未来表现，亦非收益承诺。"
+HYPOTHETICAL_NOTE = register(
+    "假设情景：按固定收益率测算，未考虑税费与市场波动，不代表任何产品的未来表现，亦非收益承诺。",
+    "Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not "
+    "represent any product's future performance and is not a promise of returns.",
 )
 
 
@@ -34,14 +37,18 @@ def _pct(rate: Decimal) -> str:
 
 def _slip_assumptions(assumptions: list[str]) -> list[str]:
     # 凭证上的免责声明由印章（disclaimer 字段）承担，列表中不再重复
-    return [a for a in assumptions if a != HYPOTHETICAL_NOTE]
+    return [a for a in assumptions if a not in all_versions(HYPOTHETICAL_NOTE)]
+
+
+def _unit() -> str:
+    return L("元", "CNY")
 
 
 def _run(fn):
     try:
         return fn()
     except calc.CalculationError as exc:
-        raise ToolException(f"计算参数错误：{exc}") from exc
+        raise ToolException(L(f"计算参数错误：{exc}", f"Invalid calculation input: {exc}")) from exc
 
 
 # ---------- calculate_growth ----------
@@ -73,14 +80,22 @@ def _growth(
     def compute():
         if compounding == "simple":
             if pmt:
-                raise calc.CalculationError("单利模式不支持每月追加投入，请改用按月复利")
+                raise calc.CalculationError(
+                    L(
+                        "单利模式不支持每月追加投入，请改用按月复利",
+                        "Simple interest doesn't support monthly contributions; use monthly "
+                        "compounding instead",
+                    )
+                )
             path = [pv + calc.simple_interest(pv, r, y) for y in range(years + 1)]
             formula = "FV = PV × (1 + r × n)"
         else:
             m = 12 if compounding == "monthly" or pmt else 1
             per_period = pmt if m == 12 else calc.ZERO
             path = calc.growth_path(pv, r, years, periods_per_year=m, periodic_payment=per_period)
-            formula = "FV = PV × (1 + r/m)^(m·n)" + (" + 定投年金终值" if pmt else "")
+            formula = "FV = PV × (1 + r/m)^(m·n)" + (
+                L(" + 定投年金终值", " + FV of monthly contributions") if pmt else ""
+            )
         return path, formula
 
     path, formula = _run(compute)
@@ -91,23 +106,41 @@ def _growth(
         "total_invested": _yuan(invested),
         "total_gain": _yuan(final - invested),
     }
+    compounding_text = {
+        "annual": L("按年复利", "Compounded annually"),
+        "monthly": L("按月复利", "Compounded monthly"),
+        "simple": L("单利，不再投资", "Simple interest, no reinvestment"),
+    }
     assumptions = [
-        f"年化收益率固定为 {_pct(r)}",
-        {"annual": "按年复利", "monthly": "按月复利", "simple": "单利，不再投资"}[compounding]
+        L(f"年化收益率固定为 {_pct(r)}", f"Fixed annual rate of {_pct(r)}"),
+        compounding_text[compounding]
         if not pmt
-        else "按月复利，每月末追加投入",
-        HYPOTHETICAL_NOTE,
+        else L("按月复利，每月末追加投入", "Compounded monthly, contributions at month-end"),
+        localized(HYPOTHETICAL_NOTE),
     ]
     items = [
-        {"label": "期末金额", "value": result["final_value"], "unit": "元"},
-        {"label": "累计投入", "value": result["total_invested"], "unit": "元"},
-        {"label": "累计收益", "value": result["total_gain"], "unit": "元"},
+        {"label": L("期末金额", "Ending balance"), "value": result["final_value"], "unit": _unit()},
+        {
+            "label": L("累计投入", "Total invested"),
+            "value": result["total_invested"],
+            "unit": _unit(),
+        },
+        {"label": L("累计收益", "Total gain"), "value": result["total_gain"], "unit": _unit()},
     ]
     if inflation_rate is not None:
         real = _run(lambda: calc.inflation_adjusted_value(final, _d(inflation_rate), years))
         result["real_value_today"] = _yuan(real)
-        items.append({"label": "折合今天购买力", "value": result["real_value_today"], "unit": "元"})
-        assumptions.insert(1, f"年通胀率固定为 {_pct(_d(inflation_rate))}")
+        items.append(
+            {
+                "label": L("折合今天购买力", "In today's money"),
+                "value": result["real_value_today"],
+                "unit": _unit(),
+            }
+        )
+        rate_text = _pct(_d(inflation_rate))
+        assumptions.insert(
+            1, L(f"年通胀率固定为 {rate_text}", f"Fixed annual inflation of {rate_text}")
+        )
 
     content = json.dumps(
         {**result, "formula": formula, "assumptions": assumptions}, ensure_ascii=False
@@ -115,24 +148,27 @@ def _growth(
     artifact = [
         {
             "type": "calculation_result",
-            "title": f"{years} 年收益测算",
+            "title": L(f"{years} 年收益测算", f"{years}-year growth estimate"),
             "formula": formula,
             "items": items,
             "assumptions": _slip_assumptions(assumptions),
-            "disclaimer": HYPOTHETICAL_NOTE,
+            "disclaimer": localized(HYPOTHETICAL_NOTE),
         },
         {
             "type": "line_chart",
-            "title": "逐年余额（假设情景）",
-            "x_label": "年",
-            "y_label": "元",
+            "title": L("逐年余额（假设情景）", "Balance by year (hypothetical)"),
+            "x_label": L("年", "Year"),
+            "y_label": _unit(),
             "series": [
                 {
-                    "name": f"年化 {_pct(r)}",
+                    "name": L(f"年化 {_pct(r)}", f"{_pct(r)} a year"),
                     "points": [{"x": i, "y": float(calc.to_cents(v))} for i, v in enumerate(path)],
                 }
             ],
-            "note": "按固定收益率测算，未考虑税费与市场波动",
+            "note": L(
+                "按固定收益率测算，未考虑税费与市场波动",
+                "Assumes a fixed rate; ignores taxes, fees and market swings",
+            ),
         },
     ]
     return content, artifact
@@ -163,29 +199,40 @@ class ScenarioInput(BaseModel):
 
 def _scenarios(principal: float, years: int, annual_rates: list[float]):
     if not 2 <= len(annual_rates) <= 5:
-        raise ToolException("计算参数错误：请提供 2 到 5 档收益率")
+        raise ToolException(
+            L(
+                "计算参数错误：请提供 2 到 5 档收益率",
+                "Invalid calculation input: give 2 to 5 rates",
+            )
+        )
     pv = _d(principal)
     rates = sorted(_d(r) for r in annual_rates)
     paths = {r: _run(lambda r=r: calc.growth_path(pv, r, years)) for r in rates}
     finals = {_pct(r): _yuan(p[-1]) for r, p in paths.items()}
     content = json.dumps(
-        {"final_values_by_rate": finals, "assumptions": ["按年复利", HYPOTHETICAL_NOTE]},
+        {
+            "final_values_by_rate": finals,
+            "assumptions": [L("按年复利", "Compounded annually"), localized(HYPOTHETICAL_NOTE)],
+        },
         ensure_ascii=False,
     )
     artifact = [
         {
             "type": "line_chart",
-            "title": f"{years} 年多档收益假设对比",
-            "x_label": "年",
-            "y_label": "元",
+            "title": L(f"{years} 年多档收益假设对比", f"{years}-year rate scenarios"),
+            "x_label": L("年", "Year"),
+            "y_label": _unit(),
             "series": [
                 {
-                    "name": f"年化 {_pct(r)}",
+                    "name": L(f"年化 {_pct(r)}", f"{_pct(r)} a year"),
                     "points": [{"x": i, "y": float(calc.to_cents(v))} for i, v in enumerate(p)],
                 }
                 for r, p in paths.items()
             ],
-            "note": "按年复利测算，未考虑税费与市场波动",
+            "note": L(
+                "按年复利测算，未考虑税费与市场波动",
+                "Compounded annually; ignores taxes, fees and market swings",
+            ),
         }
     ]
     return content, artifact
@@ -231,19 +278,32 @@ def _product_rates(product: str, holding_days: int | None) -> tuple[float, float
 
     found = load_catalog().find_by_name(product)
     if found is None:
-        raise ToolException(f"未找到产品「{product}」")
+        raise ToolException(L(f"未找到产品「{product}」", f'Product "{product}" not found'))
     if found.fees.subscription is None:
-        raise ToolException(f"{found.name}的申购费未核实，无法测算")
+        raise ToolException(
+            L(
+                f"{found.name}的申购费未核实，无法测算",
+                f"{found.name_en}'s subscription fee is unverified, so it can't be estimated",
+            )
+        )
     if holding_days is None:
-        raise ToolException("按产品测算赎回费需要提供持有天数（holding_days）")
+        raise ToolException(
+            L(
+                "按产品测算赎回费需要提供持有天数（holding_days）",
+                "Product-based redemption fees need holding_days",
+            )
+        )
     redemption = _run(
         lambda: calc.redemption_fee_rate(
             holding_days, [(t.max_days, t.rate) for t in found.fees.redemption]
         )
     )
-    note = (
+    note = L(
         f"费率来自《{found.name}》说明书：申购费 {format_rate(found.fees.subscription)}，"
-        f"持有 {holding_days} 天适用赎回费 {format_rate(redemption)}"
+        f"持有 {holding_days} 天适用赎回费 {format_rate(redemption)}",
+        f"Rates from the {found.name_en} prospectus: subscription fee "
+        f"{format_rate(found.fees.subscription)}; redemption fee for {holding_days} days held "
+        f"{format_rate(redemption)}",
     )
     return float(found.fees.subscription), float(redemption), note
 
@@ -273,31 +333,42 @@ def _fees(
     )
     as_text = {k: _yuan(v) for k, v in result.items()}
     assumptions = [
-        "外扣法：净申购金额 = 申购金额 ÷ (1 + 费率)"
+        L(
+            "外扣法：净申购金额 = 申购金额 ÷ (1 + 费率)",
+            "External method: net subscription = amount ÷ (1 + fee rate)",
+        )
         if fee_method == "external"
-        else "内扣法：申购费 = 申购金额 × 费率",
-        "持有期收益按净值涨幅计；净值通常已扣除管理费、托管费，此处不重复扣除",
-        HYPOTHETICAL_NOTE,
+        else L(
+            "内扣法：申购费 = 申购金额 × 费率", "Internal method: subscription fee = amount × rate"
+        ),
+        L(
+            "持有期收益按净值涨幅计；净值通常已扣除管理费、托管费，此处不重复扣除",
+            "Return is based on NAV change; NAV is usually already net of management and "
+            "custody fees, so they aren't deducted again",
+        ),
+        localized(HYPOTHETICAL_NOTE),
     ]
     if source_note:
         assumptions.insert(0, source_note)
     labels = {
-        "subscription_fee": "申购费",
-        "net_subscription": "净申购金额",
-        "gross_redemption_value": "赎回前市值",
-        "redemption_fee": "赎回费",
-        "net_proceeds": "到手金额",
-        "profit": "净收益",
+        "subscription_fee": L("申购费", "Subscription fee"),
+        "net_subscription": L("净申购金额", "Net subscription"),
+        "gross_redemption_value": L("赎回前市值", "Value before redemption"),
+        "redemption_fee": L("赎回费", "Redemption fee"),
+        "net_proceeds": L("到手金额", "Net proceeds"),
+        "profit": L("净收益", "Net gain"),
     }
     content = json.dumps({**as_text, "assumptions": assumptions}, ensure_ascii=False)
     artifact = [
         {
             "type": "calculation_result",
-            "title": "费用与到手金额测算",
+            "title": L("费用与到手金额测算", "Fees and net proceeds"),
             "formula": None,
-            "items": [{"label": labels[k], "value": v, "unit": "元"} for k, v in as_text.items()],
+            "items": [
+                {"label": labels[k], "value": v, "unit": _unit()} for k, v in as_text.items()
+            ],
             "assumptions": _slip_assumptions(assumptions),
-            "disclaimer": HYPOTHETICAL_NOTE,
+            "disclaimer": localized(HYPOTHETICAL_NOTE),
         }
     ]
     return content, artifact

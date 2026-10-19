@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
 from app.compliance.policy import evaluate_gate
+from app.core.i18n import L, is_en, use_locale
 from app.customers.base import get_customer_info_system
 from app.customers.needs import get_needs
 from app.db.models import Handoff, HandoffEvent, Message
@@ -40,6 +41,19 @@ STATUS_LABELS = {
     AWAITING_CONSENT: "待客户确认（旧流程）",
     IN_PROGRESS: "理财经理服务中（旧流程）",
 }
+STATUS_LABELS_EN = {
+    PENDING: "Summary shared; waiting for RM follow-up",
+    ACCEPTED: "RM following up",
+    RESOLVED: "Closed",
+    CANCELLED: "Cancelled",
+    AWAITING_CONSENT: "Awaiting customer consent (legacy)",
+    IN_PROGRESS: "RM in service (legacy)",
+}
+
+
+def status_label(status: str) -> str:
+    return L(STATUS_LABELS[status], STATUS_LABELS_EN[status])
+
 
 # 角色 → 允许的状态变更
 TRANSITIONS = {
@@ -60,6 +74,22 @@ REASON_LABELS = {
     "TOOL_FAILURE": "系统工具异常",
     "HUMAN_AUTHORIZATION_REQUIRED": "需要人工授权或审批",
 }
+REASON_LABELS_EN = {
+    "USER_REQUEST": "Customer asked for a person",
+    "REGULATED_ADVISORY_REQUEST": "Needs formal advice or a trade (regulated service)",
+    "HIGH_COMPLEXITY": "Complex planning (e.g. retirement, tax, multi-asset)",
+    "SUITABILITY_CONFLICT": "Request conflicts with risk rating",
+    "MISSING_CRITICAL_INFORMATION": "Key information missing; needs human check",
+    "LOW_RETRIEVAL_CONFIDENCE": "No reliable source found",
+    "UNVERIFIED_PRODUCT_DATA": "Product data unverified",
+    "TOOL_FAILURE": "System tool error",
+    "HUMAN_AUTHORIZATION_REQUIRED": "Needs human authorization or approval",
+}
+
+
+def reason_label(reason: str) -> str:
+    return L(REASON_LABELS.get(reason, reason), REASON_LABELS_EN.get(reason, reason))
+
 
 # 同步给理财经理的内容（看板展示；客户界面以一句话告知）
 SYNC_SCOPE = [
@@ -68,6 +98,22 @@ SYNC_SCOPE = [
     "风险测评结果",
     "本次对话记录",
 ]
+SYNC_SCOPE_EN = [
+    "Profile (tier, assets with us)",
+    "Goals (amount, horizon, liquidity, return target, etc.)",
+    "Risk profile result",
+    "This conversation",
+]
+
+
+def sync_scope_view(stored: list[str]) -> list[str]:
+    return SYNC_SCOPE_EN if is_en() and stored == SYNC_SCOPE else stored
+
+
+def summary_view(summary: dict) -> dict:
+    """摘要同时保存中英文两份（创建时生成），按查看者的语言返回。"""
+    localized = summary.get("en") if is_en() else None
+    return localized or {k: v for k, v in summary.items() if k != "en"}
 
 
 class HandoffError(ValueError):
@@ -108,10 +154,14 @@ def transition(db: Session, handoff: Handoff, to: str, role: str, actor: str, no
     allowed = TRANSITIONS.get((handoff.status, to))
     if allowed is None:
         raise HandoffError(
-            f"当前状态「{STATUS_LABELS[handoff.status]}」不能变更为「{STATUS_LABELS[to]}」"
+            L(
+                f"当前状态「{STATUS_LABELS[handoff.status]}」不能变更为「{STATUS_LABELS[to]}」",
+                f'Can\'t change from "{STATUS_LABELS_EN[handoff.status]}" to '
+                f'"{STATUS_LABELS_EN[to]}"',
+            )
         )
     if allowed != role:
-        raise HandoffError("无权执行该操作")
+        raise HandoffError(L("无权执行该操作", "Not allowed"))
     previous = handoff.status
     handoff.status = to
     handoff.updated_at = now
@@ -134,14 +184,16 @@ def build_summary(
     gate = evaluate_gate(record, now)
     if gate.risk_rating:
         band = load_questionnaire().band(gate.risk_rating)
-        assessment = (
+        assessment = L(
             f"{band.rating} {band.name}（可购买 {band.max_product_risk} 及以下），"
-            f"有效期至 {record.expires_at:%Y-%m-%d}"
+            f"有效期至 {record.expires_at:%Y-%m-%d}",
+            f"{band.rating} {band.name_en} (eligible for {band.max_product_risk} and below), "
+            f"valid until {record.expires_at:%Y-%m-%d}",
         )
+    elif "ASSESSMENT_EXPIRED" in gate.reason_codes:
+        assessment = L("测评已过期", "Risk profile expired")
     else:
-        assessment = (
-            "测评已过期" if "ASSESSMENT_EXPIRED" in gate.reason_codes else "尚未完成风险测评"
-        )
+        assessment = L("尚未完成风险测评", "No risk profile yet")
 
     messages = db.scalars(
         select(Message)
@@ -154,11 +206,13 @@ def build_summary(
         for block in m.ui_blocks or []:
             for code in _product_codes(block):
                 if (p := catalog.get(code)) is not None:
-                    discussed[code] = f"{p.name}（{p.effective_risk_level}）"
+                    discussed[code] = (
+                        f"{p.display_name}{L('（', ' (')}{p.effective_risk_level}{L('）', ')')}"
+                    )
     recent = [m.content[:120] for m in messages if m.role == "user"][-5:]
 
     return {
-        "reason": REASON_LABELS.get(reason, reason),
+        "reason": reason_label(reason),
         "customer": base.summary() if base else None,
         "assessment": assessment,
         "needs": [r for r in get_needs(db, customer_id).display() if r["value"]],
@@ -193,17 +247,22 @@ def create_request(
     if existing := active_handoff(db, conversation_id):
         return existing
     if reason not in REASON_LABELS:
-        raise HandoffError(f"未知的交接原因：{reason}")
+        raise HandoffError(L(f"未知的交接原因：{reason}", f"Unknown handoff reason: {reason}"))
     base = get_customer_info_system().get(customer_id)
     rm_id, rm_name = (
         (base.assigned_rm.id, base.assigned_rm.name) if base else ("RM001", "值班理财经理")
     )
+    # 摘要同时生成中英文两份：理财经理看板可能与客户使用不同语言
+    with use_locale("zh"):
+        summary = build_summary(db, conversation_id, customer_id, reason, open_questions, now)
+    with use_locale("en"):
+        summary["en"] = build_summary(db, conversation_id, customer_id, reason, open_questions, now)
     handoff = Handoff(
         conversation_id=conversation_id,
         customer_id=customer_id,
         reason=reason,
         status=PENDING,
-        summary=build_summary(db, conversation_id, customer_id, reason, open_questions, now),
+        summary=summary,
         consent_scope=SYNC_SCOPE,
         assigned_rm_id=rm_id,
         assigned_rm_name=rm_name,
@@ -222,10 +281,17 @@ def handoff_view(handoff: Handoff | None) -> dict | None:
     return {
         "id": handoff.id,
         "status": handoff.status,
-        "status_label": STATUS_LABELS[handoff.status],
-        "rm_name": handoff.assigned_rm_name,
-        "reason": REASON_LABELS.get(handoff.reason, handoff.reason),
+        "status_label": status_label(handoff.status),
+        "rm_name": _rm_display_name(handoff),
+        "reason": reason_label(handoff.reason),
     }
+
+
+def _rm_display_name(handoff: Handoff) -> str:
+    base = get_customer_info_system().get(handoff.customer_id)
+    if base and base.assigned_rm.id == handoff.assigned_rm_id:
+        return base.assigned_rm.display_name
+    return L(handoff.assigned_rm_name, "On-duty RM")
 
 
 def rm_contact_card(handoff: Handoff) -> dict:
@@ -234,11 +300,19 @@ def rm_contact_card(handoff: Handoff) -> dict:
     if base and base.assigned_rm.id == handoff.assigned_rm_id:
         contact = base.assigned_rm.contact_card()
     else:
-        contact = {"rm_name": handoff.assigned_rm_name, "rm_title": "理财经理"}
+        contact = {
+            "rm_name": _rm_display_name(handoff),
+            "rm_title": L("理财经理", "Relationship Manager"),
+        }
         contact |= {"phone": None, "wecom_url": None}
+    name = contact["rm_name"]
     return {
         "type": "rm_contact",
         **contact,
         "handoff_id": handoff.id,
-        "notice": f"您的咨询要点已同步给{handoff.assigned_rm_name}，联系时无需重复说明。",
+        "notice": L(
+            f"您的咨询要点已同步给{name}，联系时无需重复说明。",
+            f"Your request summary has been shared with {name}, so you won't need to repeat "
+            "yourself.",
+        ),
     }

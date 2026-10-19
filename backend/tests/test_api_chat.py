@@ -306,7 +306,12 @@ def test_products_api_lists_upcoming_with_remind_state(client):
     assert before["ZA-F06"]["allowed"] is False  # 未测评不能预约
     complete_assessment(client)  # C2
     after = {u["code"]: u for u in client.get("/api/v1/products").json()["upcoming"]}
-    assert after["ZA-F06"]["remind"] == {"allowed": True, "reminded": False, "reason": None}
+    assert after["ZA-F06"]["remind"] == {
+        "allowed": True,
+        "reminded": False,
+        "reason": None,
+        "needs_assessment": False,
+    }
     assert after["ZA-F06"]["sale_window"] == "10 月 26 日–10 月 30 日"
     assert after["ZA-F06"]["raise_limit"] == "5 亿元"
     assert "超出您的风险承受能力" in after["HY-P02"]["remind"]["reason"]  # PR3 新品
@@ -371,6 +376,23 @@ def test_search_tool_returns_matching_upcoming_and_chat_reminder(client):
     conv = body["conversation_id"]
     client.post("/api/v1/chat", json={"conversation_id": conv, "message": "好的，帮我设个提醒"})
     assert [r["product"]["code"] for r in client.get("/api/v1/reminders").json()] == ["ZA-F06"]
+    # 之后的轮次再说「已预约」：客户资料中有提醒记录，不算虚假宣称
+    use_models(main=[AIMessage("已为您预约了开售提醒，开售当天会通知您。")], router=["SERVICE"])
+    later = client.post("/api/v1/chat", json={"conversation_id": conv, "message": "提醒设好了吗"})
+    assert later.json()["reply"]["content"].startswith("已为您预约")
+
+
+def test_reminder_claim_without_tool_is_blocked(client):  # 场景评估 N02
+    complete_assessment(client)
+    claim = "好的，已为您预约知岸定享 365 天第 15 期的开售提醒。"
+    # 两次都是新消息对象：同一个对象 id 相同，LangGraph 会覆盖而不是追加
+    use_models(main=[AIMessage(claim), AIMessage(claim)], router=["PRODUCT_OR_ADVICE"])
+    body = client.post("/api/v1/chat", json={"message": "帮我设个开售提醒"}).json()
+    assert (
+        body["reply"]["content"]
+        == "这个问题我暂时无法给出合适的回答。如需进一步帮助，您可以咨询理财经理。"
+    )
+    assert client.get("/api/v1/reminders").json() == []
 
 
 # ---------- 客户等级与权益（2026-10-18） ----------
@@ -593,3 +615,71 @@ def test_conversation_history_lists_recent_first(client):
     assert rows[0]["title"] == "第二个会话" and rows[0]["message_count"] == 2
     other = client.get("/api/v1/conversations", headers={"X-Demo-User": "demo_customer_1"}).json()
     assert first["conversation_id"] not in {r["id"] for r in other}
+
+
+# ---------- 英文界面（P8-2b） ----------
+
+
+def english(client):
+    client.cookies.set("wp_locale", "en")
+
+
+def test_english_fixed_replies_and_assessment_card(client):
+    english(client)
+    use_models(main=[], router=["OUT_OF_SCOPE"])
+    body = client.post("/api/v1/chat", json={"message": "Who won the World Cup?"}).json()
+    assert body["reply"]["content"].startswith("Sorry, I'm a wealth assistant")
+    use_models(main=[], router=["PRODUCT_OR_ADVICE"])
+    body = client.post("/api/v1/chat", json={"message": "Which product should I buy?"}).json()
+    assert body["reply"]["content"].startswith("Suitability rules")
+    card = body["reply"]["ui_blocks"][0]
+    assert card["type"] == "assessment_prompt" and card["title"] == "Risk tolerance profile"
+
+
+def test_english_tool_output_and_code_notes(client):
+    """工具在 Agent 内部执行，语言上下文要一路传到工具与代码追加的说明。"""
+    complete_assessment(client)
+    english(client)
+    use_models(
+        main=[
+            tool_call("calculate_growth", {"principal": 1000000, "annual_rate": 0.05, "years": 10}),
+            AIMessage("About ¥1,628,894.63."),
+        ],
+        router=["CALCULATION"],
+    )
+    body = client.post("/api/v1/chat", json={"message": "1M at 5% for 10 years"}).json()
+    result = body["reply"]["ui_blocks"][0]
+    assert result["title"] == "10-year growth estimate"
+    assert result["items"][0] == {"label": "Ending balance", "value": "1628894.63", "unit": "CNY"}
+    assert body["reply"]["content"].endswith("is not a promise of returns.")
+
+
+def test_english_products_and_questionnaire(client):
+    english(client)
+    items = client.get("/api/v1/products").json()["items"]
+    cash = next(i for i in items if i["code"] == "ZA-C01")
+    assert cash["name"] == "Zhian Ready Cash"
+    assert cash["issuer"] == "Zhian Wealth Management"
+    assert cash["lockup"] == "Open daily"
+    assert cash["metric"]["label"] == "7-day annualized yield"
+    detail = client.get("/api/v1/products/ZA-F04").json()
+    assert detail["redemption_settlement"] == "Paid T+2 after maturity"
+    assert detail["purchase"]["needs_assessment"] is True
+    q = client.get("/api/v1/assessment/questionnaire").json()
+    assert q["questions"][0]["text"] == "What is your age?"
+
+
+def test_handoff_summary_follows_rm_locale(client):
+    complete_assessment(client)
+    english(client)
+    _, card = request_handoff_in_chat(client, reason="HIGH_COMPLEXITY")
+    assert card["rm_name"] == "RM Li (fictional)"
+    assert card["notice"].startswith("Your request summary has been shared")
+    hid = card["handoff_id"]
+    en = client.get(f"/api/v1/rm/handoffs/{hid}", headers=RM_HEADERS).json()
+    assert en["summary"]["assessment"].startswith("C2 Steady")
+    assert en["status_label"] == "Summary shared; waiting for RM follow-up"
+    client.cookies.set("wp_locale", "zh")
+    zh = client.get(f"/api/v1/rm/handoffs/{hid}", headers=RM_HEADERS).json()
+    assert zh["summary"]["assessment"].startswith("C2 稳健型")
+    assert "en" not in zh["summary"]

@@ -20,6 +20,7 @@ from app.api import (
 )
 from app.auth.service import ensure_demo_accounts
 from app.core.config import get_settings
+from app.core.i18n import LocaleMiddleware
 from app.core.security import RedactingFilter, SecurityMiddleware
 from app.db.session import get_engine
 
@@ -41,6 +42,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="WealthPilot AI", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SecurityMiddleware)
+app.add_middleware(LocaleMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,

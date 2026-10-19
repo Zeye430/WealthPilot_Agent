@@ -21,6 +21,7 @@ from app.assessment.service import latest_confirmed
 from app.auth.service import CurrentUser
 from app.compliance.policy import evaluate_gate
 from app.core.config import get_settings
+from app.core.i18n import L, all_versions
 from app.core.ratelimit import chat_limit
 from app.customers.base import get_customer_info_system
 from app.customers.context import (
@@ -39,6 +40,8 @@ from app.handoff.service import (
     latest_handoff,
 )
 from app.llm.client import LLMNotConfiguredError, get_chat_model
+from app.products.catalog import load_catalog
+from app.reminders.service import reminded_codes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["chat"])
@@ -119,10 +122,16 @@ def chat(
     handoff = active_handoff(db, conversation.id)
     history = _load_history(db, conversation.id)
     base = get_customer_info_system().get(customer_id)
+    catalog = load_catalog()
+    reminders = [
+        f"{p.name}（{p.code}）" if (p := catalog.get(code)) else code
+        for code in sorted(reminded_codes(db, customer_id))
+    ]
     customer_context = prompt_section(
         base,
         get_needs(db, customer_id),
         assessed_loss_tolerance(db, customer_id),
+        reminders,
     )
     if handoff is not None:
         customer_context += (
@@ -155,9 +164,16 @@ def chat(
         )
     except Exception as exc:
         logger.exception("agent failed", extra={"conversation_id": conversation.id})
-        raise HTTPException(status_code=502, detail="AI 服务暂时不可用，请稍后再试") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=L(
+                "AI 服务暂时不可用，请稍后再试",
+                "The AI service is temporarily unavailable. Please try again later.",
+            ),
+        ) from exc
     # 固定话术（兜底、工具上限）后面不追加提示
-    fixed_reply = result["reply"] in (SAFE_FALLBACK_REPLY, TOOL_LIMIT_REPLY, OUT_OF_SCOPE_REPLY)
+    fixed = (SAFE_FALLBACK_REPLY, TOOL_LIMIT_REPLY, OUT_OF_SCOPE_REPLY)
+    fixed_reply = result["reply"] in {v for f in fixed for v in all_versions(f)}
     if not fixed_reply and (note := age_conflict_note(req.message, result["reply"], base)):
         # 放在回答开头：年龄影响适当性判断，客户应先看到以登记为准
         result["reply"] = f"> {note}\n\n{result['reply']}"
@@ -227,7 +243,7 @@ def get_conversation(
 def _owned_conversation(db: Session, conversation_id: str, customer_id: str) -> Conversation:
     conversation = db.get(Conversation, conversation_id)
     if conversation is None or conversation.customer_id != customer_id:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise HTTPException(status_code=404, detail=L("会话不存在", "Conversation not found"))
     return conversation
 
 
@@ -241,7 +257,7 @@ def _get_or_create_conversation(
     if conversation_id:
         conversation = db.get(Conversation, conversation_id)
         if conversation is None or conversation.customer_id != customer_id:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise HTTPException(status_code=404, detail=L("会话不存在", "Conversation not found"))
         return conversation
     conversation = Conversation(customer_id=customer_id, title=first_message[:30])
     db.add(conversation)

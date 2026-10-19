@@ -12,7 +12,7 @@ import { ProductBrowser } from "@/components/products/ProductBrowser";
 import { RemindersView } from "@/components/products/RemindersView";
 import { Avatar, Button, Chip, Icon, type IconName, StepProgress } from "@/components/ui";
 import { getMe, getSessionUser, listConversations, logout, resetDemo, type SessionUser } from "@/lib/api";
-import { defineCopy, LocaleToggle, useCopy, useLocale } from "@/lib/i18n";
+import { defineCopy, LocaleToggle, useCopy, useLocale, initial } from "@/lib/i18n";
 import type { ConversationSummary, CustomerState } from "@/lib/types";
 
 type View = "chat" | "products" | "reminders" | "me";
@@ -99,6 +99,14 @@ export function AppShell() {
       })
       .catch(() => router.replace("/login"));
   }, [router, refreshState, refreshHistory]);
+
+  // 切换语言后重新读取资料与会话标题：等级、评级名称等由后端按语言返回
+  useEffect(() => {
+    if (!user) return;
+    refreshState();
+    refreshHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
 
   useEffect(() => {
     const onActed = () => setActed(true);
@@ -218,7 +226,7 @@ export function AppShell() {
           )}
 
           <div className="mt-auto flex items-center gap-2.5">
-            <Avatar text={user?.display_name.slice(0, 1) ?? "?"} tone="navy" />
+            <Avatar text={user ? initial(user.display_name) : "?"} tone="navy" />
             <span className="flex min-w-0 flex-1 flex-col text-[13px]">
               <span className="truncate font-bold">{user?.display_name}</span>
               <button type="button" onClick={signOut} className="self-start text-ink-3 hover:text-ink">

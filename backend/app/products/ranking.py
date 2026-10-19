@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
+from app.core.i18n import L
 from app.products.catalog import Product
 
 # 权重可配置；未提供投资期限时，期限匹配度不参与，其余权重按比例放大
@@ -29,11 +30,11 @@ class RankedProduct(BaseModel):
         """给客户看的匹配理由：只来自排序因素（期限、流动性、费用），不涉及收益。"""
         tags = []
         if self.product.lockup_days == 0:
-            tags.append("随时可取")
+            tags.append(L("随时可取", "Withdraw anytime"))
         if self.factors.get("horizon_fit", Decimal(0)) >= HIGHLIGHT_THRESHOLD:
-            tags.append("期限与您的计划匹配")
+            tags.append(L("期限与您的计划匹配", "Fits your time horizon"))
         if self.factors["cost"] >= HIGHLIGHT_THRESHOLD:
-            tags.append("候选中费用较低")
+            tags.append(L("候选中费用较低", "Lower fees among matches"))
         return tags
 
 

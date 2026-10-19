@@ -14,6 +14,7 @@ as_of: 2026-10-16
 products:
   - code: ZA-C01
     name: 知岸活钱宝
+    name_en: "Zhian Ready Cash"
     issuer: 知岸理财
     product_type: CASH_MANAGEMENT
     operation_mode: OPEN
@@ -26,7 +27,9 @@ products:
     data_quality: VERIFIED
     inception_date: 2023-06-01
     investment_scope: 现金，期限在 1 年以内（含）的银行存款、债券回购、中央银行票据、同业存单等货币市场工具。
+    investment_scope_en: "Cash, and money market instruments maturing within 1 year, such as bank deposits, bond repos, central bank bills and interbank certificates of deposit (CDs)."
     strategy: 以流动性管理为首要目标，控制组合平均剩余期限，在保持高流动性的前提下获取稳定的货币市场收益。
+    strategy_en: "Liquidity comes first: keeps a short average remaining maturity and seeks stable money market returns while staying highly liquid."
     fees: { management: 0.10%, custody: 0.02%, sales_service: 0.20%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
       - { type: SEVEN_DAY_ANNUALIZED, value: 1.42%, as_of: 2026-10-16 }
@@ -34,6 +37,7 @@ products:
 
   - code: HY-C01
     name: 鸿屿日日盈
+    name_en: "Hongyu Daily Gain"
     issuer: 鸿屿理财
     product_type: CASH_MANAGEMENT
     operation_mode: OPEN
@@ -46,7 +50,9 @@ products:
     data_quality: VERIFIED
     inception_date: 2022-11-15
     investment_scope: 现金，期限在 1 年以内（含）的银行存款、债券回购、中央银行票据、同业存单等货币市场工具。
+    investment_scope_en: "Cash, and money market instruments maturing within 1 year, such as bank deposits, bond repos, central bank bills and interbank certificates of deposit (CDs)."
     strategy: 精选高流动性货币市场工具，动态管理组合久期，满足投资者日常现金管理需求。
+    strategy_en: "Selects highly liquid money market instruments and actively manages duration to meet everyday cash needs."
     fees: { management: 0.12%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
       - { type: SEVEN_DAY_ANNUALIZED, value: 1.38%, as_of: 2026-10-16 }
@@ -54,6 +60,7 @@ products:
 
   - code: ZA-F01
     name: 知岸稳享每日开放
+    name_en: "Zhian Steady Daily Open"
     issuer: 知岸理财
     product_type: FIXED_INCOME
     operation_mode: OPEN
@@ -66,7 +73,9 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-01-10
     investment_scope: 债权类资产比例不低于 80%，主要投资于国债、政策性金融债、高等级信用债、同业存单及货币市场工具。
+    investment_scope_en: "At least 80% in debt assets, mainly government bonds, policy bank bonds, high-grade credit bonds, interbank CDs and money market instruments."
     strategy: 以短久期高等级债券为主，控制信用风险和利率风险，兼顾流动性与稳健收益。
+    strategy_en: "Focuses on short-duration, high-grade bonds, controlling credit and interest rate risk while balancing liquidity and steady returns."
     fees:
       management: 0.20%
       custody: 0.03%
@@ -74,10 +83,11 @@ products:
       subscription: 0%
       redemption: [{ max_days: 7, rate: 0.5% }, { max_days: null, rate: 0% }]
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 1.9%, high: 2.5%, basis: 参考短期高等级债券收益水平，结合产品投资策略与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 1.9%, high: 2.5%, basis: 参考短期高等级债券收益水平，结合产品投资策略与费用测算。, basis_en: "Based on yields of short-term high-grade bonds, adjusted for the product's strategy and fees." }
 
   - code: ZA-F02
     name: 知岸稳享 30 天持有
+    name_en: "Zhian Steady 30-Day Holding"
     issuer: 知岸理财
     product_type: FIXED_INCOME
     operation_mode: MIN_HOLDING
@@ -90,13 +100,16 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-05-20
     investment_scope: 债权类资产比例不低于 80%，主要投资于利率债、高等级信用债、同业存单及货币市场工具。
+    investment_scope_en: "At least 80% in debt assets, mainly rate bonds, high-grade credit bonds, interbank CDs and money market instruments."
     strategy: 匹配 30 天最短持有期限配置资产，适度拉长久期以提高收益，严格控制回撤。
+    strategy_en: "Matches assets to the 30-day minimum holding period, moderately extending duration for higher yield while strictly limiting drawdowns."
     fees: { management: 0.25%, custody: 0.03%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.1%, high: 2.7%, basis: 参考 1 年期以内高等级债券收益水平，扣除产品费用后测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.1%, high: 2.7%, basis: 参考 1 年期以内高等级债券收益水平，扣除产品费用后测算。, basis_en: "Based on yields of high-grade bonds maturing within 1 year, net of product fees." }
 
   - code: HY-F01
     name: 鸿屿安盈 60 天持有
+    name_en: "Hongyu Secure 60-Day Holding"
     issuer: 鸿屿理财
     product_type: FIXED_INCOME
     operation_mode: MIN_HOLDING
@@ -109,13 +122,16 @@ products:
     data_quality: VERIFIED
     inception_date: 2023-09-01
     investment_scope: 债权类资产比例不低于 80%，主要投资于高等级信用债、金融债、同业存单及货币市场工具。
+    investment_scope_en: "At least 80% in debt assets, mainly high-grade credit bonds, financial bonds, interbank CDs and money market instruments."
     strategy: 以票息收益为主，配合适度的久期管理，追求与 60 天持有期相匹配的稳健回报。
+    strategy_en: "Earns mainly coupon income with moderate duration management, targeting steady returns that match the 60-day holding period."
     fees: { management: 0.30%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.2%, high: 2.8%, basis: 参考中短期高等级信用债收益水平，结合投资策略与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.2%, high: 2.8%, basis: 参考中短期高等级信用债收益水平，结合投资策略与费用测算。, basis_en: "Based on yields of short- to medium-term high-grade credit bonds, adjusted for strategy and fees." }
 
   - code: ZA-F03
     name: 知岸稳享一年持有
+    name_en: "Zhian Steady 1-Year Holding"
     issuer: 知岸理财
     product_type: FIXED_INCOME
     operation_mode: MIN_HOLDING
@@ -128,17 +144,20 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-03-15
     investment_scope: 债权类资产比例不低于 80%，主要投资于利率债、高等级信用债、二级资本债及同业存单。
+    investment_scope_en: "At least 80% in debt assets, mainly rate bonds, high-grade credit bonds, tier-2 capital bonds and interbank CDs."
     strategy: 匹配一年持有期配置中等久期债券，以票息收益为主，辅以利率波段操作。
+    strategy_en: "Holds medium-duration bonds matched to the 1-year holding period, earning mainly coupon income with some tactical interest rate trading."
     fees: { management: 0.30%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.5%, high: 3.2%, basis: 参考 1–3 年期高等级债券收益水平，扣除产品费用后测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.5%, high: 3.2%, basis: 参考 1–3 年期高等级债券收益水平，扣除产品费用后测算。, basis_en: "Based on yields of 1–3 year high-grade bonds, net of product fees." }
       - type: ANNUAL_PERFORMANCE
         periods:
-          - { label: 2024 年（成立日至年末，年化）, start: 2024-03-15, end: 2024-12-31, value: 2.71% }
-          - { label: 2025 年度, start: 2025-01-01, end: 2025-12-31, value: 2.93% }
+          - { label: 2024 年（成立日至年末，年化）, label_en: "2024 (inception to year-end, annualized)", start: 2024-03-15, end: 2024-12-31, value: 2.71% }
+          - { label: 2025 年度, label_en: "2025 full year", start: 2025-01-01, end: 2025-12-31, value: 2.93% }
 
   - code: HY-F02
     name: 鸿屿睿远两年持有
+    name_en: "Hongyu Farsight 2-Year Holding"
     issuer: 鸿屿理财
     product_type: FIXED_INCOME
     operation_mode: MIN_HOLDING
@@ -151,13 +170,16 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-08-01
     investment_scope: 债权类资产比例不低于 80%，主要投资于中长期利率债、高等级信用债及资产支持证券优先级。
+    investment_scope_en: "At least 80% in debt assets, mainly medium- to long-term rate bonds, high-grade credit bonds and senior tranches of asset-backed securities."
     strategy: 利用两年持有期的资金稳定性配置较长久期资产，获取期限溢价。
+    strategy_en: "Uses the stability of 2-year holding money to hold longer-duration assets and earn a term premium."
     fees: { management: 0.35%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 3.5%, basis: 参考 3–5 年期高等级债券收益水平，扣除产品费用后测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 3.5%, basis: 参考 3–5 年期高等级债券收益水平，扣除产品费用后测算。, basis_en: "Based on yields of 3–5 year high-grade bonds, net of product fees." }
 
   - code: ZA-F04
     name: 知岸定享 180 天第 12 期
+    name_en: "Zhian Fixed-Term 180-Day Series 12"
     issuer: 知岸理财
     product_type: FIXED_INCOME
     operation_mode: CLOSED
@@ -171,13 +193,16 @@ products:
     inception_date: 2026-10-28
     maturity_date: 2027-04-26
     investment_scope: 债权类资产比例不低于 80%，主要投资于与产品期限相匹配的债券、同业存单及货币市场工具。
+    investment_scope_en: "At least 80% in debt assets, mainly bonds, interbank CDs and money market instruments matched to the product's term."
     strategy: 采用持有到期为主的策略，配置剩余期限与产品期限相近的资产，降低净值波动。
+    strategy_en: "Mainly buy-and-hold to maturity, holding assets with remaining terms close to the product's term to reduce NAV swings."
     fees: { management: 0.25%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.4%, high: 2.9%, basis: 参考期限相近的高等级债券收益水平，结合产品期限与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.4%, high: 2.9%, basis: 参考期限相近的高等级债券收益水平，结合产品期限与费用测算。, basis_en: "Based on yields of high-grade bonds with similar terms, adjusted for the product's term and fees." }
 
   - code: HY-F03
     name: 鸿屿臻享一年封闭第 8 期
+    name_en: "Hongyu Premier 1-Year Closed-End Series 8"
     issuer: 鸿屿理财
     product_type: FIXED_INCOME
     operation_mode: CLOSED
@@ -191,13 +216,16 @@ products:
     inception_date: 2026-11-05
     maturity_date: 2027-11-05
     investment_scope: 债权类资产比例不低于 80%，主要投资于高等级信用债、金融债及期限匹配的同业资产。
+    investment_scope_en: "At least 80% in debt assets, mainly high-grade credit bonds, financial bonds and interbank assets matched to the product's term."
     strategy: 持有到期为主，精选信用资质较好的债券，追求期限内的稳健回报。
+    strategy_en: "Mainly buy-and-hold to maturity, selecting bonds with good credit quality for steady returns over the term."
     fees: { management: 0.30%, custody: 0.02%, sales_service: 0.20%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.7%, high: 3.3%, basis: 参考 1 年期高等级信用债收益水平，结合产品期限与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.7%, high: 3.3%, basis: 参考 1 年期高等级信用债收益水平，结合产品期限与费用测算。, basis_en: "Based on yields of 1-year high-grade credit bonds, adjusted for the product's term and fees." }
 
   - code: ZA-F05
     name: 知岸定享 90 天第 3 期
+    name_en: "Zhian Fixed-Term 90-Day Series 3"
     issuer: 知岸理财
     product_type: FIXED_INCOME
     operation_mode: CLOSED
@@ -211,13 +239,16 @@ products:
     inception_date: 2026-05-12
     maturity_date: 2026-08-10
     investment_scope: 债权类资产比例不低于 80%，主要投资于与产品期限相匹配的债券、同业存单及货币市场工具。
+    investment_scope_en: "At least 80% in debt assets, mainly bonds, interbank CDs and money market instruments matched to the product's term."
     strategy: 持有到期为主，配置剩余期限与产品期限相近的资产。
+    strategy_en: "Mainly buy-and-hold to maturity, holding assets with remaining terms close to the product's term."
     fees: { management: 0.25%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.2%, high: 2.6%, basis: 参考期限相近的高等级债券收益水平，结合产品期限与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.2%, high: 2.6%, basis: 参考期限相近的高等级债券收益水平，结合产品期限与费用测算。, basis_en: "Based on yields of high-grade bonds with similar terms, adjusted for the product's term and fees." }
 
   - code: HY-F04
     name: 鸿屿安享半年定开
+    name_en: "Hongyu Secure Semiannual Periodic-Open"
     issuer: 鸿屿理财
     product_type: FIXED_INCOME
     operation_mode: PERIODIC_OPEN
@@ -230,13 +261,16 @@ products:
     data_quality: UNVERIFIED
     inception_date: 2025-04-01
     investment_scope: 债权类资产比例不低于 80%，主要投资于中短期债券、同业存单及货币市场工具。
+    investment_scope_en: "At least 80% in debt assets, mainly short- to medium-term bonds, interbank CDs and money market instruments."
     strategy: 按半年开放周期配置资产，以票息收益为主。
+    strategy_en: "Allocates assets around the semiannual opening cycle, earning mainly coupon income."
     fees: { management: 0.30%, custody: null, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.4%, high: 3.0%, basis: 参考中短期高等级债券收益水平，结合开放周期与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.4%, high: 3.0%, basis: 参考中短期高等级债券收益水平，结合开放周期与费用测算。, basis_en: "Based on yields of short- to medium-term high-grade bonds, adjusted for the opening cycle and fees." }
 
   - code: ZA-P01
     name: 知岸稳进 90 天持有（固收+）
+    name_en: "Zhian Steady Growth 90-Day Holding (Fixed Income Plus)"
     issuer: 知岸理财
     product_type: FIXED_INCOME_PLUS
     operation_mode: MIN_HOLDING
@@ -249,19 +283,22 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-06-18
     investment_scope: 债权类资产比例不低于 80%；权益类资产（股票、偏股型基金）比例不超过 20%。
+    investment_scope_en: "At least 80% in debt assets; no more than 20% in equity assets (stocks and equity-heavy funds)."
     strategy: 以高等级债券打底获取票息，用不超过 20% 的权益仓位增强收益，严格控制组合回撤。
+    strategy_en: "Builds a base of high-grade bonds for coupon income and uses up to 20% in equities to enhance returns, strictly limiting drawdowns."
     fees:
       management: 0.50%
       custody: 0.03%
       sales_service: 0.30%
       subscription: 0%
       redemption: [{ max_days: null, rate: 0% }]
-      performance_fee: { rate: 20%, condition: 年化收益超过业绩比较基准上限的部分 }
+      performance_fee: { rate: 20%, condition: 年化收益超过业绩比较基准上限的部分, condition_en: "the annualized return above the top of the benchmark range" }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 4.5%, basis: 债券部分参考中短期高等级债券收益，权益部分参考宽基指数长期表现，按配置比例加权测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 4.5%, basis: 债券部分参考中短期高等级债券收益，权益部分参考宽基指数长期表现，按配置比例加权测算。, basis_en: "Bond portion based on short- to medium-term high-grade bond yields; equity portion based on long-term performance of broad market indices; weighted by target allocation." }
 
   - code: HY-P01
     name: 鸿屿季季开放（固收+）
+    name_en: "Hongyu Quarterly Open (Fixed Income Plus)"
     issuer: 鸿屿理财
     product_type: FIXED_INCOME_PLUS
     operation_mode: PERIODIC_OPEN
@@ -274,13 +311,16 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-02-26
     investment_scope: 债权类资产比例不低于 80%；可转债及权益类资产合计比例不超过 15%。
+    investment_scope_en: "At least 80% in debt assets; convertible bonds and equity assets combined no more than 15%."
     strategy: 以债券票息为基础，适度参与可转债与权益资产，按季度开放。
+    strategy_en: "Builds on bond coupons with modest exposure to convertible bonds and equities; opens quarterly."
     fees: { management: 0.40%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.6%, high: 4.0%, basis: 债券部分参考中短期债券收益，可转债与权益部分参考相关指数表现，按配置比例加权测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.6%, high: 4.0%, basis: 债券部分参考中短期债券收益，可转债与权益部分参考相关指数表现，按配置比例加权测算。, basis_en: "Bond portion based on short- to medium-term bond yields; convertible and equity portions based on related index performance; weighted by target allocation." }
 
   - code: ZA-M01
     name: 知岸均衡配置
+    name_en: "Zhian Balanced Allocation"
     issuer: 知岸理财
     product_type: MIXED
     operation_mode: OPEN
@@ -293,7 +333,9 @@ products:
     data_quality: VERIFIED
     inception_date: 2023-12-04
     investment_scope: 债权类资产、权益类资产均可投资，任一类资产比例均不超过 80%；权益类资产比例 20%–60%。
+    investment_scope_en: "Can invest in both debt and equity assets, with neither exceeding 80%; equity assets between 20% and 60%."
     strategy: 股债均衡配置，根据市场估值动态调整权益仓位，追求中长期资产增值。
+    strategy_en: "Balances stocks and bonds, adjusting the equity weight based on market valuations, aiming for medium- to long-term growth."
     fees:
       management: 0.80%
       custody: 0.05%
@@ -301,10 +343,11 @@ products:
       subscription: 0%
       redemption: [{ max_days: 30, rate: 1% }, { max_days: null, rate: 0% }]
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, formula: 沪深 300 指数收益率×40% + 中债综合财富指数收益率×60%, basis: 按产品股债中枢配置比例选取对应市场指数加权。 }
+      - { type: PERFORMANCE_BENCHMARK, formula: 沪深 300 指数收益率×40% + 中债综合财富指数收益率×60%, basis: 按产品股债中枢配置比例选取对应市场指数加权。, formula_en: "CSI 300 Index return × 40% + ChinaBond Composite Wealth Index return × 60%", basis_en: "Market indices chosen to match the product's central stock/bond allocation, weighted accordingly." }
 
   - code: HY-M01
     name: 鸿屿多元配置一年定开
+    name_en: "Hongyu Multi-Asset 1-Year Periodic-Open"
     issuer: 鸿屿理财
     product_type: MIXED
     operation_mode: PERIODIC_OPEN
@@ -317,13 +360,16 @@ products:
     data_quality: VERIFIED
     inception_date: 2025-01-20
     investment_scope: 可投资债权类、权益类及商品类资产，任一类资产比例均不超过 80%。
+    investment_scope_en: "Can invest in debt, equity and commodity assets, with no single class exceeding 80%."
     strategy: 多资产配置，在股票、债券、商品之间分散风险，每年开放一次。
+    strategy_en: "Multi-asset allocation that spreads risk across stocks, bonds and commodities; opens once a year."
     fees: { management: 0.70%, custody: 0.05%, sales_service: 0.35%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 4.0%, high: 6.0%, basis: 参考各类资产长期收益水平，按目标配置比例加权测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 4.0%, high: 6.0%, basis: 参考各类资产长期收益水平，按目标配置比例加权测算。, basis_en: "Based on long-term returns of each asset class, weighted by target allocation." }
 
   - code: ZA-E01
     name: 知岸权益精选
+    name_en: "Zhian Equity Select"
     issuer: 知岸理财
     product_type: EQUITY
     operation_mode: OPEN
@@ -336,7 +382,9 @@ products:
     data_quality: VERIFIED
     inception_date: 2024-09-09
     investment_scope: 权益类资产（股票、股票型基金）比例不低于 80%。
+    investment_scope_en: "At least 80% in equity assets (stocks and equity funds)."
     strategy: 自下而上精选个股，行业分散配置，追求长期资本增值，净值波动较大。
+    strategy_en: "Bottom-up stock selection diversified across sectors, seeking long-term capital growth; NAV can swing significantly."
     fees:
       management: 1.00%
       custody: 0.05%
@@ -344,12 +392,13 @@ products:
       subscription: 0%
       redemption: [{ max_days: 180, rate: 0.5% }, { max_days: null, rate: 0% }]
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, formula: 中证 800 指数收益率×85% + 中债总财富指数收益率×15%, basis: 按产品权益中枢配置比例选取对应市场指数加权。 }
+      - { type: PERFORMANCE_BENCHMARK, formula: 中证 800 指数收益率×85% + 中债总财富指数收益率×15%, basis: 按产品权益中枢配置比例选取对应市场指数加权。, formula_en: "CSI 800 Index return × 85% + ChinaBond Total Wealth Index return × 15%", basis_en: "Market indices chosen to match the product's central equity allocation, weighted accordingly." }
 
   # ---------- 即将发售（新发产品，可预约开售提醒） ----------
 
   - code: ZA-F06
     name: 知岸定享 365 天第 15 期
+    name_en: "Zhian Fixed-Term 365-Day Series 15"
     issuer: 知岸理财
     product_type: FIXED_INCOME
     operation_mode: CLOSED
@@ -366,13 +415,16 @@ products:
     inception_date: 2026-11-02
     maturity_date: 2027-11-02
     investment_scope: 债权类资产比例不低于 80%，主要投资于与产品期限相匹配的高等级信用债、金融债及同业存单。
+    investment_scope_en: "At least 80% in debt assets, mainly high-grade credit bonds, financial bonds and interbank CDs matched to the product's term."
     strategy: 持有到期为主，配置剩余期限与产品期限相近的资产，降低净值波动。
+    strategy_en: "Mainly buy-and-hold to maturity, holding assets with remaining terms close to the product's term to reduce NAV swings."
     fees: { management: 0.25%, custody: 0.02%, sales_service: 0.25%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 3.3%, basis: 参考 1 年期高等级信用债收益水平，结合产品期限与费用测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 2.8%, high: 3.3%, basis: 参考 1 年期高等级信用债收益水平，结合产品期限与费用测算。, basis_en: "Based on yields of 1-year high-grade credit bonds, adjusted for the product's term and fees." }
 
   - code: HY-P02
     name: 鸿屿稳进半年持有（固收+）
+    name_en: "Hongyu Steady Growth 6-Month Holding (Fixed Income Plus)"
     issuer: 鸿屿理财
     product_type: FIXED_INCOME_PLUS
     operation_mode: MIN_HOLDING
@@ -388,7 +440,9 @@ products:
     raise_limit: 1000000000
     inception_date: 2026-11-04
     investment_scope: 债权类资产比例不低于 80%；可转债及权益类资产合计比例不超过 20%。
+    investment_scope_en: "At least 80% in debt assets; convertible bonds and equity assets combined no more than 20%."
     strategy: 以中短久期债券票息为基础，适度参与可转债与权益资产增强收益，每份额最短持有 180 天。
+    strategy_en: "Builds on coupons from short- to medium-duration bonds, with modest exposure to convertible bonds and equities to enhance returns; each unit must be held at least 180 days."
     fees: { management: 0.50%, custody: 0.03%, sales_service: 0.30%, subscription: 0%, redemption: [{ max_days: null, rate: 0% }] }
     metrics:
-      - { type: PERFORMANCE_BENCHMARK, low: 3.0%, high: 4.2%, basis: 债券部分参考中短期债券收益，可转债与权益部分参考相关指数表现，按配置比例加权测算。 }
+      - { type: PERFORMANCE_BENCHMARK, low: 3.0%, high: 4.2%, basis: 债券部分参考中短期债券收益，可转债与权益部分参考相关指数表现，按配置比例加权测算。, basis_en: "Bond portion based on short- to medium-term bond yields; convertible and equity portions based on related index performance; weighted by target allocation." }

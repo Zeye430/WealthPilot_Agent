@@ -4,128 +4,160 @@
 
 version: v1
 title: 风险承受能力测评（模拟）
+title_en: "Risk tolerance profile (simulated)"
 disclaimer: 本问卷为演示系统自行设计，非任何金融机构的正式问卷，测评结果仅用于本演示。
+disclaimer_en: "This questionnaire was written for this demo. It is not any financial institution's official questionnaire, and results are used only in this demo."
 validity_months: 12
 reassessment_cooldown_hours: 24
 
 questions:
   - id: q1
     dimension: 年龄
+    dimension_en: "Age"
     text: 您的年龄是？
+    text_en: "What is your age?"
     options:
-      - { id: A, text: 18–30 岁, score: 8 }
-      - { id: B, text: 31–45 岁, score: 10 }
-      - { id: C, text: 46–55 岁, score: 7 }
-      - { id: D, text: 56–65 岁, score: 4 }
-      - { id: E, text: 65 岁以上, score: 2 }
+      - { id: A, text: 18–30 岁, text_en: "18–30", score: 8 }
+      - { id: B, text: 31–45 岁, text_en: "31–45", score: 10 }
+      - { id: C, text: 46–55 岁, text_en: "46–55", score: 7 }
+      - { id: D, text: 56–65 岁, text_en: "56–65", score: 4 }
+      - { id: E, text: 65 岁以上, text_en: "Over 65", score: 2 }
 
   - id: q2
     dimension: 财务状况
+    dimension_en: "Financial situation"
     text: 您的收入来源和稳定性如何？
+    text_en: "How stable is your income?"
     options:
-      - { id: A, text: 目前没有稳定收入, score: 1 }
-      - { id: B, text: 收入不太稳定（如个体经营、佣金制）, score: 4 }
-      - { id: C, text: 收入稳定（如工资、养老金）, score: 7 }
-      - { id: D, text: 收入稳定，且有其他来源（如租金、经营收入、投资收益）, score: 10 }
+      - { id: A, text: 目前没有稳定收入, text_en: "No stable income right now", score: 1 }
+      - { id: B, text: 收入不太稳定（如个体经营、佣金制）, text_en: "Somewhat unstable (e.g. self-employed, commission-based)", score: 4 }
+      - { id: C, text: 收入稳定（如工资、养老金）, text_en: "Stable (e.g. salary, pension)", score: 7 }
+      - { id: D, text: 收入稳定，且有其他来源（如租金、经营收入、投资收益）, text_en: "Stable, plus other sources (e.g. rent, business or investment income)", score: 10 }
 
   - id: q3
     dimension: 财务状况
+    dimension_en: "Financial situation"
     text: 您计划投资的金额，占家庭金融资产的比例大约是？
+    text_en: "Roughly what share of your household's financial assets do you plan to invest?"
     options:
-      - { id: A, text: 70% 以上, score: 1 }
-      - { id: B, text: 50%–70%, score: 3 }
-      - { id: C, text: 20%–50%, score: 6 }
-      - { id: D, text: 20% 以下, score: 10 }
+      - { id: A, text: 70% 以上, text_en: "Over 70%", score: 1 }
+      - { id: B, text: 50%–70%, text_en: "50%–70%", score: 3 }
+      - { id: C, text: 20%–50%, text_en: "20%–50%", score: 6 }
+      - { id: D, text: 20% 以下, text_en: "Under 20%", score: 10 }
 
   - id: q4
     dimension: 投资经验
+    dimension_en: "Investment experience"
     text: 您投资过的风险最高的产品是？
+    text_en: "What is the riskiest product you have invested in?"
     options:
-      - { id: A, text: 只有存款、国债, score: 1 }
-      - { id: B, text: 银行理财、货币基金, score: 4 }
-      - { id: C, text: 债券基金、「固收+」类产品, score: 6 }
-      - { id: D, text: 股票、偏股型基金, score: 8 }
-      - { id: E, text: 期货、期权等衍生品, score: 10 }
+      - { id: A, text: 只有存款、国债, text_en: "Only deposits and government bonds", score: 1 }
+      - { id: B, text: 银行理财、货币基金, text_en: "Bank wealth products, money market funds", score: 4 }
+      - { id: C, text: 债券基金、「固收+」类产品, text_en: "Bond funds, fixed income plus products", score: 6 }
+      - { id: D, text: 股票、偏股型基金, text_en: "Stocks, equity-heavy funds", score: 8 }
+      - { id: E, text: 期货、期权等衍生品, text_en: "Derivatives such as futures and options", score: 10 }
 
   - id: q5
     dimension: 流动性要求
+    dimension_en: "Liquidity needs"
     text: 这笔资金预计多久之后可能需要使用？
+    text_en: "When might you need to use this money?"
     options:
-      - { id: A, text: 1 年内随时可能使用, score: 1 }
-      - { id: B, text: 1–3 年, score: 4 }
-      - { id: C, text: 3–5 年, score: 7 }
-      - { id: D, text: 5 年以上, score: 10 }
+      - { id: A, text: 1 年内随时可能使用, text_en: "Anytime within 1 year", score: 1 }
+      - { id: B, text: 1–3 年, text_en: "1–3 years", score: 4 }
+      - { id: C, text: 3–5 年, text_en: "3–5 years", score: 7 }
+      - { id: D, text: 5 年以上, text_en: "More than 5 years", score: 10 }
 
   - id: q6
     dimension: 投资目的
+    dimension_en: "Investment goal"
     text: 您投资的主要目的是？
+    text_en: "What is your main investment goal?"
     options:
-      - { id: A, text: 保住本金，收益跑赢存款即可, score: 1 }
-      - { id: B, text: 稳健增值，可以接受小幅波动, score: 4 }
-      - { id: C, text: 获取较高收益，可以接受较大波动, score: 7 }
-      - { id: D, text: 资产长期大幅增值，可以接受剧烈波动, score: 10 }
+      - { id: A, text: 保住本金，收益跑赢存款即可, text_en: "Protect principal; beating deposits is enough", score: 1 }
+      - { id: B, text: 稳健增值，可以接受小幅波动, text_en: "Steady growth; small swings are OK", score: 4 }
+      - { id: C, text: 获取较高收益，可以接受较大波动, text_en: "Higher returns; larger swings are OK", score: 7 }
+      - { id: D, text: 资产长期大幅增值，可以接受剧烈波动, text_en: "Strong long-term growth; sharp swings are OK", score: 10 }
 
   - id: q7
     dimension: 收益预期
+    dimension_en: "Return expectations"
     text: 以下几种一年期投资情景，您最倾向哪一种？
+    text_en: "Which of these one-year scenarios do you prefer?"
     options:
-      - { id: A, text: 收益与存款相近，基本不波动, score: 1 }
-      - { id: B, text: 收益略高于存款，可能出现小幅亏损, score: 4 }
-      - { id: C, text: 收益较高，可能亏损 10% 左右, score: 7 }
-      - { id: D, text: 收益很高，可能亏损 30% 以上, score: 10 }
+      - { id: A, text: 收益与存款相近，基本不波动, text_en: "Returns close to deposits, almost no swings", score: 1 }
+      - { id: B, text: 收益略高于存款，可能出现小幅亏损, text_en: "Slightly above deposits, small losses possible", score: 4 }
+      - { id: C, text: 收益较高，可能亏损 10% 左右, text_en: "Higher returns, losses of about 10% possible", score: 7 }
+      - { id: D, text: 收益很高，可能亏损 30% 以上, text_en: "Very high returns, losses of 30% or more possible", score: 10 }
 
   - id: q8
     dimension: 风险偏好
+    dimension_en: "Risk attitude"
     text: 如果您买的产品在 3 个月内下跌了 20%，您会怎么做？
+    text_en: "If a product you bought fell 20% within 3 months, what would you do?"
     options:
-      - { id: A, text: 立即全部赎回, score: 1 }
-      - { id: B, text: 赎回一部分, score: 4 }
-      - { id: C, text: 继续持有，观察一段时间, score: 8 }
-      - { id: D, text: 追加投资，摊低成本, score: 12 }
+      - { id: A, text: 立即全部赎回, text_en: "Sell everything right away", score: 1 }
+      - { id: B, text: 赎回一部分, text_en: "Sell part of it", score: 4 }
+      - { id: C, text: 继续持有，观察一段时间, text_en: "Keep holding and watch for a while", score: 8 }
+      - { id: D, text: 追加投资，摊低成本, text_en: "Buy more to lower my average cost", score: 12 }
 
   - id: q9
     dimension: 风险认识
+    dimension_en: "Risk awareness"
     text: 关于银行理财产品，您认为以下哪种说法正确？
+    text_en: "Which statement about bank wealth products is correct?"
     options:
-      - { id: A, text: 和存款一样，保本保收益, score: 0 }
-      - { id: B, text: 一般不会亏本金，最多收益少一些, score: 3 }
-      - { id: C, text: 不保本，净值会波动，可能亏损本金, score: 8 }
-      - { id: D, text: 不清楚, score: 0 }
+      - { id: A, text: 和存款一样，保本保收益, text_en: "Like deposits, principal and returns are guaranteed", score: 0 }
+      - { id: B, text: 一般不会亏本金，最多收益少一些, text_en: "They usually don't lose principal; returns may just be lower", score: 3 }
+      - { id: C, text: 不保本，净值会波动，可能亏损本金, text_en: "Principal isn't guaranteed; values fluctuate and can lose money", score: 8 }
+      - { id: D, text: 不清楚, text_en: "Not sure", score: 0 }
 
   - id: q10
     dimension: 风险损失承受程度
+    dimension_en: "Loss tolerance"
     text: 您能接受的最大本金亏损幅度是？
+    text_en: "What is the largest loss of principal you can accept?"
     veto_option: A   # 选 A 时无论总分多少，评为 C1（最低类别）
     options:
-      - { id: A, text: 不能接受任何本金亏损, score: 0 }
-      - { id: B, text: 5% 以内, score: 3 }
-      - { id: C, text: 5%–15%, score: 6 }
-      - { id: D, text: 15%–30%, score: 8 }
-      - { id: E, text: 30% 以上, score: 10 }
+      - { id: A, text: 不能接受任何本金亏损, text_en: "I can't accept any loss of principal", score: 0 }
+      - { id: B, text: 5% 以内, text_en: "Up to 5%", score: 3 }
+      - { id: C, text: 5%–15%, text_en: "5%–15%", score: 6 }
+      - { id: D, text: 15%–30%, text_en: "15%–30%", score: 8 }
+      - { id: E, text: 30% 以上, text_en: "Over 30%", score: 10 }
 
 ratings:
   - rating: C1
     name: 保守型
+    name_en: "Conservative"
     max_score: 25
     max_product_risk: PR1
     description: 您的首要目标是保护本金，几乎不能承受亏损。
+    description_en: "Your top priority is protecting principal; you can hardly bear any loss."
   - rating: C2
     name: 稳健型
+    name_en: "Steady"
     max_score: 55
     max_product_risk: PR2
     description: 您希望资产稳健增值，可以承受小幅波动和有限的本金亏损。
+    description_en: "You want steady growth and can bear small swings and limited losses of principal."
   - rating: C3
     name: 平衡型
+    name_en: "Balanced"
     max_score: 72
     max_product_risk: PR3
     description: 您在收益与风险之间寻求平衡，可以承受一定的本金亏损。
+    description_en: "You seek a balance between return and risk and can bear some loss of principal."
   - rating: C4
     name: 进取型
+    name_en: "Growth"
     max_score: 88
     max_product_risk: PR4
     description: 您追求较高收益，可以承受较大的波动和本金亏损。
+    description_en: "You seek higher returns and can bear larger swings and losses of principal."
   - rating: C5
     name: 激进型
+    name_en: "Aggressive"
     max_score: 100
     max_product_risk: PR5
     description: 您追求高收益，可以承受大幅波动和较大的本金亏损。
+    description_en: "You seek high returns and can bear big swings and significant losses of principal."

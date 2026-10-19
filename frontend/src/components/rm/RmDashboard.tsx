@@ -13,7 +13,7 @@ import {
   type RmHandoffRow,
   type SessionUser,
 } from "@/lib/api";
-import { defineCopy, intlLocale, LocaleToggle, useCopy, useLocale } from "@/lib/i18n";
+import { defineCopy, intlLocale, LocaleToggle, useCopy, useLocale, useSeparators, initial } from "@/lib/i18n";
 
 const POLL_MS = 3000;
 
@@ -44,6 +44,7 @@ const COPY = defineCopy({
     loadFailed: "加载失败",
     failed: "操作失败",
     customer: "客户",
+    event: (at: string, to: string, actor: string) => `${at}：${to}（${actor}）`,
   },
   en: {
     title: "RM dashboard",
@@ -71,6 +72,7 @@ const COPY = defineCopy({
     loadFailed: "Couldn't load",
     failed: "Something went wrong",
     customer: "Customer",
+    event: (at: string, to: string, actor: string) => `${at}: ${to} (${actor})`,
   },
 });
 
@@ -80,6 +82,7 @@ const COPY = defineCopy({
  */
 export function RmDashboard() {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   const { locale } = useLocale();
   const router = useRouter();
   const [me, setMe] = useState<SessionUser | null>(null);
@@ -136,7 +139,7 @@ export function RmDashboard() {
         <div className="flex items-center gap-3 text-sm">
           {me && (
             <span className="flex items-center gap-2 font-semibold">
-              <Avatar text={me.display_name.slice(0, 1)} tone="navy" />
+              <Avatar text={initial(me.display_name)} tone="navy" />
               <span className="hidden sm:inline">{me.display_name}</span>
             </span>
           )}
@@ -198,7 +201,7 @@ export function RmDashboard() {
 
               <section className="rounded-card bg-fill p-5 text-sm">
                 <h2 className="text-[17px] font-extrabold">{c.summary}</h2>
-                <p className="mt-0.5 text-xs text-ink-3">{c.generated(detail.sync_scope.join("、"))}</p>
+                <p className="mt-0.5 text-xs text-ink-3">{c.generated(detail.sync_scope.join(sep.comma))}</p>
                 <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
                   {detail.summary.customer && (
                     <Item label={c.profile}>
@@ -206,9 +209,9 @@ export function RmDashboard() {
                     </Item>
                   )}
                   <Item label={c.assessment}>{detail.summary.assessment}</Item>
-                  <Item label={c.needs}>{detail.summary.needs.map((n) => `${n.label} ${n.value}`).join("；") || c.none}</Item>
-                  <Item label={c.products}>{detail.summary.products_discussed.join("、") || c.noProducts}</Item>
-                  <Item label={c.questions}>{detail.summary.open_questions.join("；") || c.noProducts}</Item>
+                  <Item label={c.needs}>{detail.summary.needs.map((n) => `${n.label} ${n.value}`).join(sep.semi) || c.none}</Item>
+                  <Item label={c.products}>{detail.summary.products_discussed.join(sep.comma) || c.noProducts}</Item>
+                  <Item label={c.questions}>{detail.summary.open_questions.join(sep.semi) || c.noProducts}</Item>
                 </dl>
               </section>
 
@@ -235,7 +238,7 @@ export function RmDashboard() {
                 <ul className="mt-1 flex flex-col gap-0.5">
                   {detail.events.map((e, i) => (
                     <li key={i} className="figures">
-                      {new Date(e.at).toLocaleString(intlLocale(locale))}：{e.to}（{e.actor}）
+                      {c.event(new Date(e.at).toLocaleString(intlLocale(locale)), e.to, e.actor)}
                     </li>
                   ))}
                 </ul>

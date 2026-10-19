@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui";
 import { ApiError, confirmPurchase, previewPurchase } from "@/lib/api";
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, useCopy, useSeparators } from "@/lib/i18n";
 import type { ProductDetail, PurchasePreview, PurchaseResult } from "@/lib/types";
 
 const COPY = defineCopy({
@@ -67,6 +67,7 @@ export function notifyActed() {
  */
 export function PurchaseFlow({ product, onBack, onDone }: { product: ProductDetail; onBack: () => void; onDone: () => void }) {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState<PurchasePreview | null>(null);
   const [acknowledged, setAcknowledged] = useState<string[]>([]);
@@ -119,7 +120,7 @@ export function PurchaseFlow({ product, onBack, onDone }: { product: ProductDeta
         </div>
         <Summary
           rows={[
-            [c.product, `${preview.product_name}（${preview.risk_level}）`],
+            [c.product, `${preview.product_name}${sep.paren(preview.risk_level)}`],
             [c.fee, c.feeValue(preview.subscription_fee ?? "", preview.subscription_rate)],
             [c.account, c.accountValue(preview.available_balance)],
           ]}

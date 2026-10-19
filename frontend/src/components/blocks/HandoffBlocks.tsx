@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Avatar, Icon } from "@/components/ui";
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, useCopy, initial } from "@/lib/i18n";
 import type { RmContactBlock } from "@/lib/types";
 
 const COPY = defineCopy({
@@ -35,7 +35,7 @@ export function RmContactCard({ block }: { block: RmContactBlock }) {
   return (
     <div className="flex max-w-md flex-col gap-4 rounded-card bg-fill p-5">
       <div className="flex items-center gap-3">
-        <Avatar text={block.rm_name.slice(0, 1)} tone="navy" />
+        <Avatar text={initial(block.rm_name)} tone="navy" />
         <div className="min-w-0">
           <p className="text-base font-extrabold">{block.rm_name}</p>
           <p className="text-xs text-ink-2">{c.subtitle(block.rm_title)}</p>

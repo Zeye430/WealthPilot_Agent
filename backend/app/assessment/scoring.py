@@ -6,6 +6,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, model_validator
 
+from app.core.i18n import L
+
 QUESTIONNAIRE_DIR = Path(__file__).parent
 RATING_ORDER = ["C1", "C2", "C3", "C4", "C5"]
 PRODUCT_RISK_ORDER = ["PR1", "PR2", "PR3", "PR4", "PR5"]
@@ -18,13 +20,16 @@ class AssessmentError(ValueError):
 class Option(BaseModel):
     id: str
     text: str
+    text_en: str
     score: int
 
 
 class Question(BaseModel):
     id: str
     dimension: str
+    dimension_en: str
     text: str
+    text_en: str
     options: list[Option]
     veto_option: str | None = None
 
@@ -35,15 +40,27 @@ class Question(BaseModel):
 class RatingBand(BaseModel):
     rating: str
     name: str
+    name_en: str
     max_score: int
     max_product_risk: str
     description: str
+    description_en: str
+
+    @property
+    def display_name(self) -> str:
+        return L(self.name, self.name_en)
+
+    @property
+    def display_description(self) -> str:
+        return L(self.description, self.description_en)
 
 
 class Questionnaire(BaseModel):
     version: str
     title: str
+    title_en: str
     disclaimer: str
+    disclaimer_en: str
     validity_months: int
     reassessment_cooldown_hours: int
     questions: list[Question]
@@ -72,14 +89,14 @@ class Questionnaire(BaseModel):
         """给前端的版本：不含分值和否决规则，避免客户「按分作答」。"""
         return {
             "version": self.version,
-            "title": self.title,
-            "disclaimer": self.disclaimer,
+            "title": L(self.title, self.title_en),
+            "disclaimer": L(self.disclaimer, self.disclaimer_en),
             "questions": [
                 {
                     "id": q.id,
-                    "dimension": q.dimension,
-                    "text": q.text,
-                    "options": [{"id": o.id, "text": o.text} for o in q.options],
+                    "dimension": L(q.dimension, q.dimension_en),
+                    "text": L(q.text, q.text_en),
+                    "options": [{"id": o.id, "text": L(o.text, o.text_en)} for o in q.options],
                 }
                 for q in self.questions
             ],
@@ -107,16 +124,28 @@ def load_questionnaire(version: str = "v1") -> Questionnaire:
 def score_answers(questionnaire: Questionnaire, answers: dict[str, str]) -> AssessmentResult:
     expected = {q.id for q in questionnaire.questions}
     if missing := sorted(expected - answers.keys()):
-        raise AssessmentError(f"以下题目未作答：{', '.join(missing)}")
+        raise AssessmentError(
+            L(
+                f"以下题目未作答：{', '.join(missing)}",
+                f"Unanswered questions: {', '.join(missing)}",
+            )
+        )
     if extra := sorted(answers.keys() - expected):
-        raise AssessmentError(f"未知题目：{', '.join(extra)}")
+        raise AssessmentError(
+            L(f"未知题目：{', '.join(extra)}", f"Unknown questions: {', '.join(extra)}")
+        )
 
     score = 0
     vetoed = False
     for q in questionnaire.questions:
         option = q.option(answers[q.id])
         if option is None:
-            raise AssessmentError(f"{q.id} 的选项 {answers[q.id]} 不存在")
+            raise AssessmentError(
+                L(
+                    f"{q.id} 的选项 {answers[q.id]} 不存在",
+                    f"Option {answers[q.id]} doesn't exist for {q.id}",
+                )
+            )
         score += option.score
         if q.veto_option and option.id == q.veto_option:
             vetoed = True
@@ -128,8 +157,8 @@ def score_answers(questionnaire: Questionnaire, answers: dict[str, str]) -> Asse
         questionnaire_version=questionnaire.version,
         score=score,
         rating=rating,
-        rating_name=band.name,
-        description=band.description,
+        rating_name=band.display_name,
+        description=band.display_description,
         max_product_risk=band.max_product_risk,
         vetoed=vetoed,
         warnings=_consistency_warnings(answers, score_rating),
@@ -140,17 +169,33 @@ def score_answers(questionnaire: Questionnaire, answers: dict[str, str]) -> Asse
 def _consistency_warnings(answers: dict[str, str], score_rating: str) -> list[str]:
     warnings = []
     if answers.get("q5") == "A" and (answers.get("q7") == "D" or answers.get("q8") == "D"):
-        warnings.append("您表示这笔资金 1 年内可能使用，但又选择了高波动的投资倾向，请核对答案。")
+        warnings.append(
+            L(
+                "您表示这笔资金 1 年内可能使用，但又选择了高波动的投资倾向，请核对答案。",
+                "You said you may need this money within a year, but chose a high-volatility "
+                "preference. Please check your answers.",
+            )
+        )
     if answers.get("q9") in {"A", "D"} and RATING_ORDER.index(score_rating) >= 2:
         warnings.append(
-            "您认为理财产品保本或不清楚其风险，但评估结果为中高风险承受能力，请核对答案。"
+            L(
+                "您认为理财产品保本或不清楚其风险，但评估结果为中高风险承受能力，请核对答案。",
+                "You think wealth products are principal-protected or aren't sure of their risk, "
+                "yet your result shows medium-to-high risk tolerance. Please check your answers.",
+            )
         )
     return warnings
 
 
 def _notes(answers: dict[str, str]) -> list[str]:
     if answers.get("q1") == "E":
-        return ["建议您在购买任何理财产品前，与家人或理财经理充分沟通。"]
+        return [
+            L(
+                "建议您在购买任何理财产品前，与家人或理财经理充分沟通。",
+                "Before buying any wealth product, we suggest talking it through with family "
+                "or your relationship manager.",
+            )
+        ]
     return []
 
 

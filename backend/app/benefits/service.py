@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
+from app.core.i18n import L, is_en
 from app.customers.base import BaseProfile
 from app.products.presenter import format_money
 
@@ -22,24 +23,47 @@ NEAR_RATIO = Decimal("0.2")
 class Tier(BaseModel):
     code: str
     name: str
+    name_en: str
     card_name: str
+    card_name_en: str
     min_aum: Decimal
     benefits: list[str]
+    benefits_en: list[str]
+
+    @property
+    def display_name(self) -> str:
+        return L(self.name, self.name_en)
+
+    @property
+    def display_card(self) -> str:
+        return L(self.card_name, self.card_name_en)
+
+    @property
+    def display_benefits(self) -> list[str]:
+        return self.benefits_en if is_en() else self.benefits
 
 
 class Campaign(BaseModel):
     id: str
     name: str
+    name_en: str
     start: date
     end: date
     reward: str
+    reward_en: str
     rule: str
+    rule_en: str
     eligible_tiers: list[str]
+
+    @property
+    def display_name(self) -> str:
+        return L(self.name, self.name_en)
 
 
 class BenefitsConfig(BaseModel):
     as_of: date
     evaluation_rule: str
+    evaluation_rule_en: str
     tiers: list[Tier]
     campaigns: list[Campaign]
 
@@ -56,6 +80,12 @@ def load_benefits(path: Path = BENEFITS_PATH) -> BenefitsConfig:
     config = BenefitsConfig.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
     config.tiers.sort(key=lambda t: t.min_aum)
     return config
+
+
+def tier_label(name: str) -> str:
+    """银行系统里的等级名称（如「财富客户」）按当前语言显示。"""
+    tier = next((t for t in load_benefits().tiers if t.name == name), None)
+    return tier.display_name if tier else name
 
 
 class TierStatus(BaseModel):
@@ -105,34 +135,37 @@ def benefits_block(status: TierStatus, today: date) -> dict:
     nxt = status.next_tier
     return {
         "type": "tier_benefits",
-        "tier": {"name": status.tier.name, "card_name": status.tier.card_name},
+        "tier": {"name": status.tier.display_name, "card_name": status.tier.display_card},
         "aum": format_money(status.aum),
-        "benefits": status.tier.benefits,
+        "benefits": status.tier.display_benefits,
         "next_tier": {
-            "name": nxt.name,
-            "card_name": nxt.card_name,
+            "name": nxt.display_name,
+            "card_name": nxt.display_card,
             "threshold": format_money(nxt.min_aum),
             "gap": format_money(status.gap),
             "progress": float(min(status.aum / nxt.min_aum, Decimal(1))),
-            "benefits": nxt.benefits,
+            "benefits": nxt.display_benefits,
         }
         if nxt
         else None,
         "projection": {
             "aum": format_money(status.projected_aum),
-            "tier_name": status.projected_tier.name,
+            "tier_name": status.projected_tier.display_name,
             "reaches_next": status.reaches_next_with_plan,
         }
         if status.projected_aum is not None
         else None,
         "campaigns": [
             {
-                "name": c.name,
-                "period": f"{c.start:%Y-%m-%d} 至 {c.end:%Y-%m-%d}",
-                "reward": c.reward,
-                "rule": c.rule,
+                "name": c.display_name,
+                "period": L(
+                    f"{c.start:%Y-%m-%d} 至 {c.end:%Y-%m-%d}",
+                    f"{c.start:%b} {c.start.day} – {c.end:%b} {c.end.day}, {c.end.year}",
+                ),
+                "reward": L(c.reward, c.reward_en),
+                "rule": L(c.rule, c.rule_en),
             }
             for c in active_campaigns(status.tier, today)
         ],
-        "evaluation_rule": config.evaluation_rule,
+        "evaluation_rule": L(config.evaluation_rule, config.evaluation_rule_en),
     }

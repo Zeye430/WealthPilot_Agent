@@ -1,7 +1,7 @@
 "use client";
 
 import { clearNeeds, formatDate, formatMoney } from "@/lib/api";
-import { defineCopy, useCopy, useLocale } from "@/lib/i18n";
+import { defineCopy, useCopy, useLocale, initial } from "@/lib/i18n";
 import type { CustomerState } from "@/lib/types";
 
 import { Avatar, Button, ChevronRight } from "./ui";
@@ -43,7 +43,7 @@ const COPY = defineCopy({
     toNext: (name: string, gap: string) => `${gap} to ${name}`,
     risk: "Risk profile",
     canBuy: (range: string) => `Eligible for ${range}`,
-    validUntil: (d: string) => `Valid until ${d}`,
+    validUntil: (d: string) => `valid until ${d}`,
     retake: "Retake",
     notAssessed: "Risk profile not completed",
     expired: "Risk profile expired",
@@ -187,7 +187,7 @@ export function RmRow({ state, onContact }: { state: CustomerState | null; onCon
   if (!rm) return null;
   return (
     <button type="button" onClick={onContact} className="flex w-full items-center gap-3 rounded-2xl py-2 text-left hover:bg-fill">
-      <Avatar text={rm.rm_name.slice(0, 1)} />
+      <Avatar text={initial(rm.rm_name)} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-[15px] font-bold">{rm.rm_name}</span>
         <span className="text-[13px] text-ink-3">{c.rmTitle}</span>

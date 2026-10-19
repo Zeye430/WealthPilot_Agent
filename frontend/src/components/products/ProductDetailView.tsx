@@ -1,6 +1,6 @@
 "use client";
 
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, useCopy, useSeparators } from "@/lib/i18n";
 import type { ProductDetail } from "@/lib/types";
 
 const COPY = defineCopy({
@@ -47,6 +47,7 @@ const COPY = defineCopy({
 /** 产品详情。超出客户风险等级的产品也可查看条款，但顶部显著提示「不作推荐、无权限购买」。 */
 export function ProductDetailView({ product }: { product: ProductDetail }) {
   const c = useCopy(COPY);
+  const sep = useSeparators();
   const basics: [string, string][] = [
     [c.code, product.code],
     [c.issuer, product.issuer],
@@ -108,7 +109,10 @@ export function ProductDetailView({ product }: { product: ProductDetail }) {
           {product.metrics.map((m) => (
             <li key={m.label}>
               <p>
-                <span className="text-ink-2">{m.label}：</span>
+                <span className="text-ink-2">
+                  {m.label}
+                  {sep.colon}
+                </span>
                 <span className="figures font-bold">{m.text}</span>
               </p>
               {m.basis && <p className="mt-0.5 text-xs text-ink-3">{c.basis(m.basis)}</p>}

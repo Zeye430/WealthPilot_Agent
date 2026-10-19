@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { listReminders } from "@/lib/api";
-import { defineCopy, useCopy } from "@/lib/i18n";
+import { defineCopy, initial, stripFictional, useCopy, useLocale } from "@/lib/i18n";
 import type { SessionUser } from "@/lib/api";
 import type { CustomerState, Reminder } from "@/lib/types";
 
@@ -69,13 +69,14 @@ export function MeView({
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [hour] = useState(() => new Date().getHours());
 
+  const { locale } = useLocale();
   useEffect(() => {
     listReminders()
       .then(setReminders)
       .catch(() => setReminders([]));
-  }, []);
+  }, [locale]);
 
-  const name = user?.display_name.replace(/（虚构）$/, "") ?? "";
+  const name = user ? stripFictional(user.display_name) : "";
   const actions: { label: string; icon: IconName; onClick: () => void; primary?: boolean }[] = [
     { label: c.ask, icon: "chat", onClick: onAsk, primary: true },
     { label: c.products, icon: "grid", onClick: onProducts },
@@ -133,7 +134,7 @@ export function MeView({
         <div className="flex flex-col gap-3 border-t border-line pt-5 text-sm">
           {user && (
             <div className="flex items-center gap-3">
-              <Avatar text={name.slice(0, 1) || "?"} tone="navy" />
+              <Avatar text={initial(name)} tone="navy" />
               <span className="font-bold">{user.display_name}</span>
             </div>
           )}
