@@ -1,0 +1,109 @@
+{
+  "label": "fake-baseline",
+  "note": "假模型（路由 0.2 秒 + 主模型 1.5 秒），单个 uvicorn 进程，默认连接池（5+10）",
+  "server": {
+    "status": "ready",
+    "checks": {
+      "database": {
+        "ok": true,
+        "required": true
+      },
+      "knowledge_index": {
+        "ok": false,
+        "required": false,
+        "chunks": 0
+      },
+      "llm": {
+        "ok": true,
+        "required": true,
+        "provider": "fake",
+        "model": "fake"
+      },
+      "llm_circuit": {
+        "ok": true,
+        "required": false,
+        "state": "CLOSED"
+      },
+      "speech_model": {
+        "ok": true,
+        "required": false
+      }
+    },
+    "version": "0.8.0",
+    "git_sha": "dev",
+    "catalog_version": "2026-10-18.1",
+    "uptime_seconds": 10
+  },
+  "results": [
+    {
+      "concurrency": 1,
+      "requests": 40,
+      "ok": 40,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 0.57,
+      "p50_s": 1.76,
+      "p95_s": 1.77,
+      "p99_s": 1.78,
+      "max_s": 1.79,
+      "mean_s": 1.75,
+      "elapsed_s": 70.1
+    },
+    {
+      "concurrency": 5,
+      "requests": 40,
+      "ok": 40,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 2.83,
+      "p50_s": 1.76,
+      "p95_s": 1.8,
+      "p99_s": 1.81,
+      "max_s": 1.81,
+      "mean_s": 1.76,
+      "elapsed_s": 14.2
+    },
+    {
+      "concurrency": 10,
+      "requests": 40,
+      "ok": 40,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 5.49,
+      "p50_s": 1.8,
+      "p95_s": 1.87,
+      "p99_s": 1.88,
+      "max_s": 1.89,
+      "mean_s": 1.81,
+      "elapsed_s": 7.3
+    },
+    {
+      "concurrency": 20,
+      "requests": 40,
+      "ok": 40,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 7.15,
+      "p50_s": 1.9,
+      "p95_s": 3.63,
+      "p99_s": 3.73,
+      "max_s": 3.75,
+      "mean_s": 2.3,
+      "elapsed_s": 5.6
+    },
+    {
+      "concurrency": 40,
+      "requests": 40,
+      "ok": 40,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 7.03,
+      "p50_s": 3.64,
+      "p95_s": 5.5,
+      "p99_s": 5.56,
+      "max_s": 5.59,
+      "mean_s": 3.53,
+      "elapsed_s": 5.7
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "label": "fake-pool-tuned",
+  "note": "假模型（路由 0.2 秒 + 主模型 1.5 秒），单个 uvicorn 进程，释放连接 + 连接池 10+20、等待 10 秒",
+  "server": {
+    "status": "ready",
+    "checks": {
+      "database": {
+        "ok": true,
+        "required": true
+      },
+      "knowledge_index": {
+        "ok": false,
+        "required": false,
+        "chunks": 0
+      },
+      "llm": {
+        "ok": true,
+        "required": true,
+        "provider": "fake",
+        "model": "fake"
+      },
+      "llm_circuit": {
+        "ok": true,
+        "required": false,
+        "state": "CLOSED"
+      },
+      "speech_model": {
+        "ok": true,
+        "required": false
+      }
+    },
+    "version": "0.8.0",
+    "git_sha": "dev",
+    "catalog_version": "2026-10-18.1",
+    "uptime_seconds": 34
+  },
+  "results": [
+    {
+      "concurrency": 40,
+      "requests": 120,
+      "ok": 120,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 14.32,
+      "p50_s": 2.58,
+      "p95_s": 2.96,
+      "p99_s": 3.07,
+      "max_s": 3.08,
+      "mean_s": 2.59,
+      "elapsed_s": 8.4
+    },
+    {
+      "concurrency": 60,
+      "requests": 120,
+      "ok": 120,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 9.66,
+      "p50_s": 3.13,
+      "p95_s": 8.44,
+      "p99_s": 9.26,
+      "max_s": 10.0,
+      "mean_s": 4.32,
+      "elapsed_s": 12.4
+    },
+    {
+      "concurrency": 80,
+      "requests": 120,
+      "ok": 120,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 18.23,
+      "p50_s": 3.53,
+      "p95_s": 4.5,
+      "p99_s": 5.53,
+      "max_s": 5.64,
+      "mean_s": 3.5,
+      "elapsed_s": 6.6
+    },
+    {
+      "concurrency": 120,
+      "requests": 120,
+      "ok": 87,
+      "errors": {
+        "503": 33
+      },
+      "error_rate": 0.275,
+      "throughput_rps": 4.54,
+      "p50_s": 16.41,
+      "p95_s": 17.63,
+      "p99_s": 17.81,
+      "max_s": 17.84,
+      "mean_s": 16.13,
+      "elapsed_s": 19.2
+    }
+  ]
+}

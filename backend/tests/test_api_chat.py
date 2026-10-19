@@ -209,7 +209,9 @@ def test_reset_clears_assessment(client):
 
 
 def test_health():
-    assert TestClient(app).get("/health").json()["database"] == "ok"
+    assert TestClient(app).get("/health").json() == {"status": "ok"}
+    ready = TestClient(app).get("/health/ready").json()
+    assert ready["checks"]["database"]["ok"] is True
 
 
 # ---------- 产品 API（Phase 3） ----------

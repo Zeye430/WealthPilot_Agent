@@ -12,7 +12,7 @@ const COPY = defineCopy({
     tagline: "知岸银行（虚构）智能理财助手",
     welcome: "欢迎回来",
     pick: "选择演示账号",
-    roles: { customer: "客户", rm: "理财经理" },
+    roles: { customer: "客户", rm: "理财经理", ops: "运维值班" },
     username: "账号",
     password: "密码",
     accessCode: "访问码",
@@ -26,7 +26,7 @@ const COPY = defineCopy({
     tagline: "AI wealth assistant for Zhian Bank (fictional)",
     welcome: "Welcome back",
     pick: "Choose a demo account",
-    roles: { customer: "Customer", rm: "Relationship manager" },
+    roles: { customer: "Customer", rm: "Relationship manager", ops: "Operations" },
     username: "Username",
     password: "Password",
     accessCode: "Access code",
@@ -63,7 +63,8 @@ export function LoginForm({ next }: { next: string | null }) {
       const user = await login(username, password, accessCode);
       // 只允许站内跳转，防止登录后被重定向到外部网站
       const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
-      router.replace(user.role === "rm" ? "/rm" : (safeNext ?? "/"));
+      const home = { rm: "/rm", ops: "/ops" } as Record<string, string>;
+      router.replace(home[user.role] ?? safeNext ?? "/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : c.failed);
       setBusy(false);
@@ -99,7 +100,7 @@ export function LoginForm({ next }: { next: string | null }) {
                         username === a.username ? "bg-brand-soft ring-2 ring-brand" : "bg-fill hover:bg-line"
                       }`}
                     >
-                      <Avatar text={initial(a.display_name)} tone={a.role === "rm" ? "navy" : "brand"} />
+                      <Avatar text={initial(a.display_name)} tone={a.role === "customer" ? "brand" : "navy"} />
                       <span className="min-w-0">
                         <span className="block truncate font-bold">{stripFictional(a.display_name)}</span>
                         <span className="text-xs text-ink-3">{c.roles[a.role]}</span>

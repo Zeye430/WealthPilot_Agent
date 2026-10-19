@@ -1,5 +1,6 @@
 """产品查询服务：LLM 工具和 REST API 共用，保证两条路径的过滤规则完全一致。"""
 
+import re
 from collections import Counter
 
 from pydantic import BaseModel
@@ -37,7 +38,10 @@ def _matches(product: Product, filters: SearchFilters) -> bool:
             f"{product.name}{product.issuer}{product.type_label}{product.investment_scope}"
             f"{product.name_en}{product.investment_scope_en}"
         ).lower()
-        if filters.keyword.lower() not in haystack:
+        keyword = filters.keyword.lower()
+        # 英文关键词忽略空格与标点（「1 Year」与「1-Year」视为相同）
+        loose = re.sub(r"[^0-9a-z]", "", keyword) if re.search(r"[a-z]", keyword) else ""
+        if keyword not in haystack and not (loose and loose in re.sub(r"[^0-9a-z]", "", haystack)):
             return False
     return True
 

@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -179,7 +180,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(64))
     password_hash: Mapped[str] = mapped_column(String(256))
-    role: Mapped[str] = mapped_column(String(16))  # customer | rm
+    role: Mapped[str] = mapped_column(String(16))  # customer | rm | ops
     customer_id: Mapped[str | None] = mapped_column(String(64))
     rm_id: Mapped[str | None] = mapped_column(String(32))
     disabled: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -197,3 +198,39 @@ class AuthSession(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TurnMetric(Base):
+    """每轮对话的运行指标（P8-3）：耗时、模型调用、token 与费用估算、工具、审查结论。
+
+    刻意不存对话内容和客户编号：运维看板只看汇总，追查具体问题时凭 request_id / conversation_id
+    关联有权限控制的审计表（policy_decisions、tool_calls）。
+    """
+
+    __tablename__ = "turn_metrics"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    request_id: Mapped[str] = mapped_column(String(64), index=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    locale: Mapped[str] = mapped_column(String(4))
+    permission: Mapped[str | None] = mapped_column(String(32))
+    intent: Mapped[str | None] = mapped_column(String(32))
+    # ANSWERED | OUT_OF_SCOPE | ASSESSMENT_REQUIRED | FALLBACK | TOOL_LIMIT | TIMEOUT
+    # | ERROR（模型或系统异常）| BREAKER_OPEN（熔断中，未调用模型）
+    outcome: Mapped[str] = mapped_column(String(24), index=True)
+    guard_decision: Mapped[str | None] = mapped_column(
+        String(16)
+    )  # PASS | REWRITE | REDACT | FALLBACK
+    violation_codes: Mapped[list] = mapped_column(JSONB, default=list)
+    latency_ms: Mapped[int] = mapped_column(Integer)
+    llm_ms: Mapped[int] = mapped_column(Integer, default=0)
+    llm_calls: Mapped[int] = mapped_column(Integer, default=0)
+    llm_errors: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=Decimal(0))
+    tool_calls: Mapped[int] = mapped_column(Integer, default=0)
+    tool_errors: Mapped[int] = mapped_column(Integer, default=0)
+    tools: Mapped[list] = mapped_column(JSONB, default=list)  # [{"name", "status"}]
+    model: Mapped[str] = mapped_column(String(64), default="")

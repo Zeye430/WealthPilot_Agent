@@ -19,6 +19,7 @@ from app.db.models import AuthSession, User
 
 CUSTOMER = "customer"
 RM = "rm"
+OPS = "ops"  # 运维 / 合规值班：只看汇总指标与审计编号，不看对话内容与客户资料
 
 
 @dataclass(frozen=True)

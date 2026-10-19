@@ -89,8 +89,8 @@ export function AppShell() {
     // 未登录时接口返回 401，统一跳转登录页；理财经理账号进入看板
     getSessionUser()
       .then((u) => {
-        if (u.role === "rm") {
-          router.replace("/rm");
+        if (u.role !== "customer") {
+          router.replace(u.role === "rm" ? "/rm" : "/ops");
           return;
         }
         setUser(u);

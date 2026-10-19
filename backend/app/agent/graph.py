@@ -10,13 +10,17 @@
 """
 
 import json
+import logging
 import operator
 import re
+import time
+from collections.abc import Callable
 from typing import Annotated
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import ToolException
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -27,6 +31,7 @@ from app.agent.prompts import (
     SAFE_FALLBACK_REPLY,
     TOOL_LIMIT_INSTRUCTION,
     TOOL_LIMIT_REPLY,
+    TURN_TIMEOUT_REPLY,
     system_prompt,
 )
 from app.compliance import output_guard
@@ -69,6 +74,8 @@ def general_note() -> dict:
     }
 
 
+logger = logging.getLogger(__name__)
+
 CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 
 
@@ -83,6 +90,8 @@ class AgentState(MessagesState):
     reply: str
     ui_blocks: list[dict]
     guard_attempts: int
+    deadline: float  # 单轮截止时间（time.monotonic），由 API 层按 chat_turn_budget_seconds 设置
+    timed_out: bool
     policy_decisions: Annotated[list[dict], operator.add]
 
 
@@ -103,13 +112,18 @@ def _decision(checkpoint: str, decision: str, reason_codes: list[str] | None = N
     }
 
 
-def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_calls: int = 6):
+def build_graph(
+    model: BaseChatModel,
+    router_model: BaseChatModel,
+    max_tool_calls: int = 6,
+    clock: Callable[[], float] = time.monotonic,
+):
     pre_tools = [t for t in ALL_TOOLS if tool_allowed(Permission.ASSESSMENT_REQUIRED, t.name)]
     bound = {
         Permission.ASSESSMENT_REQUIRED: model.bind_tools(pre_tools),
         Permission.ASSESSED: model.bind_tools(ALL_TOOLS),
     }
-    tool_node = ToolNode(ALL_TOOLS)
+    tool_node = ToolNode(ALL_TOOLS, handle_tool_errors=_tool_error_message)
 
     def scope_router(state: AgentState):
         intent = router.classify(router_model, state["messages"])
@@ -138,6 +152,14 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         }
 
     def agent(state: AgentState):
+        deadline = state.get("deadline")
+        if deadline is not None and clock() > deadline:
+            # 超过单轮时长上限：不再调用模型；已执行的工具结果（产品列表、测算等）照常展示
+            return {
+                "timed_out": True,
+                "reply": localized(TURN_TIMEOUT_REPLY),
+                "policy_decisions": [_decision("TURN", "TIMEOUT")],
+            }
         prompt = system_prompt(
             state["permission"], state.get("risk_rating"), state.get("customer_context", "")
         )
@@ -145,6 +167,8 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
         return {"messages": [response]}
 
     def route_after_agent(state: AgentState) -> str:
+        if state.get("timed_out"):
+            return "finalize"
         last = state["messages"][-1]
         if not isinstance(last, AIMessage) or not last.tool_calls:
             return "output_guard"
@@ -198,6 +222,7 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
             _grounding(state),
             _retrieved_ids(state),
             state.get("risk_rating"),
+            facts=_facts(state),
         )
         if getattr(summary, "tool_calls", None) or not text or violations:
             return {
@@ -213,7 +238,12 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
 
         def check(text: str) -> list[str]:
             return output_guard.check_output(
-                text, state["permission"], _grounding(state), _retrieved_ids(state), rating
+                text,
+                state["permission"],
+                _grounding(state),
+                _retrieved_ids(state),
+                rating,
+                facts=_facts(state),
             )
 
         violations = check(reply)
@@ -225,7 +255,9 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
             return {
                 "guard_attempts": 1,
                 "messages": [
-                    SystemMessage(output_guard.describe(violations, reply, rating, grounding))
+                    SystemMessage(
+                        output_guard.describe(violations, reply, rating, grounding, _facts(state))
+                    )
                 ],
                 "policy_decisions": [_decision("OUTPUT", "REWRITE", [*violations, *snippets])],
             }
@@ -293,12 +325,31 @@ def build_graph(model: BaseChatModel, router_model: BaseChatModel, max_tool_call
     )
     graph.add_edge("out_of_scope", "finalize")
     graph.add_edge("assessment_required", "finalize")
-    graph.add_conditional_edges("agent", route_after_agent, ["tools", "tool_limit", "output_guard"])
+    graph.add_conditional_edges(
+        "agent", route_after_agent, ["tools", "tool_limit", "output_guard", "finalize"]
+    )
     graph.add_edge("tools", "agent")
     graph.add_edge("tool_limit", "finalize")
     graph.add_conditional_edges("output_guard", route_after_guard, ["agent", "finalize"])
     graph.add_edge("finalize", END)
     return graph.compile()
+
+
+def _tool_error_message(error: Exception) -> str:
+    """工具执行异常的统一处理（P8-4 故障注入发现）。
+
+    LangGraph 默认只处理参数校验错误，工具内部的其他异常（如向量库不可用）会让整轮对话失败。
+    这里记录完整异常（带请求编号），只给模型一句不含内部细节的说明，由模型照常作答；
+    ToolMessage 状态为 error，运行指标中计为工具失败。业务上预期的错误（ToolException）原样返回。
+    """
+    if isinstance(error, ToolException):
+        return str(error)
+    logger.error("tool failed: %s", type(error).__name__, exc_info=error)
+    return L(
+        "该工具暂时不可用，请不要编造这部分信息，可如实告知客户稍后再试或联系理财经理。",
+        "This tool is temporarily unavailable. Do not make up this information; tell the "
+        "customer to try again later or contact their relationship manager.",
+    )
 
 
 def latest_allocation_only(blocks: list[dict]) -> list[dict]:
@@ -371,6 +422,12 @@ def _grounding(state: AgentState) -> str:
     # 客户资料（含银行系统中的已有持仓）：提到客户自己持有的产品不算泄露（场景评估 R01）
     profile = state.get("customer_context", "")
     return "\n".join([profile, *(_text(m) for m in earlier if not isinstance(m, SystemMessage))])
+
+
+def _facts(state: AgentState) -> str:
+    """金额核对的依据：客户资料 + 此前所有消息与工具结果（不分测评状态，测算工具测评前也可用）。"""
+    earlier = [m for m in state["messages"][:-1] if not isinstance(m, SystemMessage)]
+    return "\n".join([state.get("customer_context", ""), *(_text(m) for m in earlier)])
 
 
 def _text(message: BaseMessage) -> str:

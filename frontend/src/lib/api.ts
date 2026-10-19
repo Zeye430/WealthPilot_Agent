@@ -32,6 +32,11 @@ function redirectToLogin() {
   }
 }
 
+/** 前端自己生成的错误提示也要随界面语言（后端提示已按 Cookie 返回对应语言） */
+function en(): boolean {
+  return typeof document !== "undefined" && document.documentElement.lang === "en";
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
@@ -41,7 +46,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers: { "Content-Type": "application/json", ...init.headers },
     });
   } catch {
-    throw new ApiError("无法连接服务器，请确认后端已启动。");
+    throw new ApiError(en() ? "Can't reach the server. Check that the backend is running." : "无法连接服务器，请确认后端已启动。");
   }
   if (res.status === 401 && !path.startsWith("/api/v1/auth/")) redirectToLogin();
   if (!res.ok) {
@@ -51,6 +56,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       .catch(() => null);
     if (detail) throw new ApiError(detail, res.status);
     // Next.js 代理连不上后端时返回 500 且没有 detail，最常见的原因是后端未启动
+    if (en()) {
+      throw new ApiError(res.status >= 500 ? `The server isn't responding (${res.status}). Please try again shortly.` : `Request failed (${res.status})`);
+    }
     throw new ApiError(
       res.status >= 500
         ? `后端服务无响应（${res.status}）：请确认后端已启动，可运行 ./scripts/dev.sh 一键启动。`
@@ -62,7 +70,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 // ---------- 登录 ----------
 
-export type SessionUser = { username: string; display_name: string; role: "customer" | "rm" };
+export type SessionUser = { username: string; display_name: string; role: "customer" | "rm" | "ops" };
 
 export type LoginConfig = {
   access_code_required: boolean;
@@ -236,4 +244,60 @@ export type RmHandoffDetail = HandoffView & {
   sync_scope: string[];
   messages: { role: "user" | "assistant" | "rm"; content: string }[];
   events: { to: string; actor: string; at: string }[];
+};
+
+// ---------- 运维看板 ----------
+
+export type HealthCheck = { ok: boolean; required: boolean; [key: string]: unknown };
+
+export type OpsOverview = {
+  window_hours: number;
+  bucket_seconds: number;
+  kpis: {
+    turns: number;
+    p50_ms: number;
+    p95_ms: number;
+    max_ms: number;
+    fallback_rate: number;
+    degraded_rate: number;
+    error_rate: number;
+    rewrite_rate: number;
+    llm_error_rate: number;
+    tool_error_rate: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    cost_usd: number;
+    cost_per_turn_usd: number;
+  };
+  outcomes: Record<string, number>;
+  intents: Record<string, number>;
+  guard: { decisions: Record<string, number>; rules: Record<string, number> };
+  tools: Record<string, Record<string, number>>;
+  series: { start: string; turns: number; p50_ms: number | null; p95_ms: number | null; problems: number }[];
+  recent: {
+    at: string;
+    request_id: string;
+    conversation_id: string | null;
+    locale: string;
+    intent: string | null;
+    outcome: string;
+    guard_decision: string | null;
+    violation_codes: string[];
+    latency_ms: number;
+    llm_calls: number;
+    tokens: number;
+    tool_errors: number;
+  }[];
+  health: {
+    status: "ready" | "not_ready";
+    checks: Record<string, HealthCheck>;
+    version: string;
+    git_sha: string;
+    catalog_version: string;
+    uptime_seconds: number;
+  };
+};
+
+export const opsApi = {
+  overview: (hours: number) => request<OpsOverview>(`/api/v1/ops/overview?hours=${hours}`),
 };

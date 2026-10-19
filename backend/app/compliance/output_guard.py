@@ -9,10 +9,12 @@
 import re
 from collections.abc import Collection
 from decimal import Decimal
+from functools import lru_cache
 
 from app.assessment.scoring import rating_allows
 from app.compliance.policy import Permission
 from app.core.i18n import is_en, register
+from app.knowledge.kb import KB_PATH
 from app.products.catalog import load_catalog
 
 # 命中词所在分句中、位于其之前出现否定词，视为否定陈述，不算违规。
@@ -119,7 +121,9 @@ RECOMMENDATION_EN = [
     for p in (
         r"\b(recommend|suggest)\b[^.;!?\n]{0,15}\b(buy|buying|invest|investing|choose|choosing|"
         r"go with|put (your|the) money)",
-        r"\b(suitable|right|best) (product|option|choice)s? for you\b",
+        # 与中文「适合您的产品是 / 有」一致：要有断言动词。
+        # 「完成测评后，我可以为您筛选 suitable products for you」是邀请测评，不算推荐（评估 R03）
+        r"\b(suitable|right|best) (product|option|choice)s? for you\s+(is|are|would be|include)\b",
     )
 ]
 
@@ -471,6 +475,67 @@ def ungrounded_figures(text: str, grounding: str) -> list[str]:
     return [f"{n}%" for n in figures if Decimal(n) not in known]
 
 
+# 金额必须有来源（P8-4）：回答中的人民币金额须出现在工具结果、客户资料或客户自己说过的话里。
+# 「金额计算一律用代码」是不可违反的规则，P8-2b 场景评估发现模型偶尔自己算「到手金额」并算错
+# （10 万元赎回费 500 元，模型写成到手 95,500 元）。
+# 允许 0.1% 的四舍五入差异（162.89 万 ≈ 1,628,894.63，误差 0.0003%）。
+# 曾用 0.5%：英文评估中模型把到手 99,500 写成 995,000，与 1,000,000 恰好相差 0.5% 而漏拦。
+_NUM = r"(\d[\d,]*(?:\.\d+)?)"
+AMOUNT_ZH = re.compile(_NUM + r"\s*(亿元|亿|万元|万(?!份)|元)")
+AMOUNT_YEN = re.compile(r"[¥￥]\s*" + _NUM + r"(?:\s*(万|亿|million|billion|[kK])\b)?")
+AMOUNT_EN = re.compile(_NUM + r"\s*(million|billion)?\s*(?:yuan|CNY|RMB)\b", re.I)
+BARE_NUMBER = re.compile(_NUM)
+UNIT = {
+    "亿元": 10**8,
+    "亿": 10**8,
+    "万元": 10**4,
+    "万": 10**4,
+    "元": 1,
+    "million": 10**6,
+    "billion": 10**9,
+    "k": 10**3,
+    None: 1,
+}
+AMOUNT_TOLERANCE = Decimal("0.001")
+
+
+def _to_decimal(number: str) -> Decimal | None:
+    try:
+        return Decimal(number.replace(",", ""))
+    except ArithmeticError:
+        return None
+
+
+def _amounts(text: str) -> list[tuple[str, Decimal]]:
+    found = []
+    for pattern in (AMOUNT_ZH, AMOUNT_YEN, AMOUNT_EN):
+        for m in pattern.finditer(text):
+            value = _to_decimal(m.group(1))
+            unit = (m.group(2) or None) if m.lastindex and m.lastindex >= 2 else None
+            if value is not None:
+                found.append((m.group().strip(), value * UNIT[unit.lower() if unit else None]))
+    return found
+
+
+@lru_cache
+def _reference_amounts() -> frozenset[Decimal]:
+    """知识库中的金额（已人工核对原文，如存款保险 50 万元）：模型直接引用不算编造。"""
+    text = KB_PATH.read_text(encoding="utf-8")
+    return frozenset(v for _, v in _amounts(text))
+
+
+def ungrounded_amounts(reply: str, facts: str) -> list[str]:
+    known = {v for _, v in _amounts(facts)} | _reference_amounts()
+    known |= {v for n in BARE_NUMBER.findall(facts) if (v := _to_decimal(n)) is not None}
+    hits = []
+    for text, value in _amounts(reply):
+        if value == 0:
+            continue
+        if not any(abs(value - k) <= max(abs(k) * AMOUNT_TOLERANCE, Decimal(1)) for k in known):
+            hits.append(text)
+    return list(dict.fromkeys(hits))
+
+
 def unsuitable_recommendations(text: str, risk_rating: str | None) -> list[str]:
     """推荐了超出客户评级的产品的句子（同句说明「超出 / 不推荐」等限制的不算）。"""
     if not risk_rating:
@@ -654,14 +719,17 @@ def _affirmative_hits(text: str, patterns: list[re.Pattern]) -> list[str]:
 def mentioned_products(text: str) -> set[str]:
     """回答中提到的目录产品（按代码或完整名称匹配）。"""
     compact = text.replace(" ", "")
-    lowered = compact.lower()
+    lowered = _alnum(text)
     return {
         p.code
         for p in load_catalog().products
-        if p.code in text
-        or p.name.replace(" ", "") in compact
-        or p.name_en.replace(" ", "").lower() in lowered
+        if p.code in text or p.name.replace(" ", "") in compact or _alnum(p.name_en) in lowered
     }
+
+
+def _alnum(text: str) -> str:
+    """英文名比较时忽略大小写、空格与标点（模型常写成 1 Year 而不是 1-Year）。"""
+    return re.sub(r"[^0-9a-z]", "", text.lower())
 
 
 def real_institutions(text: str) -> list[str]:
@@ -684,6 +752,7 @@ def check_output(
     grounding: str = "",
     retrieved: Collection[str] = (),
     risk_rating: str | None = None,
+    facts: str | None = None,
 ) -> list[str]:
     """返回违规代码列表；空列表表示通过。
 
@@ -691,6 +760,7 @@ def check_output(
     回答中提到的产品必须在其中出现过，防止模型凭空编造或测评前泄露产品信息。
     retrieved 是本轮检索到的资料编号：回答中的 [编号] 必须在其中，否则视为编造出处。
     risk_rating 是客户的有效评级：用于检查是否推荐了超出评级的产品。
+    facts 是核对金额的依据（客户资料 + 此前全部消息与工具结果，不分测评状态）；不传时用 grounding。
     """
     violations = []
     if _affirmative_hits(reply, _rules(PROHIBITED_CLAIMS, PROHIBITED_CLAIMS_EN)):
@@ -720,6 +790,8 @@ def check_output(
         violations.append("O-REASSESSMENT_STEERING")
     if _affirmative_hits(reply, _rules(FALSE_HANDOFF, FALSE_HANDOFF_EN)):
         violations.append("O-FALSE_HANDOFF_CLAIM")
+    if ungrounded_amounts(reply, grounding if facts is None else facts):
+        violations.append("O-UNGROUNDED_AMOUNT")
     if real_institutions(reply):
         violations.append("O-REAL_INSTITUTION")
     if fake_citations(reply, retrieved):
@@ -728,7 +800,10 @@ def check_output(
 
 
 def offending_snippets(
-    reply: str, risk_rating: str | None = None, grounding: str | None = None
+    reply: str,
+    risk_rating: str | None = None,
+    grounding: str | None = None,
+    facts: str | None = None,
 ) -> list[str]:
     """违规片段（写入审计记录，便于事后定位模型反复触发的表述）。"""
     hits = _affirmative_hits(reply, _rules(PROHIBITED_CLAIMS, PROHIBITED_CLAIMS_EN))
@@ -744,6 +819,7 @@ def offending_snippets(
         ]
     if grounding is not None:
         hits += ungrounded_figures(reply, grounding)
+        hits += ungrounded_amounts(reply, grounding if facts is None else facts)
     # 测评前任何推荐都是违规；测评后只有推荐超评级产品才是
     hits += unsuitable_recommendations(reply, risk_rating) if risk_rating else []
     recommendation = _rules(RECOMMENDATION, RECOMMENDATION_EN)
@@ -760,12 +836,16 @@ def offending_snippets(
 
 
 def describe(
-    violations: list[str], reply: str, risk_rating: str | None = None, grounding: str | None = None
+    violations: list[str],
+    reply: str,
+    risk_rating: str | None = None,
+    grounding: str | None = None,
+    facts: str | None = None,
 ) -> str:
     """给 LLM 的改写反馈。"""
     hits = _affirmative_hits(reply, _rules(PROHIBITED_CLAIMS, PROHIBITED_CLAIMS_EN))
     hits += _affirmative_hits(reply, _rules(RECOMMENDATION, RECOMMENDATION_EN))
-    hits += offending_snippets(reply, risk_rating, grounding)
+    hits += offending_snippets(reply, risk_rating, grounding, facts)
     return (
         "你的上一条回答未通过合规审查（"
         + "、".join(violations)
@@ -806,6 +886,13 @@ def describe(
             "回答中的业绩比较基准或七日年化数字与产品资料不符或没有来源，"
             "只能使用工具结果中的原始数字，不确定时不要写具体数字。"
             if "O-UNGROUNDED_FIGURE" in violations
+            else ""
+        )
+        + (
+            "回答中的金额没有来源：金额只能来自工具结果、客户资料或客户自己说的数字；"
+            "需要计算（如到手金额、合计、差额）时调用计算工具（calculate_fees、calculate_growth），"
+            "不要自己算；不确定时不写具体金额。"
+            if "O-UNGROUNDED_AMOUNT" in violations
             else ""
         )
         + (

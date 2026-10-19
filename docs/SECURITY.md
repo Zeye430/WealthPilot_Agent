@@ -1,4 +1,4 @@
-# WealthPilot AI — 安全设计与威胁模型（v0.1）
+# WealthPilot AI — 安全设计与威胁模型（v0.2）
 
 > 范围：作品集演示系统（虚构机构与客户、不接触真实资金）。按真实金融应用的思路设计，并标出与生产环境的差距。
 > 每条防护都对应自动化测试，测试文件见「验证」列。
@@ -11,6 +11,7 @@
 | 合规结论 | 风险评级、能否买入、交接状态：只能由代码写入，模型只读 |
 | 模型额度 | 每次对话都消耗 Kimi API 费用 |
 | 理财经理看板 | 只能看到分配给自己的客户咨询 |
+| 运维看板与指标（P8-3） | 运维角色只看汇总指标与审计编号，看不到对话内容与客户资料；Prometheus 接口需令牌 |
 
 信任边界：浏览器 → Next.js（同源代理）→ FastAPI → PostgreSQL / Kimi / 本地语音模型。**浏览器发来的一切（含请求头、模型输出）都不可信**。
 
@@ -27,7 +28,10 @@
 | **提示注入：让模型改评级、绕过规则** | 评级、客户身份通过 InjectedState 注入工具，模型看不到、也无法传入；未测评时产品工具不绑定，执行前再校验；输出审查拦截违规回答 | `test_security.py::test_llm_cannot_supply_identity_or_rating`、`test_agent_graph.py`（BLOCK_TOOL）、场景评估 G04、S01 |
 | **间接提示注入：文档中夹带指令** | 检索资料作为数据传给模型，Prompt 声明文档内容不可信；输出审查兜底 | `test_rag.py::test_prompt_injection_in_document_is_caught` |
 | **模型编造产品、收益数字、出处** | 产品必须出现在工具结果中；收益数字须有来源；引用编号须在检索结果中 | `test_compliance.py`（UNGROUNDED_PRODUCT、UNGROUNDED_FIGURE、FAKE_CITATION） |
-| **敏感信息进日志** | 不记录对话内容与录音；日志统一脱敏（手机号、身份证号、卡号） | `test_log_redaction` |
+| **敏感信息进日志** | 不记录对话内容与录音；日志统一脱敏（手机号、身份证号、卡号）；运行指标表不存对话内容与客户编号 | `test_log_redaction`、`test_observability.py::test_ops_overview_requires_ops_role_and_aggregates`（看板响应不含对话内容） |
+| **运维接口越权** | 运维看板只允许运维角色（客户、理财经理均 403）；`/metrics` 未配置令牌时关闭，配置后需 Bearer 令牌（常数时间比较） | `test_ops_overview_requires_ops_role_and_aggregates`、`test_metrics_endpoint_requires_token` |
+| **日志注入**：伪造请求编号写入换行等内容 | 上游传入的 `X-Request-ID` 只接受 8–64 位字母数字与连字符，否则重新生成 | `test_request_id_header_is_generated_or_propagated` |
+| **超载 / 上游故障拖垮服务** | 模型熔断（连续失败后快速失败）；单轮时长上限；连接池耗尽时 10 秒内返回 503 | `test_reliability.py` |
 | **语音录音泄露** | 本地模型识别，不发给第三方；只在内存中处理，不落盘 | `test_speech.py`；COMPLIANCE §6.1 |
 | **超大请求 / 异常输入** | 消息 2000 字上限；录音 60 秒上限、格式校验 | `test_message_length_is_bounded`、`test_speech.py` |
 | **点击劫持、内容嗅探、缓存客户数据** | X-Frame-Options: DENY、X-Content-Type-Options: nosniff、Cache-Control: no-store、Permissions-Policy 只允许本站用麦克风 | `test_security_headers_present` |

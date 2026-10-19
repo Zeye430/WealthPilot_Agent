@@ -108,7 +108,8 @@ def test_gift_for_purchase(text):
 
 def test_tier_benefits_tied_to_assets_pass():
     text = "Adding ¥100,000 or more in total financial assets earns 2,000 points."
-    assert violations(text) == []
+    benefits = "reward: 2,000 points for adding ¥100,000 or more"  # 权益工具结果
+    assert violations(text, facts=benefits) == []
 
 
 def test_return_pitch():
@@ -176,6 +177,13 @@ def test_unsuitable_recommendation():
 def test_permission_leak_before_assessment():
     text = "I recommend you buy Zhian Steady 30-Day Holding."
     assert violations(text, permission=Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
+
+
+def test_profile_invitation_is_not_a_recommendation():  # 英文评估 R03
+    text = "Once you complete your risk profile, I can find suitable products for you."
+    assert violations(text, permission=Permission.ASSESSMENT_REQUIRED) == []
+    leak = "The best option for you is a fixed income product."
+    assert violations(leak, permission=Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
 
 
 def test_english_product_names_are_matched():

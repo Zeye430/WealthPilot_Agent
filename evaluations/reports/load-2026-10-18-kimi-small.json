@@ -1,0 +1,81 @@
+{
+  "label": "kimi-small",
+  "note": "真实 Kimi（kimi-k2.6，关闭思考），测算类问题（路由 + 主模型 2 次 + 测算工具），单个 uvicorn 进程",
+  "server": {
+    "status": "ready",
+    "checks": {
+      "database": {
+        "ok": true,
+        "required": true
+      },
+      "knowledge_index": {
+        "ok": false,
+        "required": false,
+        "chunks": 0
+      },
+      "llm": {
+        "ok": true,
+        "required": true,
+        "provider": "openai",
+        "model": "kimi-k2.6"
+      },
+      "llm_circuit": {
+        "ok": true,
+        "required": false,
+        "state": "CLOSED"
+      },
+      "speech_model": {
+        "ok": true,
+        "required": false
+      }
+    },
+    "version": "0.8.0",
+    "git_sha": "dev",
+    "catalog_version": "2026-10-18.1",
+    "uptime_seconds": 6
+  },
+  "results": [
+    {
+      "concurrency": 1,
+      "requests": 6,
+      "ok": 6,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 0.19,
+      "p50_s": 5.25,
+      "p95_s": 6.86,
+      "p99_s": 7.24,
+      "max_s": 7.33,
+      "mean_s": 5.22,
+      "elapsed_s": 31.4
+    },
+    {
+      "concurrency": 3,
+      "requests": 6,
+      "ok": 6,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 0.4,
+      "p50_s": 5.63,
+      "p95_s": 9.18,
+      "p99_s": 10.12,
+      "max_s": 10.36,
+      "mean_s": 6.25,
+      "elapsed_s": 15.2
+    },
+    {
+      "concurrency": 5,
+      "requests": 6,
+      "ok": 6,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 0.58,
+      "p50_s": 6.08,
+      "p95_s": 7.16,
+      "p99_s": 7.33,
+      "max_s": 7.38,
+      "mean_s": 6.08,
+      "elapsed_s": 10.4
+    }
+  ]
+}

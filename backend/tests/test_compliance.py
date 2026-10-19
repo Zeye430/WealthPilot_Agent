@@ -71,7 +71,9 @@ def test_prohibited_claims_detected(text):
     ],
 )
 def test_negated_or_factual_statements_pass(text):
-    assert check_output(text, Permission.ASSESSED) == []
+    # 金额来自测算工具结果（O-UNGROUNDED_AMOUNT 要求金额有来源）
+    facts = '{"final_value": "1628894.63"}'
+    assert check_output(text, Permission.ASSESSED, facts=facts) == []
 
 
 def test_recommendation_blocked_before_assessment():  # S02e
@@ -259,7 +261,10 @@ def test_benchmark_figures_must_come_from_tool_results():  # 场景评估 N02
     assert ok == []
     # 不在收益指标语境中的百分数（如配置占比）不检查，即使同句提到业绩比较基准
     share = "知岸稳享一年持有 10 万元（22.22%），业绩比较基准 2.50%–3.20%。"
-    assert check_output(share, Permission.ASSESSED, "知岸稳享一年持有 2.50%–3.20%") == []
+    facts = "知岸稳享一年持有 2.50%–3.20% 配置金额 100000"
+    assert (
+        check_output(share, Permission.ASSESSED, "知岸稳享一年持有 2.50%–3.20%", facts=facts) == []
+    )
 
 
 def test_return_pitch_blocked():

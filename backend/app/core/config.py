@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
     database_url: str = "postgresql+psycopg://wealthpilot:wealthpilot@localhost:5433/wealthpilot"
+    # 连接池（P8-4 压测校准）：每进程最多 10 + 20 个连接；PostgreSQL 默认上限 100，
+    # 多进程部署时保证「进程数 × 30」小于上限。等不到连接时 10 秒后返回 503，而不是让客户干等。
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout_seconds: float = 10
 
     # Kimi（Moonshot）提供 OpenAI 兼容接口；换模型只改这三项
     llm_base_url: str = "https://api.moonshot.ai/v1"
@@ -20,9 +25,21 @@ class Settings(BaseSettings):
     llm_temperature: float = 1.0
     llm_temperature_no_thinking: float = 0.6
     llm_agent_thinking: bool = False  # 主 Agent 是否开启思考（关闭约快一倍）；话题路由始终关闭
-    # 场景评估中出现过连接被重置：单次超时 30 秒、失败自动重试 2 次（指数退避），避免客户等待过久
-    llm_timeout_seconds: float = 30
-    llm_max_retries: int = 2
+    # 单次调用超时 25 秒、失败重试 1 次（场景评估中偶发连接重置，重试一次即可恢复）。
+    # 与单轮时长上限、前端代理超时（120 秒）配合：最坏情况 ≈ 60 秒上限 + 一次调用 2×25 秒 < 120 秒
+    llm_timeout_seconds: float = 25
+    llm_max_retries: int = 1
+    # 单轮对话时长上限：超过后不再调用模型，展示已查到的结果并说明（P8-4）
+    chat_turn_budget_seconds: float = 60
+    # 模型熔断：连续失败 5 次后暂停调用 30 秒，期间直接提示客户，之后放行一个探测请求
+    llm_breaker_failures: int = 5
+    llm_breaker_cooldown_seconds: float = 30
+    # 费用估算单价（美元 / 百万 token），以模型服务商官网价格为准，用于运维看板的成本估算
+    llm_price_input_per_mtok: float = 0.60
+    llm_price_output_per_mtok: float = 2.50
+    # 压测专用：fake 时用固定回复的假模型（模拟延迟），只测系统本身的吞吐，不调用、不计费
+    llm_provider: str = "openai"
+    fake_llm_latency_seconds: float = 1.5
 
     agent_max_tool_calls: int = 6
 
@@ -71,6 +88,12 @@ class Settings(BaseSettings):
             "rm_id": "RM001",
         },
         {
+            "username": "ops",
+            "display_name": "运维值班（虚构）",
+            "display_name_en": "Ops on call (fictional)",
+            "role": "ops",
+        },
+        {
             "username": "zhou",
             "display_name": "周经理（虚构）",
             "display_name_en": "RM Zhou (fictional)",
@@ -82,6 +105,13 @@ class Settings(BaseSettings):
     # 登录页显示的演示提示（如演示密码）；公开部署时配合访问码使用，或设为空不显示
     demo_login_hint: str | None = "演示账号的密码均为 wealthpilot-demo"
     demo_login_hint_en: str | None = "All demo accounts use the password wealthpilot-demo"
+
+    # 可观测性：部署时设为 json（每行一个 JSON，便于云平台检索）；本地开发为可读文本
+    log_format: str = "text"
+    # Prometheus 指标接口 /metrics 的访问令牌；不设置时接口关闭（返回 404）
+    metrics_token: SecretStr | None = None
+    app_version: str = "0.8.0"
+    git_sha: str = "dev"  # 部署时由 CI 注入，看板显示当前运行的版本
 
     # 限流（单实例内存滑动窗口；多实例部署时应换成 Redis）
     rate_limit_enabled: bool = True

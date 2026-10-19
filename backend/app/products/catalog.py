@@ -4,6 +4,7 @@
 校验在启动时执行：费率缺失却标为已核实、现金管理类没有七日年化等配置错误，会直接报错。
 """
 
+import re
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
@@ -322,16 +323,23 @@ class Catalog(BaseModel):
         """按名称或代码模糊匹配（客户常说「活钱宝」而不是完整名称）。"""
         if product := self.get(text):
             return product
-        text = text.replace(" ", "").lower()
+        compact = text.replace(" ", "")
+        # 英文名忽略大小写、空格与标点：模型常写成「Zhian Steady 1 Year Holding」（评估 R02）
+        # 只在输入含英文字母时按英文名匹配：中文名去掉汉字后只剩数字（如「30」），会误配其他产品
+        alnum = _alnum(text) if re.search(r"[A-Za-z]", text) else ""
         return next(
             (
                 p
                 for p in self.products
-                if text
-                and (text in p.name.replace(" ", "") or text in p.name_en.replace(" ", "").lower())
+                if compact
+                and (compact in p.name.replace(" ", "") or (alnum and alnum in _alnum(p.name_en)))
             ),
             None,
         )
+
+
+def _alnum(text: str) -> str:
+    return re.sub(r"[^0-9a-z]", "", text.lower())
 
 
 @lru_cache

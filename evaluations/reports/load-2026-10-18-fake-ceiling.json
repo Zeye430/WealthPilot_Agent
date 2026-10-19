@@ -1,0 +1,83 @@
+{
+  "label": "fake-ceiling",
+  "note": "假模型（路由 0.2 秒 + 主模型 1.5 秒），单个 uvicorn 进程，释放连接后，寻找下一个瓶颈",
+  "server": {
+    "status": "ready",
+    "checks": {
+      "database": {
+        "ok": true,
+        "required": true
+      },
+      "knowledge_index": {
+        "ok": false,
+        "required": false,
+        "chunks": 0
+      },
+      "llm": {
+        "ok": true,
+        "required": true,
+        "provider": "fake",
+        "model": "fake"
+      },
+      "llm_circuit": {
+        "ok": true,
+        "required": false,
+        "state": "CLOSED"
+      },
+      "speech_model": {
+        "ok": true,
+        "required": false
+      }
+    },
+    "version": "0.8.0",
+    "git_sha": "dev",
+    "catalog_version": "2026-10-18.1",
+    "uptime_seconds": 113
+  },
+  "results": [
+    {
+      "concurrency": 40,
+      "requests": 80,
+      "ok": 80,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 18.43,
+      "p50_s": 2.01,
+      "p95_s": 2.23,
+      "p99_s": 2.28,
+      "max_s": 2.29,
+      "mean_s": 2.03,
+      "elapsed_s": 4.3
+    },
+    {
+      "concurrency": 60,
+      "requests": 80,
+      "ok": 80,
+      "errors": {},
+      "error_rate": 0.0,
+      "throughput_rps": 18.0,
+      "p50_s": 2.28,
+      "p95_s": 3.9,
+      "p99_s": 4.08,
+      "max_s": 4.12,
+      "mean_s": 2.56,
+      "elapsed_s": 4.4
+    },
+    {
+      "concurrency": 80,
+      "requests": 80,
+      "ok": 44,
+      "errors": {
+        "500": 36
+      },
+      "error_rate": 0.45,
+      "throughput_rps": 1.27,
+      "p50_s": 32.53,
+      "p95_s": 33.95,
+      "p99_s": 34.28,
+      "max_s": 34.35,
+      "mean_s": 25.51,
+      "elapsed_s": 34.7
+    }
+  ]
+}

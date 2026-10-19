@@ -148,6 +148,18 @@ TOOL_LIMIT_REPLY = register(
     "into smaller questions, or contact your relationship manager.",
 )
 
+TURN_TIMEOUT_REPLY = register(
+    "这个问题处理时间较长，我先停在这里，已经查到的结果展示在下方。您可以稍后再问一次，或联系理财经理协助。",
+    "This is taking longer than expected, so I'll stop here. Anything I've already found is "
+    "shown below. You can ask again shortly, or contact your relationship manager.",
+)
+
+BREAKER_OPEN_REPLY = register(
+    "AI 助手暂时繁忙，请稍后再试。在此期间，您仍可以浏览理财产品、查看提醒，或联系专属理财经理。",
+    "The AI assistant is busy right now. Please try again shortly. Meanwhile you can still "
+    "browse products, check your reminders or contact your relationship manager.",
+)
+
 LANGUAGE_RULES_EN = """
 ## Language
 The customer is using the English interface. Always reply in clear, plain US English, even though

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.assessment.scoring import load_questionnaire
 from app.assessment.service import latest_confirmed
-from app.auth.service import CUSTOMER, RM, CurrentUser, resolve_session
+from app.auth.service import CUSTOMER, OPS, RM, CurrentUser, resolve_session
 from app.compliance.policy import evaluate_gate
 from app.core.i18n import L
 from app.customers.context import customer_profile
@@ -47,6 +47,13 @@ def get_rm_id(user: CurrentUser = Depends(get_current_user)) -> str:
             status_code=403, detail=L("仅限理财经理访问", "Relationship managers only")
         )
     return user.rm_id
+
+
+def get_ops_user(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """运维看板：只允许运维角色；只能看汇总指标，看不到对话内容与客户资料。"""
+    if user.role != OPS:
+        raise HTTPException(status_code=403, detail=L("仅限运维人员访问", "Operations staff only"))
+    return user
 
 
 class AssessmentSummary(BaseModel):
