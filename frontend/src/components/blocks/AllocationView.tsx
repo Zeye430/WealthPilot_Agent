@@ -1,130 +1,109 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-
 import { useProductActions } from "@/components/products/ProductActions";
+import { Chip } from "@/components/ui";
+import { defineCopy, useCopy } from "@/lib/i18n";
 import type { AllocationBlock, NeedsUpdateBlock } from "@/lib/types";
 
 const COLORS = [1, 2, 3, 4, 5].map((i) => `var(--series-${i})`);
-const STATUS = {
-  OK: { label: "通过", className: "text-ink-2", mark: "✓" },
-  WARN: { label: "注意", className: "text-notice", mark: "!" },
-  FAIL: { label: "未通过", className: "text-danger", mark: "✗" },
-} as const;
 
-/** 对话中记录需求后的一行确认，让客户知道系统记住了什么。 */
+const COPY = defineCopy({
+  zh: {
+    saved: "已记录：",
+    passed: "约束检查通过",
+    failed: "存在未通过的约束",
+    status: { OK: "通过", WARN: "注意", FAIL: "未通过" },
+    clickHint: "点击产品名称可查看详情或买入。",
+    shares: (parts: string) => `配置比例：${parts}`,
+  },
+  en: {
+    saved: "Saved: ",
+    passed: "All checks passed",
+    failed: "Some checks failed",
+    status: { OK: "Pass", WARN: "Note", FAIL: "Fail" },
+    clickHint: "Tap a product name to view details or buy.",
+    shares: (parts: string) => `Allocation: ${parts}`,
+  },
+});
+
+/** 对话中记录需求后的一个标签，让客户知道系统记住了什么。 */
 export function NeedsUpdateNote({ block }: { block: NeedsUpdateBlock }) {
+  const c = useCopy(COPY);
   return (
-    <p className="text-xs text-ink-2">
-      已记录您的需求：{block.items.map((i) => `${i.label} ${i.value}`).join("；")}
-    </p>
+    <span className="inline-flex w-fit max-w-full items-center rounded-full bg-fill px-3 py-1.5 text-xs leading-5 font-semibold text-ink-2">
+      {c.saved}
+      {block.items.map((i) => `${i.label} ${i.value}`).join("；")}
+    </span>
   );
 }
 
-/** 配置情景：构成环形图 + 明细 + 约束检查。不展示任何收益测算。 */
+/** 配置情景：比例条 + 明细 + 约束检查。不展示任何收益测算。 */
 export function AllocationView({ block }: { block: AllocationBlock }) {
+  const c = useCopy(COPY);
   const { open } = useProductActions();
-  // 超过 5 项时，图中合并为「其他」（配色只有 5 种已验证的色盲可分辨颜色）；明细表仍列全部
-  const chart =
-    block.slices.length <= COLORS.length
-      ? block.slices
-      : [
-          ...block.slices.slice(0, COLORS.length - 1),
-          {
-            ...block.slices[COLORS.length - 1],
-            code: "OTHER",
-            name: "其他",
-            amount: block.slices.slice(COLORS.length - 1).reduce((s, x) => s + x.amount, 0),
-          },
-        ];
+  const color = (i: number) => COLORS[Math.min(i, COLORS.length - 1)];
+  const tone = { OK: "ok", WARN: "notice", FAIL: "danger" } as const;
 
   return (
-    <figure className="max-w-2xl rounded-sm border border-rule bg-surface px-5 py-4">
-      <figcaption className="flex items-baseline justify-between gap-3">
-        <span className="font-serif text-base font-bold">{block.title}</span>
-        <span className={`text-xs font-medium ${block.passed ? "text-ink-2" : "text-danger"}`}>
-          {block.passed ? "约束检查通过" : "存在未通过的约束"}
-        </span>
+    <figure className="flex max-w-2xl flex-col gap-4 rounded-card bg-fill p-5">
+      <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-[17px] font-extrabold">{block.title}</span>
+        <Chip tone={block.passed ? "ok" : "danger"}>{block.passed ? c.passed : c.failed}</Chip>
       </figcaption>
 
-      <div className="mt-3 grid items-center gap-4 sm:grid-cols-[180px_1fr]">
-        <div className="mx-auto h-44 w-44">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={chart}
-                dataKey="amount"
-                nameKey="name"
-                innerRadius="58%"
-                outerRadius="95%"
-                paddingAngle={1}
-                stroke="var(--surface)"
-                strokeWidth={2}
-                isAnimationActive={false}
-              >
-                {chart.map((s, i) => (
-                  <Cell key={s.code} fill={COLORS[i]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value, name) => [`${Number(value).toLocaleString("zh-CN")} 元`, name]}
-                contentStyle={{ background: "var(--surface)", border: "1px solid var(--rule)", fontSize: 12 }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <table className="figures w-full text-sm">
-          <tbody>
-            {block.slices.map((s, i) => (
-              <tr key={s.code} className="border-b border-rule last:border-0">
-                <td className="py-1.5 pr-2">
-                  <span
-                    className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
-                    style={{ background: COLORS[Math.min(i, COLORS.length - 1)] }}
-                    aria-hidden
-                  />
-                  {/* 理财产品可点开查看详情与买入；活期存款没有风险等级，不可点 */}
-                  {s.risk_level ? (
-                    <button
-                      type="button"
-                      onClick={() => open(s.code)}
-                      className="text-left text-brand underline decoration-rule underline-offset-4 hover:decoration-brand"
-                    >
-                      {s.name}
-                    </button>
-                  ) : (
-                    s.name
-                  )}
-                  <span className="ml-1.5 text-xs text-ink-3">
-                    {s.risk_level ? `${s.risk_level}，` : ""}
-                    {s.lockup}
-                  </span>
-                </td>
-                <td className="py-1.5 text-right">{s.amount_text}</td>
-                <td className="w-16 py-1.5 text-right text-ink-2">{s.pct_text}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div
+        className="flex h-3 gap-0.5 overflow-hidden rounded-full"
+        role="img"
+        aria-label={c.shares(block.slices.map((s) => `${s.name} ${s.pct_text}`).join("，"))}
+      >
+        {block.slices.map((s, i) => (
+          <span key={s.code} style={{ flex: s.amount, background: color(i) }} />
+        ))}
       </div>
 
-      <ul className="mt-3 space-y-1.5 border-t border-rule pt-3 text-sm">
-        {block.checks.map((c) => {
-          const st = STATUS[c.status];
-          return (
-            <li key={c.label + c.message} className="flex gap-2">
-              <span className={`w-12 shrink-0 text-xs font-medium ${st.className}`}>
-                {st.mark} {st.label}
-              </span>
-              <span className="leading-6">
-                <span className="font-medium">{c.label}：</span>
-                <span className="text-ink-2">{c.message}</span>
-              </span>
-            </li>
-          );
-        })}
+      <table className="figures w-full text-sm">
+        <tbody>
+          {block.slices.map((s, i) => (
+            <tr key={s.code} className="border-b border-line last:border-0">
+              <td className="py-2.5 pr-2">
+                <span className="mr-2.5 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: color(i) }} aria-hidden />
+                {/* 理财产品可点开查看详情与买入；活期存款没有风险等级，不可点 */}
+                {s.risk_level ? (
+                  <button type="button" onClick={() => open(s.code)} className="text-left font-bold text-brand hover:underline">
+                    {s.name}
+                  </button>
+                ) : (
+                  <span className="font-bold">{s.name}</span>
+                )}
+                <span className="ml-1.5 text-xs text-ink-3">
+                  {s.risk_level ? `${s.risk_level}，` : ""}
+                  {s.lockup}
+                </span>
+              </td>
+              <td className="py-2.5 text-right font-bold">{s.amount_text}</td>
+              <td className="w-16 py-2.5 text-right text-ink-2">{s.pct_text}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <ul className="flex flex-col gap-2 text-sm leading-6">
+        {block.checks.map((check) => (
+          <li key={check.label + check.message} className="flex items-start gap-2.5">
+            <Chip tone={tone[check.status]} className="mt-0.5">
+              {c.status[check.status]}
+            </Chip>
+            <span>
+              <span className="font-bold">{check.label}：</span>
+              <span className="text-ink-2">{check.message}</span>
+            </span>
+          </li>
+        ))}
       </ul>
-      <p className="mt-2 text-xs text-ink-3">点击产品名称可查看详情或买入。{block.disclaimer}</p>
+      <p className="text-xs leading-5 text-ink-3">
+        {c.clickHint}
+        {block.disclaimer}
+      </p>
     </figure>
   );
 }

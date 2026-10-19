@@ -182,12 +182,21 @@ export function formatWan(value: number): string {
   return `${Number.isInteger(wan) ? wan : wan.toFixed(1)}万`;
 }
 
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("zh-CN", {
+export function formatDate(iso: string, locale: "zh" | "en" = "zh"): string {
+  return new Date(iso).toLocaleDateString(locale === "en" ? "en-US" : "zh-CN", {
     year: "numeric",
-    month: "long",
+    month: locale === "en" ? "short" : "long",
     day: "numeric",
   });
+}
+
+/** 人民币金额：¥500,000.00（中英文统一写法，数字按地区分隔） */
+export function formatMoney(value: number, locale: "zh" | "en" = "zh", decimals = 2): string {
+  const n = value.toLocaleString(locale === "en" ? "en-US" : "zh-CN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return `¥${n}`;
 }
 
 export function productRiskRange(maxRisk: string): string {

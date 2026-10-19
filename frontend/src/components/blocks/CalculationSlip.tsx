@@ -1,71 +1,64 @@
+"use client";
+
+import { Chip } from "@/components/ui";
 import { formatYuan } from "@/lib/api";
+import { defineCopy, useCopy } from "@/lib/i18n";
 import type { CalculationResultBlock } from "@/lib/types";
 
-/** 测算凭证：计算结果以银行凭证的形式呈现，角上的印章标明这是假设情景。 */
+const COPY = defineCopy({
+  zh: { formula: "公式", hypothetical: "假设情景，非预测、非承诺", assumptions: "测算假设" },
+  en: { formula: "Formula", hypothetical: "Hypothetical, not a forecast or promise", assumptions: "Assumptions" },
+});
+
+/** 测算结果：大号结果数字 + 明细 + 假设。顶部标签标明这是假设情景。 */
 export function CalculationSlip({ block }: { block: CalculationResultBlock }) {
+  const c = useCopy(COPY);
   const [headline, ...rows] = block.items;
 
   return (
-    <figure className="relative max-w-xl overflow-hidden rounded-sm border border-rule bg-surface">
-      <div className="px-5 pt-4 pb-3 sm:px-6">
-        <figcaption className="font-serif text-base font-bold">{block.title}</figcaption>
-        {block.formula && (
-          <p className="figures mt-1 text-sm text-ink-2">
-            公式 <span className="text-ink">{block.formula}</span>
-          </p>
-        )}
-
-        <Stamp text={block.disclaimer} />
-
-        {headline && (
-          <div className="mt-4">
-            <p className="text-sm text-ink-2">{headline.label}</p>
-            <p className="figures font-serif text-3xl font-bold tracking-tight sm:text-4xl">
-              {formatYuan(headline.value)}
-              <span className="ml-1 font-sans text-base font-normal text-ink-2">
-                {headline.unit}
-              </span>
-            </p>
-          </div>
-        )}
-
-        <dl className="mt-3 space-y-1.5 text-sm">
-          {rows.map((item) => (
-            <div key={item.label} className="flex items-baseline gap-2">
-              <dt className="text-ink-2">{item.label}</dt>
-              <span className="leader" aria-hidden />
-              <dd className="figures text-ink">
-                {formatYuan(item.value)} {item.unit}
-              </dd>
-            </div>
-          ))}
-        </dl>
+    <figure className="flex max-w-xl flex-col gap-4 rounded-card bg-fill p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <figcaption className="text-[17px] font-extrabold">{block.title}</figcaption>
+        <Chip tone="notice" className="whitespace-normal" >
+          <span title={block.disclaimer}>{c.hypothetical}</span>
+        </Chip>
       </div>
+      {block.formula && (
+        <p className="figures -mt-2 text-sm text-ink-2">
+          {c.formula} <span className="font-semibold text-ink">{block.formula}</span>
+        </p>
+      )}
 
-      <div className="perforation" aria-hidden />
+      {headline && (
+        <div>
+          <p className="text-sm text-ink-2">{headline.label}</p>
+          <p className="figures text-4xl font-extrabold tracking-tight">
+            {formatYuan(headline.value)}
+            <span className="ml-1.5 text-base font-semibold text-ink-2">{headline.unit}</span>
+          </p>
+        </div>
+      )}
 
-      <div className="px-5 pt-2 pb-4 sm:px-6">
-        <p className="text-xs font-medium text-ink-2">测算假设</p>
-        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-2">
+      <dl className="flex flex-col gap-2 text-sm">
+        {rows.map((item) => (
+          <div key={item.label} className="flex items-baseline gap-2">
+            <dt className="text-ink-2">{item.label}</dt>
+            <span className="leader" aria-hidden />
+            <dd className="figures font-bold">
+              {formatYuan(item.value)} {item.unit}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="border-t border-line pt-3">
+        <p className="text-xs font-bold text-ink-2">{c.assumptions}</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs leading-5 text-ink-2">
           {block.assumptions.map((a) => (
             <li key={a}>{a}</li>
           ))}
         </ul>
       </div>
     </figure>
-  );
-}
-
-function Stamp({ text }: { text: string }) {
-  return (
-    <div
-      className="pointer-events-none absolute top-4 right-4 flex -rotate-12 flex-col items-center rounded-full border-2 border-brand px-3 py-1.5 text-brand opacity-80 sm:top-5 sm:right-6"
-      role="note"
-      aria-label={text}
-      title={text}
-    >
-      <span className="font-serif text-sm font-bold leading-tight">假设情景</span>
-      <span className="text-[10px] leading-tight">非预测 非承诺</span>
-    </div>
   );
 }

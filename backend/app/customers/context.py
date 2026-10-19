@@ -33,7 +33,33 @@ def customer_profile(db: Session, customer_id: str) -> dict:
         # 本次需求未单独提供时，展示测评中已回答的结果（标注来源，不写入本次需求）
         if row["field"] == "max_acceptable_loss" and row["value"] is None and loss:
             row["value"], row["source"] = loss, "来自风险测评"
-    return {"base": base.summary() if base else None, "needs": needs}
+    return {
+        "base": base.summary() if base else None,
+        "needs": needs,
+        "overview": overview(base) if base else None,
+    }
+
+
+def overview(base: BaseProfile) -> dict:
+    """「我的」页资产卡片：原始数值由前端按语言格式化；等级与升级差距由代码计算。"""
+    assets = base.assets_at_bank
+    status = tier_status(base)
+    nxt = status.next_tier
+    return {
+        "total": float(assets.total),
+        "liquid": float(assets.liquid_total()),
+        "wealth": float(sum((h.amount for h in assets.wealth_products), start=0)),
+        "tier": {"name": status.tier.name, "card_name": status.tier.card_name},
+        "next_tier": {
+            "name": nxt.name,
+            "threshold": float(nxt.min_aum),
+            "gap": float(status.gap),
+            "progress": float(min(status.aum / nxt.min_aum, 1)),
+        }
+        if nxt
+        else None,
+        "rm": base.assigned_rm.contact_card(),
+    }
 
 
 def tier_lines(base: BaseProfile, needs: Needs) -> list[str]:

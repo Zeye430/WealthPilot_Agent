@@ -1,83 +1,69 @@
 "use client";
 
 import { useProductActions } from "@/components/products/ProductActions";
+import { Chip } from "@/components/ui";
+import { defineCopy, useCopy } from "@/lib/i18n";
 import type { ProductCard } from "@/lib/types";
 
-/** 产品卡片：对话中的产品列表与「产品」页共用，点击打开详情与买入。收益数字始终带口径标签。 */
+const COPY = defineCopy({
+  zh: { open: "查看详情 / 买入", viewOnly: "仅可查看", fictional: (code: string) => `虚构演示产品 ${code}` },
+  en: { open: "View / Buy", viewOnly: "View only", fictional: (code: string) => `Fictional demo product ${code}` },
+});
+
+/** 产品卡片：对话中的产品列表与「理财产品」页共用，点击打开详情与买入。收益数字始终带口径标签。 */
 export function ProductCardView({ product }: { product: ProductCard }) {
+  const c = useCopy(COPY);
   const { open } = useProductActions();
-  const unverified = product.data_quality === "UNVERIFIED";
   const viewOnly = product.purchasable === false;
-  const body = (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-serif text-base font-bold leading-snug">{product.name}</p>
-          <p className="mt-1 flex flex-wrap gap-1.5 text-xs text-ink-2">
-            <Tag>{product.issuer}</Tag>
-            <Tag>{product.type_label}</Tag>
-            <Tag>{product.lockup}</Tag>
-          </p>
-        </div>
-        <span
-          className="figures shrink-0 rounded-sm border border-ink-3 px-1.5 py-0.5 text-xs font-medium"
-          title={product.risk_note ?? `风险等级 ${product.risk_level}`}
-        >
-          {product.risk_level}
-        </span>
-      </div>
-
-      <div className="mt-3">
-        <p className="text-xs text-ink-2">{product.metric.label}</p>
-        <p className="figures font-serif text-xl font-bold">{product.metric.text}</p>
-      </div>
-
-      <dl className="mt-3 grid grid-cols-2 gap-x-3 text-xs">
-        <div>
-          <dt className="text-ink-3">起购金额</dt>
-          <dd className="figures mt-0.5">{product.minimum}</dd>
-        </div>
-        <div>
-          <dt className="text-ink-3">年化固定费用</dt>
-          <dd className="figures mt-0.5">{product.annual_fee}</dd>
-        </div>
-      </dl>
-
-      {product.highlights && product.highlights.length > 0 && (
-        <p className="mt-3 flex flex-wrap gap-1.5 text-xs">
-          {product.highlights.map((h) => (
-            <span key={h} className="rounded-sm bg-brand-soft px-1.5 py-0.5 text-brand">
-              {h}
-            </span>
-          ))}
-        </p>
-      )}
-      {product.risk_note && <p className="mt-2 text-xs leading-5 text-ink-2">{product.risk_note}</p>}
-      {(unverified || viewOnly) &&
-        product.warnings?.map((w) => (
-          <p key={w} className="mt-2 border-l-2 border-notice bg-notice-soft px-2 py-1 text-xs leading-5 text-ink-2">
-            {w}
-          </p>
-        ))}
-
-      <p className="mt-3 flex items-center justify-between border-t border-rule pt-2.5 text-xs">
-        <span className="text-ink-3">虚构演示产品 {product.code}</span>
-        <span className={viewOnly ? "text-ink-3" : "font-medium text-brand"}>{viewOnly ? "仅可查看" : "查看详情 / 买入"}</span>
-      </p>
-    </>
-  );
+  const showWarnings = viewOnly || product.data_quality === "UNVERIFIED";
+  // 「1.42%（截至 10-16）」：大字只放数值，截止日期并入口径标签
+  const [, value = product.metric.text, asOf] = product.metric.text.match(/^(.+?)（(.+)）$/) ?? [];
 
   return (
     <button
       type="button"
       onClick={() => open(product.code)}
-      className="block h-full w-full rounded-sm border border-rule bg-surface p-4 text-left hover:border-brand"
+      className="flex h-full w-full flex-col gap-3 rounded-card bg-fill p-5 text-left transition-colors hover:bg-line/70"
     >
-      {body}
+      <span className="flex items-start justify-between gap-3">
+        <span className="text-base leading-snug font-extrabold">{product.name}</span>
+        <span className="figures shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-extrabold" title={product.risk_note ?? undefined}>
+          {product.risk_level}
+        </span>
+      </span>
+      <span className="flex flex-col gap-0.5">
+        <span className="text-xs text-ink-3">
+          {product.metric.label}
+          {asOf && `（${asOf}）`}
+        </span>
+        <span className="figures text-[26px] leading-tight font-extrabold tracking-tight">{value}</span>
+      </span>
+      <span className="text-xs text-ink-2">
+        {product.type_label}；{product.lockup}；{product.minimum}
+      </span>
+      {product.highlights && product.highlights.length > 0 && (
+        <span className="flex flex-wrap gap-1.5">
+          {product.highlights.map((h) => (
+            <Chip key={h}>{h}</Chip>
+          ))}
+        </span>
+      )}
+      {showWarnings &&
+        product.warnings?.map((w) => (
+          <span key={w} className="rounded-2xl bg-notice-soft px-3 py-2 text-xs leading-5 text-notice">
+            {w}
+          </span>
+        ))}
+      <span className="mt-auto flex flex-col gap-2 pt-1">
+        <span
+          className={`flex h-11 items-center justify-center rounded-full text-[15px] font-bold ${
+            viewOnly ? "bg-canvas text-ink-3" : "bg-brand text-on-brand"
+          }`}
+        >
+          {viewOnly ? c.viewOnly : c.open}
+        </span>
+        <span className="text-center text-[11px] text-ink-3">{c.fictional(product.code)}</span>
+      </span>
     </button>
   );
-}
-
-function Tag({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-sm bg-paper px-1.5 py-0.5">{children}</span>;
 }

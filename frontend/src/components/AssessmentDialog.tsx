@@ -2,16 +2,52 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import {
-  ApiError,
-  confirmAssessment,
-  getQuestionnaire,
-  productRiskRange,
-  submitAssessment,
-} from "@/lib/api";
+import { RATING_EN, riskRange } from "@/components/Profile";
+import { Button, Icon } from "@/components/ui";
+import { ApiError, confirmAssessment, getQuestionnaire, submitAssessment } from "@/lib/api";
+import { defineCopy, useCopy, useLocale } from "@/lib/i18n";
 import type { AssessmentResult, CustomerState, Questionnaire } from "@/lib/types";
 
 const RATINGS = ["C1", "C2", "C3", "C4", "C5"];
+
+const COPY = defineCopy({
+  zh: {
+    title: "风险承受能力测评",
+    resultTitle: "您的测评结果",
+    close: "关闭",
+    loadFailed: "问卷加载失败",
+    failed: "操作失败，请重试。",
+    prefilled: "已根据您在本行登记的资料预选年龄，如有变化可直接修改。",
+    answered: (a: number, t: number) => `已答 ${a} / ${t}`,
+    validity: "确认后评级生效，有效期 12 个月。",
+    retake: "重新作答",
+    confirm: "确认评级",
+    honest: "请根据实际情况作答，结果将决定您可购买的产品范围。",
+    submit: "提交测评",
+    score: "测评得分",
+    eligible: "可购买的产品风险等级",
+    vetoed: "您选择了「不能接受任何本金亏损」，按规则评为 C1（保守型），仅可购买 PR1 产品。",
+    scale: (r: string) => `评级刻度，当前为 ${r}`,
+  },
+  en: {
+    title: "Risk tolerance profile",
+    resultTitle: "Your result",
+    close: "Close",
+    loadFailed: "Couldn't load the questionnaire",
+    failed: "Something went wrong. Please try again.",
+    prefilled: "We pre-selected your age from bank records. Change it if it's out of date.",
+    answered: (a: number, t: number) => `${a} of ${t} answered`,
+    validity: "Your rating takes effect once confirmed and is valid for 12 months.",
+    retake: "Answer again",
+    confirm: "Confirm rating",
+    honest: "Answer honestly. Your result decides which products you can buy.",
+    submit: "Submit",
+    score: "Score",
+    eligible: "Eligible product risk levels",
+    vetoed: "You chose “cannot accept any loss of principal,” so you're rated C1 (Conservative) and can buy PR1 products only.",
+    scale: (r: string) => `Rating scale, currently ${r}`,
+  },
+});
 
 type Props = {
   open: boolean;
@@ -19,8 +55,9 @@ type Props = {
   onConfirmed: (state: CustomerState, result: AssessmentResult) => void;
 };
 
-/** 问卷以固定表单呈现，计分完全在后端；LLM 不参与提问和计分。 */
+/** 问卷以固定表单呈现，计分完全在后端；LLM 不参与提问和计分。手机上从底部弹出。 */
 export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
+  const c = useCopy(COPY);
   const ref = useRef<HTMLDialogElement>(null);
   const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -38,10 +75,10 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
           setQuestionnaire(q);
           setAnswers(q.prefill); // 银行系统已有的信息（如年龄）预选，客户确认或修改
         })
-        .catch((e) => setError(e instanceof ApiError ? e.message : "问卷加载失败"));
+        .catch((e) => setError(e instanceof ApiError ? e.message : c.loadFailed));
     }
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, c.loadFailed]);
 
   function reset() {
     setAnswers(questionnaire?.prefill ?? {});
@@ -55,7 +92,7 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
     try {
       await action();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "操作失败，请重试。");
+      setError(e instanceof ApiError ? e.message : c.failed);
     } finally {
       setBusy(false);
     }
@@ -72,63 +109,58 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
         onClose();
       }}
       aria-labelledby="assessment-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-2xl rounded-sm bg-surface p-0 text-ink backdrop:bg-ink/40"
+      className="mx-0 mt-auto mb-0 w-full max-w-none rounded-t-3xl bg-surface p-0 text-ink backdrop:bg-navy/50 sm:m-auto sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:rounded-3xl"
     >
-      <div className="flex max-h-[88vh] flex-col">
-        <header className="border-b border-rule px-5 py-4 sm:px-7">
+      <div className="flex max-h-[92vh] flex-col sm:max-h-[88vh]">
+        <span aria-hidden className="mx-auto mt-3 h-1 w-10 rounded-full bg-line sm:hidden" />
+        <header className="flex flex-col gap-3 px-5 pt-4 pb-3 sm:px-7 sm:pt-6">
           <div className="flex items-start justify-between gap-4">
-            <h2 id="assessment-title" className="font-serif text-xl font-bold">
-              {submitted ? "您的测评结果" : (questionnaire?.title ?? "风险承受能力测评")}
+            <h2 id="assessment-title" className="text-[22px] leading-tight font-extrabold tracking-tight">
+              {submitted ? c.resultTitle : (questionnaire?.title ?? c.title)}
             </h2>
             <button
               type="button"
               onClick={() => ref.current?.close()}
-              className="shrink-0 rounded-sm px-2 py-1 text-sm text-ink-2 hover:bg-paper"
+              aria-label={c.close}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fill hover:bg-line"
             >
-              关闭
+              <Icon name="close" size={18} />
             </button>
           </div>
           {!submitted && questionnaire && (
             <>
-              <p className="mt-1 text-xs leading-5 text-ink-3">{questionnaire.disclaimer}</p>
-              {Object.keys(questionnaire.prefill).length > 0 && (
-                <p className="mt-1 text-xs leading-5 text-ink-2">已根据您在本行登记的资料预选年龄，如有变化可直接修改。</p>
-              )}
-              <div className="mt-3 flex items-center gap-3 text-xs text-ink-2">
-                <div className="h-1 flex-1 overflow-hidden rounded-full bg-rule" aria-hidden>
-                  <div
-                    className="h-full bg-brand transition-[width]"
-                    style={{ width: `${total ? (answered / total) * 100 : 0}%` }}
-                  />
+              <p className="text-xs leading-5 text-ink-3">{questionnaire.disclaimer}</p>
+              {Object.keys(questionnaire.prefill).length > 0 && <p className="text-xs leading-5 text-ink-2">{c.prefilled}</p>}
+              <div className="flex items-center gap-3 text-xs font-semibold text-ink-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line" aria-hidden>
+                  <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${total ? (answered / total) * 100 : 0}%` }} />
                 </div>
-                <span className="figures">
-                  已答 {answered} / {total}
-                </span>
+                <span className="figures">{c.answered(answered, total)}</span>
               </div>
             </>
           )}
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:px-7">
           {submitted ? (
             <ResultView result={submitted.result} />
           ) : (
-            <ol className="space-y-7">
+            <ol className="flex flex-col gap-7">
               {questionnaire?.questions.map((q, index) => (
                 <li key={q.id}>
                   <fieldset>
-                    <legend className="font-medium leading-7">
+                    <legend className="leading-7 font-bold">
                       <span className="figures mr-2 text-ink-3">{index + 1}.</span>
                       {q.text}
                     </legend>
-                    <div className="mt-2 grid gap-1.5">
+                    <div className="mt-2.5 grid gap-2">
                       {q.options.map((o) => {
                         const checked = answers[q.id] === o.id;
                         return (
                           <label
                             key={o.id}
-                            className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2.5 text-sm leading-6 ${
-                              checked ? "border-brand bg-brand-soft" : "border-rule hover:border-ink-3"
+                            className={`flex cursor-pointer items-start gap-3 rounded-2xl px-4 py-3 text-sm leading-6 transition-colors ${
+                              checked ? "bg-brand-soft font-semibold text-brand-strong ring-2 ring-brand" : "bg-fill hover:bg-line"
                             }`}
                           >
                             <input
@@ -137,7 +169,7 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
                               value={o.id}
                               checked={checked}
                               onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.id }))}
-                              className="mt-1.5 accent-[var(--brand)]"
+                              className="mt-1 h-4 w-4 accent-[var(--brand)]"
                             />
                             {o.text}
                           </label>
@@ -151,26 +183,20 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
           )}
         </div>
 
-        <footer className="border-t border-rule px-5 py-4 sm:px-7">
+        <footer className="flex flex-col gap-3 border-t border-line px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-7">
           {error && (
-            <p role="alert" className="mb-3 text-sm text-danger">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
           {submitted ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-ink-2">确认后评级生效，有效期 12 个月。</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={reset}
-                  disabled={busy}
-                  className="rounded-sm border border-rule px-4 py-2 text-sm hover:border-ink-3"
-                >
-                  重新作答
-                </button>
-                <button
-                  type="button"
+            <>
+              <p className="text-xs text-ink-2">{c.validity}</p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="quiet" onClick={reset} disabled={busy}>
+                  {c.retake}
+                </Button>
+                <Button
                   disabled={busy}
                   onClick={() =>
                     run(async () => {
@@ -179,17 +205,15 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
                       ref.current?.close();
                     })
                   }
-                  className="rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
                 >
-                  确认评级
-                </button>
+                  {c.confirm}
+                </Button>
               </div>
-            </div>
+            </>
           ) : (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-ink-3">请根据实际情况作答，结果将决定您可购买的产品范围。</p>
-              <button
-                type="button"
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-ink-3">{c.honest}</p>
+              <Button
                 disabled={busy || !total || answered < total}
                 onClick={() =>
                   run(async () => {
@@ -197,10 +221,9 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
                     setSubmitted({ id: res.assessment_id, result: res.result });
                   })
                 }
-                className="shrink-0 rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
               >
-                提交测评
-              </button>
+                {c.submit}
+              </Button>
             </div>
           )}
         </footer>
@@ -210,35 +233,38 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
 }
 
 function ResultView({ result }: { result: AssessmentResult }) {
+  const c = useCopy(COPY);
+  const { locale } = useLocale();
+  const name = locale === "en" ? RATING_EN[result.rating] ?? result.rating_name : result.rating_name;
   return (
-    <div>
-      <div className="flex items-end gap-3">
-        <span className="font-serif text-5xl font-bold text-brand">{result.rating}</span>
-        <span className="pb-1.5 font-serif text-xl font-bold">{result.rating_name}</span>
+    <div className="flex flex-col gap-5 pb-2">
+      <div className="flex flex-col gap-2 rounded-card bg-navy p-5 text-white">
+        <span className="flex items-end gap-3">
+          <span className="text-5xl font-extrabold">{result.rating}</span>
+          <span className="pb-1.5 text-xl font-bold">{name}</span>
+        </span>
+        <p className="text-sm leading-6 text-on-navy-2">{result.description}</p>
       </div>
-      <p className="mt-2 leading-7 text-ink-2">{result.description}</p>
 
       <RatingScale current={result.rating} />
 
-      <dl className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
-        <div className="rounded-sm bg-paper px-3 py-2.5">
-          <dt className="text-ink-2">测评得分</dt>
-          <dd className="figures mt-0.5 text-lg">{result.score} / 100</dd>
+      <dl className="grid gap-2 text-sm sm:grid-cols-2">
+        <div className="rounded-2xl bg-fill px-4 py-3">
+          <dt className="text-ink-2">{c.score}</dt>
+          <dd className="figures mt-0.5 text-xl font-extrabold">{result.score} / 100</dd>
         </div>
-        <div className="rounded-sm bg-paper px-3 py-2.5">
-          <dt className="text-ink-2">可购买的产品风险等级</dt>
-          <dd className="figures mt-0.5 text-lg">{productRiskRange(result.max_product_risk)}</dd>
+        <div className="rounded-2xl bg-fill px-4 py-3">
+          <dt className="text-ink-2">{c.eligible}</dt>
+          <dd className="figures mt-0.5 text-xl font-extrabold">{riskRange(result.max_product_risk)}</dd>
         </div>
       </dl>
 
-      {result.vetoed && (
-        <Notice>您选择了「不能接受任何本金亏损」，按规则评为 C1（保守型），仅可购买 PR1 产品。</Notice>
-      )}
+      {result.vetoed && <Notice>{c.vetoed}</Notice>}
       {result.warnings.map((w) => (
         <Notice key={w}>{w}</Notice>
       ))}
       {result.notes.map((n) => (
-        <p key={n} className="mt-3 text-sm text-ink-2">
+        <p key={n} className="text-sm text-ink-2">
           {n}
         </p>
       ))}
@@ -248,17 +274,18 @@ function ResultView({ result }: { result: AssessmentResult }) {
 
 /** 五级评级刻度：当前评级高亮，帮助客户理解自己处在哪一档。 */
 function RatingScale({ current }: { current: string }) {
+  const c = useCopy(COPY);
   const index = RATINGS.indexOf(current);
   return (
-    <div className="mt-5" aria-label={`评级刻度，当前为 ${current}`}>
-      <div className="grid grid-cols-5 gap-1">
+    <div aria-label={c.scale(current)}>
+      <div className="grid grid-cols-5 gap-1.5">
         {RATINGS.map((r, i) => (
-          <div key={r} className={`h-2 rounded-full ${i <= index ? "bg-brand" : "bg-rule"}`} />
+          <div key={r} className={`h-2 rounded-full ${i <= index ? "bg-brand" : "bg-line"}`} />
         ))}
       </div>
-      <div className="figures mt-1.5 grid grid-cols-5 gap-1 text-center text-xs">
+      <div className="figures mt-1.5 grid grid-cols-5 gap-1.5 text-center text-xs">
         {RATINGS.map((r) => (
-          <span key={r} className={r === current ? "font-bold text-brand" : "text-ink-3"}>
+          <span key={r} className={r === current ? "font-extrabold text-brand" : "text-ink-3"}>
             {r}
           </span>
         ))}
@@ -268,9 +295,5 @@ function RatingScale({ current }: { current: string }) {
 }
 
 function Notice({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-3 border-l-2 border-notice bg-notice-soft px-3 py-2 text-sm leading-6 text-ink-2">
-      {children}
-    </p>
-  );
+  return <p className="rounded-2xl bg-notice-soft px-4 py-3 text-sm leading-6 text-notice">{children}</p>;
 }

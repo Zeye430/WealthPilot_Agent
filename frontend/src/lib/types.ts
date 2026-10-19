@@ -190,6 +190,15 @@ export type AllocationBlock = {
   disclaimer: string;
 };
 
+export type AssetOverview = {
+  total: number;
+  liquid: number;
+  wealth: number;
+  tier: { name: string; card_name: string };
+  next_tier: { name: string; threshold: number; gap: number; progress: number } | null;
+  rm: { rm_name: string; rm_title: string; phone: string | null; wecom_url: string | null };
+};
+
 export type BaseProfileSummary = {
   display_name: string;
   age: number;
@@ -261,7 +270,7 @@ export type CustomerState = {
   permission: "ASSESSMENT_REQUIRED" | "ASSESSED";
   gate_reasons: string[];
   assessment: AssessmentSummary | null;
-  profile: { base: BaseProfileSummary | null; needs: NeedsRow[] };
+  profile: { base: BaseProfileSummary | null; needs: NeedsRow[]; overview: AssetOverview | null };
 };
 
 export type ChatResponse = {

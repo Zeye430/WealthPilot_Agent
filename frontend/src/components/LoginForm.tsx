@@ -3,12 +3,44 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Avatar, Button } from "@/components/ui";
 import { ApiError, getLoginConfig, login, type LoginConfig } from "@/lib/api";
+import { defineCopy, LocaleToggle, useCopy } from "@/lib/i18n";
 
-const ROLE_LABEL = { customer: "客户", rm: "理财经理" } as const;
+const COPY = defineCopy({
+  zh: {
+    tagline: "知岸银行（虚构）智能理财助手",
+    welcome: "欢迎回来",
+    pick: "选择演示账号",
+    roles: { customer: "客户", rm: "理财经理" },
+    username: "账号",
+    password: "密码",
+    accessCode: "访问码",
+    signIn: "登录",
+    signingIn: "登录中…",
+    failed: "登录失败，请重试。",
+    noServer: "无法连接服务器",
+    demo: "作品集演示系统：机构、产品与客户均为虚构；买入流程只到确认页，不会真实下单。",
+  },
+  en: {
+    tagline: "AI wealth assistant for Zhian Bank (fictional)",
+    welcome: "Welcome back",
+    pick: "Choose a demo account",
+    roles: { customer: "Customer", rm: "Relationship manager" },
+    username: "Username",
+    password: "Password",
+    accessCode: "Access code",
+    signIn: "Sign in",
+    signingIn: "Signing in…",
+    failed: "Sign-in failed. Please try again.",
+    noServer: "Can't reach the server",
+    demo: "Portfolio demo: the bank, products and customers are fictional. Purchases stop at the confirmation step.",
+  },
+});
 
 /** 登录页：账号密码登录；公开演示时需要访问码。会话保存在 httpOnly Cookie 中。 */
 export function LoginForm({ next }: { next: string | null }) {
+  const c = useCopy(COPY);
   const router = useRouter();
   const [config, setConfig] = useState<LoginConfig | null>(null);
   const [username, setUsername] = useState("");
@@ -20,8 +52,8 @@ export function LoginForm({ next }: { next: string | null }) {
   useEffect(() => {
     getLoginConfig()
       .then(setConfig)
-      .catch((e) => setError(e instanceof ApiError ? e.message : "无法连接服务器"));
-  }, []);
+      .catch((e) => setError(e instanceof ApiError ? e.message : c.noServer));
+  }, [c.noServer]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,102 +65,81 @@ export function LoginForm({ next }: { next: string | null }) {
       const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
       router.replace(user.role === "rm" ? "/rm" : (safeNext ?? "/"));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "登录失败，请重试。");
+      setError(err instanceof ApiError ? err.message : c.failed);
       setBusy(false);
     }
   }
 
+  const inputClass =
+    "h-13 w-full rounded-full bg-fill px-5 text-[15px] outline-none placeholder:text-ink-3 focus:ring-2 focus:ring-brand";
+
   return (
-    <main className="flex min-h-full items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <p className="font-serif text-2xl font-bold text-brand">WealthPilot</p>
-        <p className="mt-1 text-sm text-ink-2">理财助手（演示版）</p>
+    <main className="flex min-h-full flex-col bg-canvas">
+      <div className="flex justify-end px-5 pt-4">
+        <LocaleToggle />
+      </div>
+      <div className="flex flex-1 items-start justify-center px-5 pt-6 pb-12 sm:items-center sm:pt-0">
+        <div className="w-full max-w-sm">
+          <p className="text-[28px] font-extrabold tracking-tight">WealthPilot</p>
+          <p className="mt-1 text-sm text-ink-3">{c.tagline}</p>
+          <h1 className="mt-8 text-[22px] font-extrabold">{c.welcome}</h1>
 
-        <form onSubmit={submit} className="mt-8 space-y-4 rounded-sm border border-rule bg-surface px-5 py-6">
-          {config && config.demo_accounts.length > 0 && (
-            <fieldset>
-              <legend className="text-xs text-ink-2">选择演示账号</legend>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {config.demo_accounts.map((a) => (
-                  <button
-                    key={a.username}
-                    type="button"
-                    onClick={() => setUsername(a.username)}
-                    aria-pressed={username === a.username}
-                    className={`rounded-sm border px-3 py-2 text-left text-sm ${
-                      username === a.username ? "border-brand bg-brand-soft" : "border-rule hover:border-ink-3"
-                    }`}
-                  >
-                    <span className="block font-medium">{a.display_name}</span>
-                    <span className="text-xs text-ink-3">{ROLE_LABEL[a.role]}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          )}
+          <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
+            {config && config.demo_accounts.length > 0 && (
+              <fieldset>
+                <legend className="text-xs font-bold text-ink-3">{c.pick}</legend>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {config.demo_accounts.map((a) => (
+                    <button
+                      key={a.username}
+                      type="button"
+                      onClick={() => setUsername(a.username)}
+                      aria-pressed={username === a.username}
+                      className={`flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors ${
+                        username === a.username ? "bg-brand-soft ring-2 ring-brand" : "bg-fill hover:bg-line"
+                      }`}
+                    >
+                      <Avatar text={a.display_name.slice(0, 1)} tone={a.role === "rm" ? "navy" : "brand"} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-bold">{a.display_name.replace(/（虚构）$/, "")}</span>
+                        <span className="text-xs text-ink-3">{c.roles[a.role]}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
-          <Field label="账号" id="username">
-            <input
-              id="username"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-sm border border-rule bg-surface px-3 py-2"
-              required
-            />
-          </Field>
-          <Field label="密码" id="password">
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-sm border border-rule bg-surface px-3 py-2"
-              required
-            />
-          </Field>
-          {config?.access_code_required && (
-            <Field label="访问码" id="access-code">
-              <input
-                id="access-code"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                className="w-full rounded-sm border border-rule bg-surface px-3 py-2"
-                required
-              />
-            </Field>
-          )}
+            <label className="sr-only" htmlFor="username">
+              {c.username}
+            </label>
+            <input id="username" autoComplete="username" placeholder={c.username} value={username} onChange={(e) => setUsername(e.target.value)} className={inputClass} required />
+            <label className="sr-only" htmlFor="password">
+              {c.password}
+            </label>
+            <input id="password" type="password" autoComplete="current-password" placeholder={c.password} value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} required />
+            {config?.access_code_required && (
+              <>
+                <label className="sr-only" htmlFor="access-code">
+                  {c.accessCode}
+                </label>
+                <input id="access-code" placeholder={c.accessCode} value={accessCode} onChange={(e) => setAccessCode(e.target.value)} className={inputClass} required />
+              </>
+            )}
 
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-sm bg-brand px-4 py-2.5 text-sm font-medium text-surface disabled:opacity-40"
-          >
-            {busy ? "登录中…" : "登录"}
-          </button>
-          {config?.hint && <p className="text-xs text-ink-3">{config.hint}</p>}
-        </form>
-        <p className="mt-4 text-xs leading-5 text-ink-3">
-          作品集演示系统：机构、产品与客户均为虚构；买入流程只到确认页，不会真实下单。
-        </p>
+            {error && (
+              <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger">
+                {error}
+              </p>
+            )}
+            <Button type="submit" size="lg" disabled={busy} className="w-full">
+              {busy ? c.signingIn : c.signIn}
+            </Button>
+            {config?.hint && <p className="text-center text-xs text-ink-3">{config.hint}</p>}
+          </form>
+          <p className="mt-8 text-xs leading-5 text-ink-3">{c.demo}</p>
+        </div>
       </div>
     </main>
-  );
-}
-
-function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-1 block text-sm">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

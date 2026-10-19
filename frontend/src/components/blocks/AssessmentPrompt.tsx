@@ -1,36 +1,34 @@
+"use client";
+
+import { Button } from "@/components/ui";
+import { defineCopy, useCopy } from "@/lib/i18n";
 import type { AssessmentPromptBlock } from "@/lib/types";
 
+const COPY = defineCopy({
+  zh: { reminder: "完成风险测评后，我可以按您的需求匹配产品。", start: "开始测评" },
+  en: { reminder: "Complete your risk profile and I'll match products to your needs.", start: "Start now" },
+});
+
 /** 测评入口。invite：客户要产品时的完整卡片；reminder：常识回答后的一行提醒。 */
-export function AssessmentPrompt({
-  block,
-  onStart,
-}: {
-  block: AssessmentPromptBlock;
-  onStart: () => void;
-}) {
+export function AssessmentPrompt({ block, onStart }: { block: AssessmentPromptBlock; onStart: () => void }) {
+  const c = useCopy(COPY);
   if (block.variant === "reminder") {
     return (
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-2">
-        完成风险测评后，我可以在您的风险等级范围内为您筛选产品。
-        <button type="button" onClick={onStart} className="font-medium text-brand underline underline-offset-4">
-          开始测评
-        </button>
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-2">
+        {c.reminder}
+        <Button size="sm" variant="quiet" onClick={onStart}>
+          {c.start}
+        </Button>
       </p>
     );
   }
   return (
-    <div className="flex max-w-xl flex-wrap items-center justify-between gap-4 rounded-sm border border-brand/40 bg-brand-soft px-5 py-4">
+    <div className="flex max-w-xl flex-col gap-4 rounded-card bg-brand-soft p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="font-serif font-bold">{block.title}</p>
+        <p className="font-extrabold">{block.title}</p>
         <p className="mt-1 text-sm leading-6 text-ink-2">{block.message}</p>
       </div>
-      <button
-        type="button"
-        onClick={onStart}
-        className="shrink-0 rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface"
-      >
-        开始测评
-      </button>
+      <Button onClick={onStart}>{c.start}</Button>
     </div>
   );
 }

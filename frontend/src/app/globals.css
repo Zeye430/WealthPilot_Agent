@@ -1,19 +1,32 @@
 @import "tailwindcss";
 
+/*
+ * 设计令牌（2026-10-18 改版）：白底 + 浅灰分区、深海军蓝文字、亮蓝主操作、胶囊按钮、20px 卡片圆角。
+ * 设计语言参考 PayPal App 的简洁感，配色与字体为本项目自有（不使用 PayPal 品牌元素）。
+ */
 :root {
   color-scheme: light;
-  --paper: #f5f7f7;
-  --surface: #ffffff;
-  --ink: #16212a;
-  --ink-2: #5a6670;
-  --ink-3: #87929a;
-  --rule: #d8dfe2;
-  --brand: #1d4f5c;
-  --brand-soft: #e3eef0;
-  --notice: #9a6412;
-  --notice-soft: #fbf3e4;
-  --danger: #b4312c;
+  --canvas: #ffffff; /* 页面底色 */
+  --fill: #f4f6f9; /* 卡片、分区、输入框底色 */
+  --surface: #ffffff; /* 弹窗、底部面板等浮层 */
+  --line: #e3e8ef;
+  --ink: #0a1f3d;
+  --ink-2: #4b5b70;
+  --ink-3: #6b7a8c;
+  --brand: #1d5bd8;
+  --brand-strong: #0f3a8c;
+  --brand-soft: #e8f0fe;
+  --on-brand: #ffffff;
+  --navy: #0a1f3d; /* 资产卡片 */
+  --on-navy-2: #b8c4d6;
+  --ok: #0e7c4a;
+  --ok-soft: #ddf3e8;
+  --notice: #8a5a00;
+  --notice-soft: #fff4db;
+  --danger: #c0262d;
+  --danger-soft: #fde8e8;
 
+  /* 图表系列色：按固定顺序分配，已用 dataviz 校验脚本验证色盲可分辨 */
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
@@ -24,17 +37,25 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper: #121c22;
-    --surface: #17242b;
-    --ink: #e8eef0;
-    --ink-2: #a9b6bd;
-    --ink-3: #7c8a92;
-    --rule: #2a3a42;
-    --brand: #7fb8c4;
-    --brand-soft: #1e333b;
+    --canvas: #0b1220;
+    --fill: #172133;
+    --surface: #121b2c;
+    --line: #263349;
+    --ink: #e9eef6;
+    --ink-2: #a9b5c8;
+    --ink-3: #8592a6;
+    --brand: #7aa5f5;
+    --brand-strong: #a9c4fa;
+    --brand-soft: #1b2b4d;
+    --on-brand: #0b1220;
+    --navy: #15284a;
+    --on-navy-2: #b8c4d6;
+    --ok: #4cc38a;
+    --ok-soft: #12301f;
     --notice: #e2b25c;
     --notice-soft: #2e2817;
-    --danger: #e66767;
+    --danger: #f07b7b;
+    --danger-soft: #3a1c1c;
 
     --series-1: #3987e5;
     --series-2: #d95926;
@@ -46,17 +67,25 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #121c22;
-  --surface: #17242b;
-  --ink: #e8eef0;
-  --ink-2: #a9b6bd;
-  --ink-3: #7c8a92;
-  --rule: #2a3a42;
-  --brand: #7fb8c4;
-  --brand-soft: #1e333b;
+  --canvas: #0b1220;
+  --fill: #172133;
+  --surface: #121b2c;
+  --line: #263349;
+  --ink: #e9eef6;
+  --ink-2: #a9b5c8;
+  --ink-3: #8592a6;
+  --brand: #7aa5f5;
+  --brand-strong: #a9c4fa;
+  --brand-soft: #1b2b4d;
+  --on-brand: #0b1220;
+  --navy: #15284a;
+  --on-navy-2: #b8c4d6;
+  --ok: #4cc38a;
+  --ok-soft: #12301f;
   --notice: #e2b25c;
   --notice-soft: #2e2817;
-  --danger: #e66767;
+  --danger: #f07b7b;
+  --danger-soft: #3a1c1c;
 
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -66,37 +95,37 @@
 }
 
 @theme inline {
-  --color-paper: var(--paper);
+  --color-canvas: var(--canvas);
+  --color-fill: var(--fill);
   --color-surface: var(--surface);
+  --color-line: var(--line);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
-  --color-rule: var(--rule);
   --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+  --color-navy: var(--navy);
+  --color-on-navy-2: var(--on-navy-2);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
   --color-notice: var(--notice);
   --color-notice-soft: var(--notice-soft);
   --color-danger: var(--danger);
-  --font-sans: var(--font-noto-sans), "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-serif: var(--font-noto-serif), "Songti SC", serif;
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-jakarta), var(--font-noto-sans), "PingFang SC", "Microsoft YaHei", sans-serif;
+  --radius-card: 20px;
 }
 
 body {
-  background: var(--paper);
+  background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-sans);
 }
 
 .figures {
   font-variant-numeric: tabular-nums lining-nums;
-}
-
-/* 凭证的齿孔分隔线 */
-.perforation {
-  height: 12px;
-  background:
-    radial-gradient(circle at 6px 6px, var(--paper) 4px, transparent 4.5px) 0 0 / 14px 12px repeat-x;
-  margin-inline: -1px;
 }
 
 /* 金额行的点线引导 */
@@ -111,6 +140,14 @@ body {
 :focus-visible:not([data-focus-ring="off"]) {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* 横向滑动的卡片列表：隐藏滚动条但保留滚动 */
+.scroll-row {
+  scrollbar-width: none;
+}
+.scroll-row::-webkit-scrollbar {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

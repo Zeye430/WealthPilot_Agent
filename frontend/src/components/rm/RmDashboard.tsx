@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { Avatar, Button, Chip } from "@/components/ui";
 import {
   ApiError,
   getSessionUser,
@@ -12,14 +13,74 @@ import {
   type RmHandoffRow,
   type SessionUser,
 } from "@/lib/api";
+import { defineCopy, intlLocale, LocaleToggle, useCopy, useLocale } from "@/lib/i18n";
 
 const POLL_MS = 3000;
+
+const COPY = defineCopy({
+  zh: {
+    title: "理财经理看板",
+    demo: "演示系统：理财经理与客户均为虚构",
+    logout: "退出登录",
+    inbox: "客户咨询",
+    empty: "暂无咨询",
+    pick: "选择左侧的客户咨询查看要点。",
+    reason: (status: string, reason: string) => `${status}；原因：${reason}`,
+    accept: "标记跟进中",
+    resolve: "结束跟进",
+    summary: "咨询要点",
+    generated: (scope: string) => `由系统根据客户资料与对话自动生成，包括：${scope}`,
+    profile: "客户资料",
+    profileValue: (age: number, tier: string, liquid: string) => `${age} 岁，${tier}；可随时支取约 ${liquid}`,
+    assessment: "风险测评",
+    needs: "本次需求",
+    none: "未提供",
+    products: "已了解的产品",
+    noProducts: "无",
+    questions: "待跟进问题",
+    transcript: "对话记录",
+    roles: { user: "客户", assistant: "AI 助手", rm: "理财经理（旧版应用内回复）" } as Record<string, string>,
+    events: "状态记录",
+    loadFailed: "加载失败",
+    failed: "操作失败",
+    customer: "客户",
+  },
+  en: {
+    title: "RM dashboard",
+    demo: "Demo: relationship managers and customers are fictional",
+    logout: "Sign out",
+    inbox: "Customer requests",
+    empty: "No requests",
+    pick: "Select a request to see the summary.",
+    reason: (status: string, reason: string) => `${status}. Reason: ${reason}`,
+    accept: "Mark as following up",
+    resolve: "Close",
+    summary: "Summary",
+    generated: (scope: string) => `Generated from bank records and the conversation: ${scope}`,
+    profile: "Profile",
+    profileValue: (age: number, tier: string, liquid: string) => `${age}, ${tier}; about ${liquid} available anytime`,
+    assessment: "Risk profile",
+    needs: "Goals",
+    none: "Not provided",
+    products: "Products discussed",
+    noProducts: "None",
+    questions: "Open questions",
+    transcript: "Transcript",
+    roles: { user: "Customer", assistant: "AI assistant", rm: "RM (legacy in-app reply)" } as Record<string, string>,
+    events: "Status history",
+    loadFailed: "Couldn't load",
+    failed: "Something went wrong",
+    customer: "Customer",
+  },
+});
 
 /**
  * 理财经理看板（演示）：查看客户联系前同步过来的咨询要点。
  * 客户通过名片上的企业微信 / 电话联系理财经理，看板只用于了解情况和标记跟进状态。
  */
 export function RmDashboard() {
+  const c = useCopy(COPY);
+  const { locale } = useLocale();
   const router = useRouter();
   const [me, setMe] = useState<SessionUser | null>(null);
   const [rows, setRows] = useState<RmHandoffRow[]>([]);
@@ -40,9 +101,9 @@ export function RmDashboard() {
       setRows(await rmApi.list());
       if (selected) setDetail(await rmApi.detail(selected));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "加载失败");
+      setError(e instanceof ApiError ? e.message : c.loadFailed);
     }
-  }, [me, selected]);
+  }, [me, selected, c.loadFailed]);
 
   useEffect(() => {
     const first = setTimeout(refresh, 0);
@@ -59,36 +120,38 @@ export function RmDashboard() {
       await action();
       await refresh();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "操作失败");
+      setError(e instanceof ApiError ? e.message : c.failed);
     }
   }
 
   const canResolve = detail && (detail.status === "PENDING" || detail.status === "ACCEPTED");
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-5 py-3">
+    <div className="flex h-full flex-col bg-canvas">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 lg:px-8">
         <div>
-          <p className="font-serif text-lg font-bold text-brand">理财经理看板</p>
-          <p className="text-xs text-ink-2">演示系统：理财经理与客户均为虚构</p>
+          <p className="text-xl font-extrabold tracking-tight">{c.title}</p>
+          <p className="text-xs text-ink-3">{c.demo}</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          {me && <span className="text-ink-2">当前登录：{me.display_name}</span>}
-          <button
-            type="button"
-            onClick={() => logout().finally(() => router.replace("/login"))}
-            className="text-ink-2 underline underline-offset-4 hover:text-ink"
-          >
-            退出登录
-          </button>
+          {me && (
+            <span className="flex items-center gap-2 font-semibold">
+              <Avatar text={me.display_name.slice(0, 1)} tone="navy" />
+              <span className="hidden sm:inline">{me.display_name}</span>
+            </span>
+          )}
+          <LocaleToggle />
+          <Button variant="quiet" size="sm" onClick={() => logout().finally(() => router.replace("/login"))}>
+            {c.logout}
+          </Button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="border-b border-rule md:w-80 md:border-r md:border-b-0" aria-label="交接请求">
-          <p className="px-5 pt-4 text-xs font-medium text-ink-2">客户咨询</p>
-          {rows.length === 0 && <p className="px-5 py-3 text-sm text-ink-3">暂无咨询</p>}
-          <ul className="space-y-1 p-3">
+        <aside className="border-b border-line bg-fill md:w-80 md:border-b-0" aria-label={c.inbox}>
+          <p className="px-5 pt-5 text-xs font-bold text-ink-3">{c.inbox}</p>
+          {rows.length === 0 && <p className="px-5 py-3 text-sm text-ink-3">{c.empty}</p>}
+          <ul className="flex flex-col gap-1.5 p-3">
             {rows.map((r) => (
               <li key={r.id}>
                 <button
@@ -97,89 +160,70 @@ export function RmDashboard() {
                     setSelected(r.id);
                     rmApi.detail(r.id).then(setDetail);
                   }}
-                  className={`w-full rounded-sm border px-3 py-2.5 text-left text-sm ${
-                    selected === r.id ? "border-brand bg-brand-soft" : "border-rule hover:border-ink-3"
+                  className={`flex w-full flex-col gap-1 rounded-2xl px-4 py-3 text-left text-sm ${
+                    selected === r.id ? "bg-canvas ring-2 ring-brand" : "hover:bg-canvas"
                   }`}
                 >
-                  <span className="flex justify-between gap-2">
-                    <span className="font-medium">{r.customer_name}</span>
-                    <span className="text-xs text-ink-2">{r.status_label}</span>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-bold">{r.customer_name}</span>
+                    <Chip tone={r.status === "PENDING" ? "notice" : r.status === "ACCEPTED" ? "brand" : "neutral"}>{r.status_label}</Chip>
                   </span>
-                  <span className="mt-0.5 block text-xs text-ink-3">{r.reason}</span>
+                  <span className="text-xs text-ink-3">{r.reason}</span>
                 </button>
               </li>
             ))}
           </ul>
         </aside>
 
-        <main className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <main className="min-h-0 flex-1 overflow-y-auto px-5 py-6 lg:px-8">
           {error && <p className="mb-3 text-sm text-danger">{error}</p>}
           {!detail ? (
-            <p className="text-sm text-ink-3">选择左侧的客户咨询查看要点。</p>
+            <p className="text-sm text-ink-3">{c.pick}</p>
           ) : (
-            <div className="mx-auto max-w-3xl space-y-5">
+            <div className="mx-auto flex max-w-3xl flex-col gap-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h1 className="font-serif text-xl font-bold">{detail.summary.customer?.display_name ?? "客户"}</h1>
-                  <p className="text-sm text-ink-2">
-                    {detail.status_label}，原因：{detail.summary.reason}
-                  </p>
+                  <h1 className="text-2xl font-extrabold tracking-tight">{detail.summary.customer?.display_name ?? c.customer}</h1>
+                  <p className="text-sm text-ink-2">{c.reason(detail.status_label, detail.summary.reason)}</p>
                 </div>
                 <div className="flex gap-2">
-                  {detail.status === "PENDING" && (
-                    <button
-                      type="button"
-                      onClick={() => act(() => rmApi.accept(detail.id))}
-                      className="rounded-sm bg-brand px-4 py-2 text-sm font-medium text-surface"
-                    >
-                      标记跟进中
-                    </button>
-                  )}
+                  {detail.status === "PENDING" && <Button onClick={() => act(() => rmApi.accept(detail.id))}>{c.accept}</Button>}
                   {canResolve && (
-                    <button
-                      type="button"
-                      onClick={() => act(() => rmApi.resolve(detail.id))}
-                      className="rounded-sm border border-rule px-4 py-2 text-sm hover:border-ink-3"
-                    >
-                      结束跟进
-                    </button>
+                    <Button variant="secondary" onClick={() => act(() => rmApi.resolve(detail.id))}>
+                      {c.resolve}
+                    </Button>
                   )}
                 </div>
               </div>
 
-              <section className="rounded-sm border border-rule bg-surface px-4 py-3 text-sm">
-                <h2 className="font-serif font-bold">咨询要点</h2>
-                <p className="mt-0.5 text-xs text-ink-3">由系统根据客户资料与对话自动生成，包括：{detail.sync_scope.join("、")}</p>
-                <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              <section className="rounded-card bg-fill p-5 text-sm">
+                <h2 className="text-[17px] font-extrabold">{c.summary}</h2>
+                <p className="mt-0.5 text-xs text-ink-3">{c.generated(detail.sync_scope.join("、"))}</p>
+                <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
                   {detail.summary.customer && (
-                    <Item label="客户资料">
-                      {detail.summary.customer.age} 岁，{detail.summary.customer.customer_tier}；可随时支取约{" "}
-                      {detail.summary.customer.assets.liquid_total}
+                    <Item label={c.profile}>
+                      {c.profileValue(detail.summary.customer.age, detail.summary.customer.customer_tier, detail.summary.customer.assets.liquid_total)}
                     </Item>
                   )}
-                  <Item label="风险测评">{detail.summary.assessment}</Item>
-                  <Item label="本次需求">
-                    {detail.summary.needs.map((n) => `${n.label} ${n.value}`).join("；") || "未提供"}
-                  </Item>
-                  <Item label="已了解的产品">{detail.summary.products_discussed.join("、") || "无"}</Item>
-                  <Item label="待跟进问题">{detail.summary.open_questions.join("；") || "无"}</Item>
+                  <Item label={c.assessment}>{detail.summary.assessment}</Item>
+                  <Item label={c.needs}>{detail.summary.needs.map((n) => `${n.label} ${n.value}`).join("；") || c.none}</Item>
+                  <Item label={c.products}>{detail.summary.products_discussed.join("、") || c.noProducts}</Item>
+                  <Item label={c.questions}>{detail.summary.open_questions.join("；") || c.noProducts}</Item>
                 </dl>
               </section>
 
               <section>
-                <h2 className="font-serif font-bold">对话记录</h2>
-                <ol className="mt-2 space-y-2 text-sm">
+                <h2 className="text-[17px] font-extrabold">{c.transcript}</h2>
+                <ol className="mt-3 flex flex-col gap-3 text-sm">
                   {detail.messages.map((m, i) => (
-                    <li key={i} className={m.role === "user" ? "text-right" : ""}>
-                      <span className="block text-[11px] text-ink-3">
-                        {{ user: "客户", assistant: "AI 助手", rm: "理财经理（旧版应用内回复）" }[m.role]}
-                      </span>
+                    <li key={i} className={m.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}>
+                      <span className="text-[11px] text-ink-3">{c.roles[m.role]}</span>
                       <span
-                        className={`inline-block max-w-[85%] rounded-sm px-3 py-2 text-left leading-6 whitespace-pre-wrap ${
-                          m.role === "user" ? "bg-brand-soft" : m.role === "rm" ? "border-l-2 border-brand bg-surface" : "bg-paper"
+                        className={`mt-0.5 max-w-[85%] rounded-[18px] px-4 py-2.5 leading-6 whitespace-pre-wrap ${
+                          m.role === "user" ? "rounded-br-md bg-brand text-on-brand" : "rounded-bl-md bg-fill"
                         }`}
                       >
-                        {m.content || "（已转给理财经理）"}
+                        {m.content}
                       </span>
                     </li>
                   ))}
@@ -187,11 +231,11 @@ export function RmDashboard() {
               </section>
 
               <section className="text-xs text-ink-3">
-                <h2 className="font-medium text-ink-2">状态记录</h2>
-                <ul className="mt-1 space-y-0.5">
+                <h2 className="font-bold text-ink-2">{c.events}</h2>
+                <ul className="mt-1 flex flex-col gap-0.5">
                   {detail.events.map((e, i) => (
-                    <li key={i}>
-                      {new Date(e.at).toLocaleString("zh-CN")}：{e.to}（{e.actor}）
+                    <li key={i} className="figures">
+                      {new Date(e.at).toLocaleString(intlLocale(locale))}：{e.to}（{e.actor}）
                     </li>
                   ))}
                 </ul>
@@ -208,7 +252,7 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
   return (
     <div>
       <dt className="text-xs text-ink-3">{label}</dt>
-      <dd className="mt-0.5 leading-6">{children}</dd>
+      <dd className="mt-0.5 leading-6 font-semibold">{children}</dd>
     </div>
   );
 }
