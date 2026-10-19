@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, Helvetica, Arial, sans-serif">
+  <title>WealthPilot 生产部署架构</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5b70"/>
+    </marker>
+    <marker id="arrowDash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b25e09"/>
+    </marker>
+    <style>
+      .zone { font-size: 13px; font-weight: 700; fill: #4b5b70; }
+      .title { font-size: 15px; font-weight: 700; fill: #0a1f3d; }
+      .sub { font-size: 12px; fill: #4b5b70; }
+      .tag { font-size: 11px; font-weight: 700; }
+      .box { fill: #ffffff; stroke: #c8d2df; stroke-width: 1.2; rx: 12; }
+      .edge { stroke: #4b5b70; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #b25e09; stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; marker-end: url(#arrowDash); }
+      .elabel { font-size: 11.5px; fill: #4b5b70; }
+      .dlabel { font-size: 11.5px; fill: #b25e09; font-weight: 600; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="760" fill="#ffffff"/>
+
+  <!-- 网络区域底色：左列互联网链路，右两列行内网络 -->
+  <rect x="30" y="20" width="360" height="430" rx="18" fill="#fff4e8"/>
+  <text x="48" y="44" class="zone">互联网链路（客户）</text>
+  <rect x="410" y="20" width="760" height="430" rx="18" fill="#eef2f7"/>
+  <text x="428" y="44" class="zone">行内网络（员工）· 外网不可达</text>
+
+  <!-- 第 1 层：三个入口 -->
+  <rect x="60" y="60" width="300" height="72" class="box"/>
+  <text x="80" y="88" class="title">客户</text>
+  <text x="80" y="112" class="sub">知岸银行 App 中的「AI 理财助手」模块</text>
+
+  <rect x="440" y="60" width="330" height="72" class="box"/>
+  <text x="460" y="88" class="title">理财经理</text>
+  <text x="460" y="112" class="sub">员工工作台 / CRM 待办 / 企业微信</text>
+
+  <rect x="810" y="60" width="330" height="72" class="box"/>
+  <text x="830" y="88" class="title">运维与合规</text>
+  <text x="830" y="112" class="sub">Grafana 告警值班 · 合规审计系统</text>
+
+  <!-- 第 2 层：网络接入 -->
+  <rect x="60" y="180" width="300" height="72" class="box"/>
+  <text x="80" y="208" class="title">API 网关 + WAF</text>
+  <text x="80" y="232" class="sub">TLS · 限流 · 只放行客户接口</text>
+
+  <rect x="440" y="180" width="700" height="72" class="box"/>
+  <text x="460" y="208" class="title">员工统一身份认证（单点登录 · 多因素）</text>
+  <text x="460" y="232" class="sub">按岗位授权：理财经理只看本人 / 本网点客户；运维只看汇总指标</text>
+
+  <!-- 第 3 层：WealthPilot -->
+  <rect x="44" y="290" width="1112" height="146" rx="16" fill="#e8f0fe" stroke="#1d5bd8" stroke-width="1.5"/>
+  <text x="62" y="313" class="zone" style="fill:#1d5bd8">WealthPilot</text>
+
+  <rect x="60" y="326" width="300" height="94" class="box"/>
+  <text x="80" y="352" class="title">客户接口 + H5 前端</text>
+  <text x="80" y="375" class="sub">门禁 · 工具 · 输出审查（15 条规则）</text>
+  <text x="80" y="397" class="sub">核验进入凭证 → 建立会话</text>
+
+  <rect x="440" y="326" width="330" height="94" class="box"/>
+  <text x="460" y="352" class="title">理财经理接口</text>
+  <text x="460" y="375" class="sub">/api/v1/rm/* · 咨询要点与跟进状态</text>
+  <text x="460" y="397" class="sub">状态机留痕，只能由真实操作推进</text>
+
+  <rect x="810" y="326" width="330" height="94" class="box"/>
+  <text x="830" y="352" class="title">运维接口与指标</text>
+  <text x="830" y="375" class="sub">/api/v1/ops/* · /metrics · /health/ready</text>
+  <text x="830" y="397" class="sub">不含对话内容与客户编号</text>
+
+  <!-- 第 4 层：依赖 -->
+  <text x="48" y="490" class="zone">依赖</text>
+  <rect x="60" y="500" width="300" height="110" class="box"/>
+  <text x="80" y="528" class="title">银行既有系统</text>
+  <text x="80" y="552" class="sub">手机银行后台（签发凭证；公钥供本地核验）</text>
+  <text x="80" y="574" class="sub">客户信息系统 / CRM（基础画像，只读）</text>
+  <text x="80" y="596" class="sub">理财销售系统（产品要素 · 下单 · 双录）</text>
+
+  <rect x="440" y="500" width="330" height="110" class="box"/>
+  <text x="460" y="528" class="title">数据区</text>
+  <text x="460" y="552" class="sub">PostgreSQL 主备 + pgvector（对话、审计、指标）</text>
+  <text x="460" y="574" class="sub">Redis（限流、熔断状态，多实例共享）</text>
+  <text x="460" y="596" class="sub">日志平台（审计留存，不可篡改）</text>
+
+  <rect x="810" y="500" width="330" height="110" class="box"/>
+  <text x="830" y="528" class="title">模型服务</text>
+  <text x="830" y="552" class="sub">大模型：已备案服务或行内私有化部署</text>
+  <text x="830" y="574" class="sub">发送前数据最小化；备用模型可切换</text>
+  <text x="830" y="596" class="sub">语音识别：行内部署，录音不出行</text>
+
+  <!-- 连线：入口 → 接入 → WealthPilot -->
+  <path d="M210,132 L210,176" class="edge"/>
+  <text x="218" y="160" class="elabel">一次性进入凭证</text>
+  <path d="M210,252 L210,322" class="edge"/>
+  <path d="M605,132 L605,176" class="edge"/>
+  <path d="M975,132 L975,176" class="edge"/>
+  <path d="M605,252 L605,322" class="edge"/>
+  <path d="M975,252 L975,322" class="edge"/>
+
+  <!-- WealthPilot → 依赖 -->
+  <path d="M150,420 L150,496" class="edge"/>
+  <text x="158" y="465" class="elabel">读画像、产品要素</text>
+  <text x="158" y="481" class="elabel">买入校验</text>
+  <path d="M300,420 L300,470 L470,470 L470,496" class="edge"/>
+  <text x="372" y="464" class="elabel">读写</text>
+  <path d="M340,420 L340,452 L1080,452 L1080,496" class="edge"/>
+  <text x="640" y="467" class="elabel">调用模型（不含客户编号）</text>
+  <path d="M605,420 L605,496" class="edge"/>
+  <path d="M900,420 L900,478 L740,478 L740,496" class="edge"/>
+
+  <!-- 虚线：公钥与交接推送 -->
+  <path d="M440,350 L424,350 L424,100 L436,100" class="dash"/>
+  <text x="418" y="250" class="dlabel" transform="rotate(-90 418 250)" text-anchor="middle">交接要点推送</text>
+
+  <!-- 图例 -->
+  <g transform="translate(60,650)">
+    <path d="M0,10 L40,10" class="edge"/>
+    <text x="50" y="14" class="elabel">请求 / 数据流向</text>
+    <path d="M180,10 L220,10" class="dash"/>
+    <text x="230" y="14" class="elabel">消息推送</text>
+    <rect x="400" y="0" width="20" height="20" rx="4" fill="#fff4e8"/>
+    <text x="428" y="14" class="elabel">互联网链路</text>
+    <rect x="520" y="0" width="20" height="20" rx="4" fill="#eef2f7"/>
+    <text x="548" y="14" class="elabel">行内网络（外网不可达）</text>
+    <rect x="720" y="0" width="20" height="20" rx="4" fill="#e8f0fe" stroke="#1d5bd8"/>
+    <text x="748" y="14" class="elabel">WealthPilot（行内应用区，多实例 + 负载均衡）</text>
+  </g>
+  <text x="60" y="712" class="sub">演示中：客户入口为模拟手机银行（/bank），理财经理与运维以账号密码登录代替单点登录，运维看板 /ops 代替 Grafana；</text>
+  <text x="60" y="732" class="sub">身份只从 get_current_user 一处获得，接口已按 /api/v1/rm、/api/v1/ops 分组，对接生产入口时业务代码不变。</text>
+</svg>

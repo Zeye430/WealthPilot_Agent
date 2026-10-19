@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
       { source: "/health", destination: `${backendUrl}/health` },
+      // 模拟手机银行的后台接口（演示用）；生产中是银行自己的系统
+      { source: "/bank-sim/api/:path*", destination: `${backendUrl}/bank-sim/api/:path*` },
     ];
   },
 };

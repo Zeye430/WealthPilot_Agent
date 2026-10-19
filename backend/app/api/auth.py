@@ -1,6 +1,7 @@
 """登录 / 退出 / 当前用户。会话令牌只通过 httpOnly Cookie 传递，前端脚本读不到。"""
 
 import hmac
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -8,12 +9,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import SESSION_COOKIE, get_current_user, get_now
-from app.auth.service import CurrentUser, authenticate, create_session, revoke_session
+from app.auth import app_ticket
+from app.auth.service import (
+    CurrentUser,
+    app_customer,
+    authenticate,
+    create_session,
+    revoke_session,
+)
 from app.core.config import get_settings
 from app.core.i18n import L
 from app.core.ratelimit import login_limit
 from app.db.session import get_session
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
@@ -80,6 +89,12 @@ def login(
             status_code=401, detail=L("账号或密码不正确", "Incorrect username or password")
         )
     token = create_session(db, user, now)
+    _set_session_cookie(response, token)
+    return user_view(user)
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    settings = get_settings()
     response.set_cookie(
         SESSION_COOKIE,
         token,
@@ -89,7 +104,41 @@ def login(
         samesite="lax",
         path="/",
     )
-    return user_view(user)
+
+
+class AppTicketRequest(BaseModel):
+    ticket: str = Field(min_length=20, max_length=2048)
+
+
+@router.post("/app-ticket")
+def app_ticket_login(
+    req: AppTicketRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_session),
+    now: datetime = Depends(get_now),
+):
+    """手机银行 App 进入：核验银行签发的一次性凭证，建立 WealthPilot 会话（客户无需输入密码）。"""
+    login_limit(request, "app-ticket")
+    try:
+        ticket = app_ticket.verify(req.ticket, now)
+        app_ticket.consume(db, ticket, now)
+        user = app_customer(db, ticket.customer_id)
+    except (app_ticket.TicketError, ValueError) as exc:
+        # 原因只写日志；对外统一提示，不帮助攻击者区分「签名错」「已过期」「已使用」
+        logger.warning("app ticket rejected: %s", exc)
+        raise HTTPException(
+            status_code=401,
+            detail=L(
+                "进入凭证无效或已过期，请返回手机银行重新进入。",
+                "This entry link is invalid or has expired. Please go back to the banking app "
+                "and open the assistant again.",
+            ),
+        ) from exc
+    db.commit()
+    token = create_session(db, user, now)
+    _set_session_cookie(response, token)
+    return {**user_view(user), "entry": "bank_app", "locale": ticket.locale}
 
 
 @router.post("/logout", status_code=204)

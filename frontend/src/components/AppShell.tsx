@@ -12,6 +12,7 @@ import { ProductBrowser } from "@/components/products/ProductBrowser";
 import { RemindersView } from "@/components/products/RemindersView";
 import { Avatar, Button, Chip, Icon, type IconName, StepProgress } from "@/components/ui";
 import { getMe, getSessionUser, listConversations, logout, resetDemo, type SessionUser } from "@/lib/api";
+import { BANK_APP_HOME, isEmbedded, useEmbedded } from "@/lib/embed";
 import { defineCopy, LocaleToggle, useCopy, useLocale, initial } from "@/lib/i18n";
 import type { ConversationSummary, CustomerState } from "@/lib/types";
 
@@ -28,6 +29,7 @@ const COPY = defineCopy({
     recent: "最近对话",
     untitled: "未命名对话",
     logout: "退出登录",
+    backToBank: "返回手机银行",
     notAssessed: "未测评",
     steps: ["了解需求", "风险测评", "匹配产品", "预约或买入"],
     stepLabel: (n: number, name: string) => `第 ${n} 步，共 4 步：${name}`,
@@ -44,6 +46,7 @@ const COPY = defineCopy({
     recent: "Recent chats",
     untitled: "Untitled chat",
     logout: "Sign out",
+    backToBank: "Back to banking app",
     notAssessed: "Not profiled",
     steps: ["Needs", "Risk profile", "Matching", "Reserve or buy"],
     stepLabel: (n: number, name: string) => `Step ${n} of 4: ${name}`,
@@ -62,6 +65,7 @@ export function AppShell() {
   const router = useRouter();
   const c = useCopy(COPY);
   const { locale } = useLocale();
+  const embedded = useEmbedded();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [state, setState] = useState<CustomerState | null>(null);
   const [view, setView] = useState<View>("chat");
@@ -97,7 +101,8 @@ export function AppShell() {
         refreshState();
         refreshHistory();
       })
-      .catch(() => router.replace("/login"));
+      // 从手机银行进入时没有 WealthPilot 登录页：会话失效就回到手机银行重新进入
+      .catch(() => (isEmbedded() ? window.location.assign(BANK_APP_HOME) : router.replace("/login")));
   }, [router, refreshState, refreshHistory]);
 
   // 切换语言后重新读取资料与会话标题：等级、评级名称等由后端按语言返回
@@ -141,6 +146,11 @@ export function AppShell() {
 
   async function signOut() {
     await logout().catch(() => undefined);
+    if (embedded) {
+      // 离开理财助手：结束 WealthPilot 会话，回到手机银行（银行的会话不受影响）
+      window.location.assign(BANK_APP_HOME);
+      return;
+    }
     router.replace("/login");
   }
 
@@ -230,7 +240,7 @@ export function AppShell() {
             <span className="flex min-w-0 flex-1 flex-col text-[13px]">
               <span className="truncate font-bold">{user?.display_name}</span>
               <button type="button" onClick={signOut} className="self-start text-ink-3 hover:text-ink">
-                {c.logout}
+                {embedded ? c.backToBank : c.logout}
               </button>
             </span>
             <LocaleToggle className="bg-canvas" />
@@ -241,7 +251,15 @@ export function AppShell() {
           {/* 手机端顶栏 */}
           <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-4 pb-2 lg:hidden">
             {/* 「我的」页自带问候语标题，顶栏不再重复 */}
-            <h1 className={`text-[22px] font-extrabold tracking-tight ${view === "me" ? "invisible" : ""}`}>{c.titles[view]}</h1>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {/* 嵌入手机银行时，左上角返回 App（相当于 App 原生导航栏的返回键） */}
+              {embedded && (
+                <button type="button" onClick={signOut} aria-label={c.backToBank} className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full hover:bg-fill">
+                  <Icon name="back" size={22} />
+                </button>
+              )}
+              <h1 className={`text-[22px] font-extrabold tracking-tight ${view === "me" ? "invisible" : ""}`}>{c.titles[view]}</h1>
+            </div>
             <div className="flex items-center gap-2">
               {view === "chat" && ratingChip}
               <LocaleToggle />

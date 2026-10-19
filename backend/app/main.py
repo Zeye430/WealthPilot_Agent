@@ -22,6 +22,7 @@ from app.api import (
     speech,
 )
 from app.auth.service import ensure_demo_accounts
+from app.bank_sim import api as bank_sim_api
 from app.core.config import get_settings
 from app.core.i18n import L, LocaleMiddleware
 from app.core.observability import METRICS, RequestContextMiddleware, configure_logging
@@ -83,3 +84,6 @@ app.include_router(purchases.router)
 app.include_router(reminders.router)
 app.include_router(speech.router)
 app.include_router(ops.router)
+app.include_router(
+    bank_sim_api.router
+)  # 模拟手机银行（演示）；BANK_SIM_ENABLED=false 时接口返回 404

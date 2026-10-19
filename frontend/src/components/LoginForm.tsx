@@ -1,17 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Avatar, Button } from "@/components/ui";
 import { ApiError, getLoginConfig, login, type LoginConfig } from "@/lib/api";
+import { setEmbedded } from "@/lib/embed";
 import { defineCopy, LocaleToggle, useCopy, stripFictional, initial } from "@/lib/i18n";
 
 const COPY = defineCopy({
   zh: {
     tagline: "知岸银行（虚构）智能理财助手",
-    welcome: "欢迎回来",
-    pick: "选择演示账号",
+    welcome: "演示入口",
+    pick: "或直接选择角色登录",
+    bankTitle: "客户：从手机银行进入",
+    bankText: "生产中客户在知岸银行 App 里打开理财助手，无需单独登录。推荐面试官从这里体验。",
+    entries: {
+      customer: "生产中：从手机银行 App 进入",
+      rm: "生产中：员工工作台，统一身份认证",
+      ops: "生产中：运维监控平台（如 Grafana）",
+    } as Record<string, string>,
     roles: { customer: "客户", rm: "理财经理", ops: "运维值班" },
     username: "账号",
     password: "密码",
@@ -24,8 +33,15 @@ const COPY = defineCopy({
   },
   en: {
     tagline: "AI wealth assistant for Zhian Bank (fictional)",
-    welcome: "Welcome back",
-    pick: "Choose a demo account",
+    welcome: "Demo entry",
+    pick: "Or sign in directly as a role",
+    bankTitle: "Customer: open from the banking app",
+    bankText: "In production, customers open the assistant inside the Zhian Bank app with no separate sign-in. Recommended for interviewers.",
+    entries: {
+      customer: "In production: from the banking app",
+      rm: "In production: staff workstation with single sign-on",
+      ops: "In production: monitoring platform (e.g. Grafana)",
+    } as Record<string, string>,
     roles: { customer: "Customer", rm: "Relationship manager", ops: "Operations" },
     username: "Username",
     password: "Password",
@@ -50,6 +66,8 @@ export function LoginForm({ next }: { next: string | null }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // 直接登录是独立网页，不是手机银行里的模块
+    setEmbedded(false);
     getLoginConfig()
       .then(setConfig)
       .catch((e) => setError(e instanceof ApiError ? e.message : c.noServer));
@@ -85,7 +103,20 @@ export function LoginForm({ next }: { next: string | null }) {
           <p className="mt-1 text-sm text-ink-3">{c.tagline}</p>
           <h1 className="mt-8 text-[22px] font-extrabold">{c.welcome}</h1>
 
-          <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
+          <Link
+            href="/bank"
+            className="mt-5 flex items-center justify-between gap-4 rounded-card bg-navy p-5 text-white transition-opacity hover:opacity-95"
+          >
+            <span className="flex flex-col gap-1">
+              <span className="text-[16px] font-extrabold">{c.bankTitle}</span>
+              <span className="text-xs leading-5 text-on-navy-2">{c.bankText}</span>
+            </span>
+            <span aria-hidden className="text-2xl">
+              →
+            </span>
+          </Link>
+
+          <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
             {config && config.demo_accounts.length > 0 && (
               <fieldset>
                 <legend className="text-xs font-bold text-ink-3">{c.pick}</legend>
@@ -104,6 +135,7 @@ export function LoginForm({ next }: { next: string | null }) {
                       <span className="min-w-0">
                         <span className="block truncate font-bold">{stripFictional(a.display_name)}</span>
                         <span className="text-xs text-ink-3">{c.roles[a.role]}</span>
+                        <span className="block text-[10px] leading-4 text-ink-3">{c.entries[a.role]}</span>
                       </span>
                     </button>
                   ))}

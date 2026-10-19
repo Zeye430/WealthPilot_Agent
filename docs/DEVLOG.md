@@ -1135,7 +1135,7 @@
 - ✏️ `frontend/src/lib/api.ts`、`components/LoginForm.tsx`、`components/AppShell.tsx`
 - ✏️ `docs/ARCHITECTURE.md`（§4.8、D43–D44）、`SECURITY.md`、`ROADMAP.md`、`README.md`、`.env.example`、`docker-compose.yml`（就绪检查）
 
-**提交**：与第 29 步一起，待产品负责人执行。
+**提交**：已提交（1949f3f，与第 29 步一起）。
 
 ## 2026-10-19 · 第 29 步：P8-4 可靠性验证
 
@@ -1187,5 +1187,62 @@
 
 - **取舍**：金额规则也会拦下常识回答里的举例金额（如「超出 50 万的 45 万部分」），这类回答改写一次后通过，没有兜底，代价是改写率上升（英文 8 次 / 75 轮）。目前保持严格；是否放行常识类举例金额由产品负责人决定。
 - **真实环境中观察到单轮上限生效**：复现 R02 时模型服务明显变慢，一轮只调用一次工具就超过 60 秒，客户看到「处理时间较长」并照常看到产品详情卡片。
+
+**提交**：已提交（1949f3f）。
+
+## 2026-10-19 · 第 30 步：客户从手机银行进入（理财助手作为 App 模块）
+
+**背景**：产品负责人指出，生产中客户从银行 App 进入、理财经理从员工系统进入、运维从运营系统进入，而演示中三者共用一个登录页。决定：客户入口改为模拟手机银行，理财助手是其中一个功能模块；部署图放入 P8-5。
+
+**关键决策**
+- **一次性进入凭证**（D49）：客户在银行 App 中已登录，点击「AI 理财助手」时银行后台签发凭证（签发方、接收方、客户编号、60 秒有效期、唯一编号，HMAC-SHA256 签名）；WealthPilot 核验后建立自己的会话。与国内银行 H5 嵌入 App 的常见做法一致，WealthPilot 不接触银行密码。生产中建议银行私钥签名、WealthPilot 只持公钥。
+- **模拟银行系统与 WealthPilot 严格分开**（D50）：`app/bank_sim/` 代表「银行自己的系统」，独立 Cookie 与密钥，只通过签名凭证交互，生产中关闭（`BANK_SIM_ENABLED=false`）。
+- **首次进入自动开户**（D51）：账号 `app:<客户编号>`，没有密码，只能经 App 进入。
+- **嵌入模式**：不显示 WealthPilot 的登录 / 退出，只有「返回手机银行」（离开时结束 WealthPilot 会话，银行会话保留）；会话失效时回到手机银行而不是 WealthPilot 登录页。
+
+**做了什么**
+1. 后端：`app/auth/app_ticket.py`（签发、核验、一次性登记）、`POST /api/v1/auth/app-ticket`、自动开户、`used_app_tickets` 表（迁移 `50e67185edf2`）；`app/bank_sim/api.py`（银行登录、首页、签发凭证、退出）。
+2. 前端：`/bank`（电脑端演示：手机外框 + 右侧 5 步实时说明）、`/bank/app`（模拟知岸银行 App：登录、账户概览、8 个功能入口与理财助手横幅，深青绿配色以区别于 WealthPilot）、`/app-entry`（核验凭证后立即从地址栏移除凭证）；嵌入模式下的返回按钮与会话失效处理。
+3. WealthPilot 登录页标注为「演示入口」：顶部推荐「客户：从手机银行进入」，每个角色注明生产中从哪里进入。
+
+**验证**
+- `tests/test_app_entry.py` 11 个：完整流程（银行会话不能访问 WealthPilot、凭证换会话、重放被拒）、自动开户账号不能用密码登录、需银行会话才能签发、篡改签名与载荷 / 缺签名 / 非法格式、过期、未知客户、用途不对、模拟银行可关闭。
+- 浏览器端到端 13 项全部通过（临时端口、独立测试库）：登录手机银行 → 演示面板第 1 步完成 → 银行会话访问 WealthPilot 返回 401 → 点击理财助手 → 地址栏不含凭证 → 5 步全部完成 → 嵌入模式有返回、无退出 → 对话可用 → 返回手机银行后银行会话仍在、WealthPilot 会话已结束 → 伪造凭证被拒并提示返回 → 手机上 `/bank` 直接打开 App → 登录页英文标注。
+- 后端 383 个测试通过；前端类型检查、lint 通过。
+
+**文件**
+- 🆕 `backend/app/auth/app_ticket.py`、`app/bank_sim/__init__.py`、`app/bank_sim/api.py`、`migrations/versions/50e67185edf2_used_app_tickets.py`、`tests/test_app_entry.py`
+- 🆕 `frontend/src/lib/embed.ts`、`app/app-entry/page.tsx`、`app/bank/page.tsx`、`app/bank/app/page.tsx`、`components/bank/AppEntry.tsx`、`BankApp.tsx`、`BankStage.tsx`
+- ✏️ `backend/app/api/auth.py`、`app/auth/service.py`、`app/core/config.py`、`app/db/models.py`、`app/main.py`
+- ✏️ `frontend/next.config.ts`、`lib/api.ts`、`components/AppShell.tsx`、`MeView.tsx`、`LoginForm.tsx`
+- ✏️ `docs/ARCHITECTURE.md`（D49–D51）、`SECURITY.md`、`README.md`、`.env.example`
+
+**提交**：与第 31 步一起，待产品负责人执行。
+
+## 2026-10-19 · 第 31 步：P8-5 判断力文档（含生产部署图）
+
+**目标**：面试时能有条理地回答「这个系统在银行里怎么落地、还差什么、花多少钱、出了问题怎么处理、换到美国合规框架下怎么办」。
+
+**做了什么**
+1. `docs/PRODUCTION_READINESS.md` + `docs/diagrams/production-deployment.svg`：**生产部署图**（三个入口 × 网络分区 × WealthPilot × 银行既有系统 / 数据区 / 模型服务）；三个入口的身份对接方式与改造量；演示 → 生产差距清单（身份与集成、合规、数据与隐私、可靠性、模型治理，按 P0 / P1 / P2 排序）；一周试点的最小集合。
+   - 部署图先用 Mermaid 画，自动布局在分层图上连线交叉严重，改为手绘 SVG（每层位置固定，GitHub 可直接显示）。
+2. `docs/US_REGULATORY_MAPPING.md`（英文，给美国面试官）：Reg BI 四项义务（Care / Disclosure / Conflict of Interest / Compliance）与 FINRA 2111、FINRA 2210、3110、4511 / SEA 17a-4、Reg S-P（2024 修订）、FINRA RN 24-09、SR 11-7 的逐条对照：规则要求、WealthPilot 的实现（指向代码与测试）、美国落地的差距；中美框架对照表；美国试点的前五步。SEC 撤回预测性数据分析提案（2025-06-12）与 Reg S-P 修订内容经网络核实。
+3. `docs/COST_ESTIMATE.md`：基于 289 轮真实 Kimi 对话的实测（平均输入 10,244 / 输出 306 token、每轮调用模型 3.3 次、P50 9.3 秒）。**输入占 97%**，降本方向是提示词缓存与上下文精简；按话题的每轮费用；1 千 / 1 万 / 10 万月活的月费用（无缓存与 50% 缓存命中两种）；容量估算；演示环境费用。
+4. `docs/RUNBOOK.md`：按请求编号追查的通用方法；熔断、兜底率上升、客户投诉、延迟、系统繁忙、数据库不可用、工具失败、合规规则紧急变更、切换模型、密钥轮换、客户数据请求共 11 个场景的处理步骤。
+
+**发现并修正**
+- **模型单价过时**：核对 Kimi 官网价格页（kimi-k2.6：输入 $0.95 / 命中缓存 $0.16 / 输出 $4.00），之前配置的 $0.60 / $2.50 偏低约 40%，已更新默认值（运维看板的费用估算随之变化；已写入的历史指标按当时单价计算）。
+
+**验证**
+- 部署图在浏览器中渲染检查（三轮调整布局，消除连线交叉与文字遮挡）。
+- 文档中的数字（每轮费用、月费用、缓存节省比例）用脚本复算一致；Runbook 中引用的日志关键词、配置项、脚本路径与代码一致。
+
+**限制**
+- 成本基于评估流量（产品类问题偏多），真实话题分布需上线后以看板数据校准；缓存命中 token 尚未单独记录，费用为上限。
+- 生产落地清单、成本、故障手册目前为中文；英文版随 P9 一起整理。
+
+**文件**
+- 🆕 `docs/PRODUCTION_READINESS.md`、`docs/diagrams/production-deployment.svg`、`docs/US_REGULATORY_MAPPING.md`、`docs/COST_ESTIMATE.md`、`docs/RUNBOOK.md`
+- ✏️ `backend/app/core/config.py`（模型单价）、`.env.example`、`docs/ROADMAP.md`、`README.md`
 
 **提交**：待产品负责人执行。

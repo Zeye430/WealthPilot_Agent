@@ -1,3 +1,4 @@
+import { BANK_APP_HOME, isEmbedded } from "@/lib/embed";
 import type {
   AssessmentResult,
   ChatResponse,
@@ -24,7 +25,13 @@ export class ApiError extends Error {
 
 /** 会话失效或未登录：回到登录页（会话令牌在 httpOnly Cookie 中，前端脚本读不到，也无需处理）。 */
 function redirectToLogin() {
-  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+  if (typeof window === "undefined") return;
+  if (isEmbedded()) {
+    // 从手机银行进入时，会话失效应回到手机银行重新进入，而不是 WealthPilot 的登录页
+    window.location.assign(BANK_APP_HOME);
+    return;
+  }
+  if (!window.location.pathname.startsWith("/login")) {
     const next = encodeURIComponent(window.location.pathname);
     // 会话失效时整页跳转，清掉页面中残留的客户数据（这里不在 React 组件内，无法使用 router）
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
@@ -48,7 +55,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   } catch {
     throw new ApiError(en() ? "Can't reach the server. Check that the backend is running." : "无法连接服务器，请确认后端已启动。");
   }
-  if (res.status === 401 && !path.startsWith("/api/v1/auth/")) redirectToLogin();
+  // 登录接口与模拟手机银行接口的 401 由页面自己处理（手机银行有自己的登录，不跳到 WealthPilot 登录页）
+  if (res.status === 401 && !path.startsWith("/api/v1/auth/") && !path.startsWith("/bank-sim/")) redirectToLogin();
   if (!res.ok) {
     const detail = await res
       .json()
@@ -300,4 +308,32 @@ export type OpsOverview = {
 
 export const opsApi = {
   overview: (hours: number) => request<OpsOverview>(`/api/v1/ops/overview?hours=${hours}`),
+};
+
+// ---------- 手机银行进入 ----------
+
+export type AppEntryResult = SessionUser & { entry: "bank_app"; locale: "zh" | "en" };
+
+/** 用手机银行签发的一次性凭证换取 WealthPilot 会话 */
+export const enterFromBankApp = (ticket: string) =>
+  request<AppEntryResult>("/api/v1/auth/app-ticket", { method: "POST", body: JSON.stringify({ ticket }) });
+
+/** 模拟的手机银行后台（演示用，代表银行自己的系统，不属于 WealthPilot） */
+export type BankHome = {
+  name: string;
+  tier: string;
+  card: string;
+  card_tail: string;
+  demand_deposit: number;
+  time_deposit: number;
+  wealth: number;
+  total: number;
+};
+
+export const bankApi = {
+  login: (username: string, password: string) =>
+    request<{ ok: boolean }>("/bank-sim/api/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  home: () => request<BankHome>("/bank-sim/api/home"),
+  ticket: () => request<{ ticket: string; expires_in: number }>("/bank-sim/api/assistant-ticket", { method: "POST" }),
+  logout: () => request<void>("/bank-sim/api/logout", { method: "POST" }),
 };

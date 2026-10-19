@@ -75,6 +75,37 @@ def authenticate(db: Session, username: str, password: str) -> CurrentUser | Non
     return _current(user) if verify_password(password, user.password_hash) else None
 
 
+APP_USER_PREFIX = "app:"
+APP_ONLY_PASSWORD = "!app-entry-only"  # 不是合法哈希，任何密码都无法通过校验
+
+
+def app_customer(db: Session, customer_id: str) -> CurrentUser:
+    """经手机银行进入的客户：首次进入时自动开户（JIT provisioning），账号没有密码，只能经 App 进入。
+
+    客户身份由银行核验（凭证签名），WealthPilot 不接触客户的银行登录密码。
+    """
+    from app.customers.base import get_customer_info_system
+
+    base = get_customer_info_system().get(customer_id)
+    if base is None:
+        raise ValueError(f"unknown customer {customer_id}")
+    username = f"{APP_USER_PREFIX}{customer_id}"
+    user = db.scalars(select(User).where(User.username == username)).first()
+    if user is None:
+        user = User(
+            username=username,
+            display_name=base.display_name,
+            role=CUSTOMER,
+            customer_id=customer_id,
+            password_hash=APP_ONLY_PASSWORD,
+        )
+        db.add(user)
+        db.flush()
+    if user.disabled:
+        raise ValueError(f"disabled customer {customer_id}")
+    return _current(user)
+
+
 def create_session(db: Session, user: CurrentUser, now: datetime) -> str:
     token = secrets.token_urlsafe(32)
     ttl = timedelta(hours=get_settings().session_ttl_hours)

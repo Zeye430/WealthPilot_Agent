@@ -34,9 +34,10 @@ class Settings(BaseSettings):
     # 模型熔断：连续失败 5 次后暂停调用 30 秒，期间直接提示客户，之后放行一个探测请求
     llm_breaker_failures: int = 5
     llm_breaker_cooldown_seconds: float = 30
-    # 费用估算单价（美元 / 百万 token），以模型服务商官网价格为准，用于运维看板的成本估算
-    llm_price_input_per_mtok: float = 0.60
-    llm_price_output_per_mtok: float = 2.50
+    # 费用估算单价（美元 / 百万 token）：kimi-k2.6 官网价格（2026-10 核对：输入未命中缓存 0.95、
+    # 命中缓存 0.16、输出 4.00）。按未命中缓存计算，是费用上限；换模型时同步修改
+    llm_price_input_per_mtok: float = 0.95
+    llm_price_output_per_mtok: float = 4.00
     # 压测专用：fake 时用固定回复的假模型（模拟延迟），只测系统本身的吞吐，不调用、不计费
     llm_provider: str = "openai"
     fake_llm_latency_seconds: float = 1.5
@@ -60,6 +61,13 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12  # 绝对有效期
     session_idle_minutes: int = 120  # 闲置超时
     cookie_secure: bool = False  # 部署到 HTTPS 时设为 true
+    # 手机银行进入凭证（app ticket）：银行 App 签发、WealthPilot 核验的共享密钥与有效期。
+    # 默认值只用于本地开发；部署时必须设置（生产中更推荐银行私钥签名、WealthPilot 公钥核验）
+    app_ticket_secret: SecretStr = SecretStr("dev-only-app-ticket-secret-change-me")
+    app_ticket_ttl_seconds: int = 60
+    # 是否启用「模拟手机银行」（演示用，代表银行自己的系统，生产中不存在于本项目）
+    bank_sim_enabled: bool = True
+
     # 公开演示访问码：设置后登录需要输入，防止陌生人刷模型额度；本地开发留空
     demo_access_code: SecretStr | None = None
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { listReminders } from "@/lib/api";
+import { useEmbedded } from "@/lib/embed";
 import { defineCopy, initial, stripFictional, useCopy, useLocale } from "@/lib/i18n";
 import type { SessionUser } from "@/lib/api";
 import type { CustomerState, Reminder } from "@/lib/types";
@@ -22,6 +23,7 @@ const COPY = defineCopy({
     upcoming: (window: string) => `${window}开售，已预约提醒`,
     reset: "清空我的演示数据",
     logout: "退出登录",
+    backToBank: "返回手机银行",
     demo: "作品集演示：虚构机构、产品与客户；买入只到确认页，不会真实下单。",
     comma: "，",
   },
@@ -36,6 +38,7 @@ const COPY = defineCopy({
     upcoming: (window: string) => `Opens ${window}, reminder set`,
     reset: "Reset my demo data",
     logout: "Sign out",
+    backToBank: "Back to banking app",
     demo: "Portfolio demo: fictional bank, products and customers. Purchases stop at the confirmation step.",
     comma: ", ",
   },
@@ -70,6 +73,7 @@ export function MeView({
   const [hour] = useState(() => new Date().getHours());
 
   const { locale } = useLocale();
+  const embedded = useEmbedded();
   useEffect(() => {
     listReminders()
       .then(setReminders)
@@ -140,7 +144,7 @@ export function MeView({
           )}
           <div className="flex flex-wrap gap-x-5 gap-y-2 font-semibold text-ink-2">
             <button type="button" onClick={onLogout} className="hover:text-ink">
-              {c.logout}
+              {embedded ? c.backToBank : c.logout}
             </button>
             <button type="button" onClick={onReset} className="hover:text-ink">
               {c.reset}

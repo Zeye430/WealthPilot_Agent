@@ -30,6 +30,8 @@
 | **模型编造产品、收益数字、出处** | 产品必须出现在工具结果中；收益数字须有来源；引用编号须在检索结果中 | `test_compliance.py`（UNGROUNDED_PRODUCT、UNGROUNDED_FIGURE、FAKE_CITATION） |
 | **敏感信息进日志** | 不记录对话内容与录音；日志统一脱敏（手机号、身份证号、卡号）；运行指标表不存对话内容与客户编号 | `test_log_redaction`、`test_observability.py::test_ops_overview_requires_ops_role_and_aggregates`（看板响应不含对话内容） |
 | **运维接口越权** | 运维看板只允许运维角色（客户、理财经理均 403）；`/metrics` 未配置令牌时关闭，配置后需 Bearer 令牌（常数时间比较） | `test_ops_overview_requires_ops_role_and_aggregates`、`test_metrics_endpoint_requires_token` |
+| **伪造或盗用手机银行进入凭证**（P8-5） | 凭证由银行签名（演示为 HMAC-SHA256，常数时间比较；生产建议银行私钥签名、WealthPilot 只持公钥）；校验签发方、接收方（用途）、60 秒有效期（允许 10 秒时钟偏差）；一次性：编号写入数据库，重复使用即拒绝（多实例有效）；拒绝原因只写日志，对外统一提示；进入页立即从地址栏移除凭证；按 IP 限流 | `test_app_entry.py`（篡改签名与载荷、过期、重放、用途不对、未知客户、需银行会话） |
+| **手机银行与 WealthPilot 会话混用** | 两套独立 Cookie：银行会话不能访问 WealthPilot 接口；经 App 自动开户的账号没有密码，无法用账号密码登录；返回手机银行时结束 WealthPilot 会话 | `test_bank_app_entry_flow`、`test_app_only_account_cannot_password_login`；浏览器端到端 13 项 |
 | **日志注入**：伪造请求编号写入换行等内容 | 上游传入的 `X-Request-ID` 只接受 8–64 位字母数字与连字符，否则重新生成 | `test_request_id_header_is_generated_or_propagated` |
 | **超载 / 上游故障拖垮服务** | 模型熔断（连续失败后快速失败）；单轮时长上限；连接池耗尽时 10 秒内返回 503 | `test_reliability.py` |
 | **语音录音泄露** | 本地模型识别，不发给第三方；只在内存中处理，不落盘 | `test_speech.py`；COMPLIANCE §6.1 |

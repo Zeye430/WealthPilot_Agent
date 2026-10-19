@@ -234,3 +234,16 @@ class TurnMetric(Base):
     tool_errors: Mapped[int] = mapped_column(Integer, default=0)
     tools: Mapped[list] = mapped_column(JSONB, default=list)  # [{"name", "status"}]
     model: Mapped[str] = mapped_column(String(64), default="")
+
+
+class UsedAppTicket(Base):
+    """已使用的手机银行进入凭证（一次性）：同一凭证再次使用时主键冲突，视为重放。
+
+    过期后的记录可定期清理（凭证本身已无法通过有效期校验）。
+    """
+
+    __tablename__ = "used_app_tickets"
+
+    jti: Mapped[str] = mapped_column(String(64), primary_key=True)
+    used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
