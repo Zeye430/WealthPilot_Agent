@@ -8,6 +8,7 @@ class ScriptedChatModel(BaseChatModel):
 
     responses: list[AIMessage]
     calls: int = 0
+    received: list[list] = []  # messages of each call, for checking what the provider would see
 
     @property
     def _llm_type(self) -> str:
@@ -17,6 +18,7 @@ class ScriptedChatModel(BaseChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        self.received.append(list(messages))
         response = self.responses[self.calls]
         self.calls += 1
         return ChatResult(generations=[ChatGeneration(message=response)])

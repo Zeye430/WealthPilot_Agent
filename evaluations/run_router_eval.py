@@ -16,12 +16,12 @@ from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
 
 from app.agent.router import OUT_OF_SCOPE, classify  # noqa: E402
 from app.api.chat import ROUTER_MAX_TOKENS  # noqa: E402
-from app.llm.client import get_chat_model  # noqa: E402
+from app.llm.client import get_router_model  # noqa: E402
 
 
 def main() -> None:
     cases = yaml.safe_load((ROOT / "evaluations/router_cases.yaml").read_text(encoding="utf-8"))
-    model = get_chat_model(thinking=False, max_tokens=ROUTER_MAX_TOKENS)
+    model = get_router_model(max_tokens=ROUTER_MAX_TOKENS)
     wrong, latencies, per_label = [], [], Counter()
 
     for case in cases:

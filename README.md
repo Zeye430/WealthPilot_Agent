@@ -187,7 +187,7 @@ A reply that fails review is rewritten once with specific feedback. If it fails 
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts |
 | Backend | Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic |
 | Agent | LangGraph: one main agent with strongly typed tools |
-| Model | Kimi K2.6 through an OpenAI-compatible adapter; switching models is a config change plus a re-run of the evaluation |
+| Model | Kimi K2.6 by default. Pluggable through config: any OpenAI-compatible API (OpenAI, DeepSeek, Qwen, Ollama, vLLM, ...), Claude, Gemini or Azure OpenAI, with an optional cheaper model for topic routing |
 | Data | PostgreSQL 16 + pgvector; local embeddings (fastembed) and speech recognition (SenseVoice) |
 | Ops | Docker Compose, Caddy (automatic HTTPS), GitHub Actions, uv, pytest, ruff |
 
@@ -210,7 +210,25 @@ Every evaluation writes a report to [`evaluations/reports/`](evaluations/reports
 
 <h2 id="quick-start">Quick start</h2>
 
-You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and a Kimi API key ([platform.kimi.ai](https://platform.kimi.ai)). Any OpenAI-compatible model should work after changing `LLM_BASE_URL` and `LLM_MODEL`; only Kimi has been evaluated.
+You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and an API key for a model that supports tool calling. Kimi ([platform.kimi.ai](https://platform.kimi.ai)) is the default and the only model evaluated end to end.
+
+<details>
+<summary><strong>Using another model</strong></summary>
+
+<br>
+
+Set these in `.env`; `.env.example` has a ready-made block for each provider.
+
+| Provider | `LLM_PROVIDER` | Also set |
+|---|---|---|
+| Kimi, OpenAI, DeepSeek, Qwen, Ollama, vLLM and other OpenAI-compatible APIs | `openai_compatible` | `LLM_BASE_URL`, `LLM_MODEL` |
+| Claude | `anthropic` | `LLM_MODEL` |
+| Gemini | `gemini` | `LLM_MODEL` |
+| Azure OpenAI | `azure_openai` | `LLM_BASE_URL` (endpoint), `LLM_MODEL` (deployment), `LLM_API_VERSION` |
+
+`LLM_ROUTER_MODEL` can point topic routing at a cheaper model. Then run `cd backend && uv run python scripts/check_llm.py` for a smoke test, re-run the scenario evaluation, and set `LLM_PRICE_*` so cost tracking uses the new model's prices.
+
+</details>
 
 ```bash
 git clone https://github.com/Zeye430/WealthPilot_Agent.git && cd WealthPilot_Agent

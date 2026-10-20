@@ -187,7 +187,7 @@ flowchart TD
 | 前端 | Next.js 16、React 19、TypeScript、Tailwind CSS 4、Recharts |
 | 后端 | Python 3.13、FastAPI、Pydantic、SQLAlchemy 2、Alembic |
 | Agent | LangGraph：单主 Agent + 强类型工具 |
-| 模型 | Kimi K2.6，经 OpenAI 兼容适配层接入；换模型只改配置，再跑一遍评估 |
+| 模型 | 默认 Kimi K2.6；可通过配置切换为任意 OpenAI 兼容接口（OpenAI、DeepSeek、通义千问、Ollama、vLLM 等）、Claude、Gemini 或 Azure OpenAI，话题路由可单独使用更便宜的模型 |
 | 数据 | PostgreSQL 16 + pgvector；本地向量模型（fastembed）与语音识别（SenseVoice） |
 | 运维 | Docker Compose、Caddy（自动 HTTPS）、GitHub Actions、uv、pytest、ruff |
 
@@ -210,7 +210,25 @@ flowchart TD
 
 <h2 id="快速开始">快速开始</h2>
 
-需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+ 和 Kimi API Key（[platform.kimi.ai](https://platform.kimi.ai)）。其他 OpenAI 兼容模型修改 `LLM_BASE_URL` 与 `LLM_MODEL` 即可接入，但目前只有 Kimi 经过评估。
+需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+，以及一个支持工具调用的模型 API Key。默认使用 Kimi（[platform.kimi.ai](https://platform.kimi.ai)），也是目前唯一完整评估过的模型。
+
+<details>
+<summary><strong>使用其他模型</strong></summary>
+
+<br>
+
+在 `.env` 中设置以下配置；`.env.example` 里每家厂商都有现成的填写示例。
+
+| 厂商 | `LLM_PROVIDER` | 还需设置 |
+|---|---|---|
+| Kimi、OpenAI、DeepSeek、通义千问、Ollama、vLLM 等 OpenAI 兼容接口 | `openai_compatible` | `LLM_BASE_URL`、`LLM_MODEL` |
+| Claude | `anthropic` | `LLM_MODEL` |
+| Gemini | `gemini` | `LLM_MODEL` |
+| Azure OpenAI | `azure_openai` | `LLM_BASE_URL`（终结点）、`LLM_MODEL`（部署名）、`LLM_API_VERSION` |
+
+`LLM_ROUTER_MODEL` 可以让话题路由使用更便宜的模型。切换后运行 `cd backend && uv run python scripts/check_llm.py` 做冒烟测试，再跑一遍场景评估，并把 `LLM_PRICE_*` 改成新模型的单价，费用统计才准确。
+
+</details>
 
 ```bash
 git clone https://github.com/Zeye430/WealthPilot_Agent.git && cd WealthPilot_Agent

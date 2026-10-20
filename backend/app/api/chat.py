@@ -48,7 +48,12 @@ from app.handoff.service import (
     latest_handoff,
 )
 from app.llm.breaker import get_breaker
-from app.llm.client import LLMNotConfiguredError, get_chat_model
+from app.llm.client import (
+    LLMNotConfiguredError,
+    get_chat_model,
+    get_router_model,
+    provider_name,
+)
 from app.llm.fake import FakeChatModel
 from app.llm.telemetry import TurnTelemetry
 from app.ops.turns import TurnRecord, record_turn
@@ -102,7 +107,7 @@ class ConversationSummary(BaseModel):
 @lru_cache
 def _build_agent():
     settings = get_settings()
-    if settings.llm_provider == "fake":
+    if provider_name(settings) == "fake":
         logger.warning("LLM_PROVIDER=fake：使用压测用假模型，回答为固定内容")
         return build_graph(
             FakeChatModel(latency_seconds=settings.fake_llm_latency_seconds),
@@ -113,7 +118,7 @@ def _build_agent():
         get_chat_model(settings),
         # Topic routing is a simple classification: thinking off and a short output limit, about 0.7
         # s and a few tokens
-        get_chat_model(settings, thinking=False, max_tokens=ROUTER_MAX_TOKENS),
+        get_router_model(settings, max_tokens=ROUTER_MAX_TOKENS),
         max_tool_calls=settings.agent_max_tool_calls,
     )
 

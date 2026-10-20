@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,16 +20,29 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     db_pool_timeout_seconds: float = 10
 
-    # Kimi (Moonshot) offers an OpenAI-compatible API; switching models only changes these three
+    # Model provider (see app/llm/client.py): openai_compatible (default: Kimi, OpenAI, DeepSeek,
+    # Qwen, GLM, Ollama, etc.), anthropic, gemini, azure_openai, or fake for load testing
+    llm_provider: str = "openai_compatible"
     llm_base_url: str = "https://api.moonshot.ai/v1"
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = "kimi-k2.6"
-    # Kimi thinking mode only accepts temperature=1, and non-thinking only 0.6; determinism comes
-    # from tools and rules, not temperature
-    llm_temperature: float = 1.0
-    llm_temperature_no_thinking: float = 0.6
-    # thinking for the main agent (off is about twice as fast); always off for the topic router
+    # Optional cheaper model for topic routing (same provider); empty uses LLM_MODEL
+    llm_router_model: str = ""
+    # Azure OpenAI only: API version
+    llm_api_version: str = "2024-10-21"
+    # Sampling temperature; empty (default) uses the model's own default, because newer Claude
+    # models and OpenAI reasoning models reject other values. Kimi ignores it: its API requires 1
+    # with thinking and 0.6 without, applied in code. Determinism comes from tools and rules.
+    llm_temperature: float | None = None
+    # Thinking for the main agent (off is about twice as fast); always off for the topic router.
+    # A Kimi and Gemini switch; other providers choose reasoning by model name
     llm_agent_thinking: bool = False
+
+    @field_validator("llm_temperature", mode="before")
+    @classmethod
+    def _empty_temperature_is_none(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
+
     # 25-second timeout per call with 1 retry (connection resets happened occasionally in scenario
     # evals; one retry recovers).
     # Fits with the turn budget and the frontend proxy timeout (120 s): worst case ≈ 60 s budget +
@@ -49,9 +62,8 @@ class Settings(BaseSettings):
     # when switching models
     llm_price_input_per_mtok: float = 0.95
     llm_price_output_per_mtok: float = 4.00
-    # Load testing only: fake uses a canned-reply model (with simulated latency) to measure the
-    # system's own throughput, with no calls or cost
-    llm_provider: str = "openai"
+    # Load testing only (LLM_PROVIDER=fake): latency of the canned-reply model, to measure the
+    # system's own throughput with no calls or cost
     fake_llm_latency_seconds: float = 1.5
 
     agent_max_tool_calls: int = 6

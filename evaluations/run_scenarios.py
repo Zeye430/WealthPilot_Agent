@@ -36,7 +36,7 @@ from app.compliance.policy import Permission  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.db.models import PolicyDecisionLog  # noqa: E402
 from app.db.session import get_engine  # noqa: E402
-from app.llm.client import get_chat_model  # noqa: E402
+from app.llm.client import get_chat_model, provider_name  # noqa: E402
 from app.main import app  # noqa: E402
 from app.api.deps import get_current_user  # noqa: E402
 from tests.identity import header_identity  # noqa: E402
@@ -262,7 +262,8 @@ def write_report(results: list[dict], only: list[str] | None = None, suite: str 
     lines = [
         f"# 场景评估报告{'（英文界面）' if suite == 'en' else ''}（{date.today()}）",
         "",
-        f"- 模型：{get_settings().llm_model}（思考模式：{'开启' if get_settings().llm_agent_thinking else '关闭'}）",
+        f"- 模型：{provider_name(get_settings())} / {get_settings().llm_model}"
+        f"（思考模式：{'开启' if get_settings().llm_agent_thinking else '关闭'}）",
         f"- 运行通过：**{passed}/{len(results)}**（{len(by_id)} 个场景，每个 {len(results) // len(by_id)} 次）；"
         f"全部通过的场景 {sum(all(v) for v in by_id.values())}/{len(by_id)}；"
         f"检查项通过：{sum(c['pass'] for c in checks)}/{len(checks)}",
