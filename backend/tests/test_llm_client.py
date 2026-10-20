@@ -14,9 +14,12 @@ from app.llm.client import (
     SYSTEM_NOTE_PREFIX,
     LLMNotConfiguredError,
     SystemFirstChatModel,
+    describe,
     get_chat_model,
     get_router_model,
+    prices_are_defaults,
     system_first,
+    vendor_of,
 )
 from tests.fakes import ScriptedChatModel, tool_call
 
@@ -64,6 +67,83 @@ def test_other_openai_compatible_gets_no_kimi_fields():
     assert get_chat_model(settings(**OPENAI)).temperature is None
     assert get_chat_model(settings(**OPENAI, llm_temperature="")).temperature is None
     assert type(get_chat_model(settings(**OPENAI, llm_provider="openai"))) is ChatOpenAI  # alias
+
+
+# ---------- Chinese vendor presets (kimi / deepseek / qwen / glm) ----------
+
+
+def test_presets_need_only_a_key():
+    cases = {
+        "deepseek": (
+            "https://api.deepseek.com",
+            "deepseek-flash",
+            {"thinking": {"type": "disabled"}},
+        ),
+        "qwen": (
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "qwen-plus",
+            {"enable_thinking": False},
+        ),
+        "glm": ("https://api.z.ai/api/paas/v4", "glm-4.7", {"thinking": {"type": "disabled"}}),
+        "kimi": ("https://api.moonshot.ai/v1", "kimi-k2.6", {"thinking": {"type": "disabled"}}),
+    }
+    for provider, (url, model_name, body) in cases.items():
+        model = get_chat_model(settings(llm_provider=provider))
+        assert str(model.openai_api_base).rstrip("/") == url, provider
+        assert model.model_name == model_name, provider
+        assert model.extra_body == body, provider
+
+
+def test_preset_defaults_yield_to_explicit_settings():
+    workspace = "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+    model = get_chat_model(
+        settings(llm_provider="qwen", llm_base_url=workspace, llm_model="qwen-max")
+    )
+    assert model.openai_api_base == workspace and model.model_name == "qwen-max"
+    assert model.extra_body == {"enable_thinking": False}  # quirks still apply
+
+
+def test_empty_url_and_model_use_preset_and_leftovers_are_caught():
+    model = get_chat_model(settings(llm_provider="deepseek", llm_base_url="", llm_model=""))
+    assert model.model_name == "deepseek-flash"
+    # Switched LLM_PROVIDER but kept the Kimi URL: the DeepSeek key would go to Moonshot
+    with pytest.raises(LLMNotConfiguredError):
+        get_chat_model(settings(llm_provider="deepseek", llm_base_url="https://api.moonshot.ai/v1"))
+    with pytest.raises(LLMNotConfiguredError):
+        get_chat_model(settings(llm_base_url="", llm_model="gpt-4.1"))  # generic needs a URL
+
+
+def test_thinking_switch_per_vendor(caplog):
+    assert get_chat_model(settings(llm_provider="qwen"), thinking=True).extra_body == {
+        "enable_thinking": True
+    }
+    assert get_chat_model(settings(llm_provider="glm"), thinking=True).extra_body == {
+        "thinking": {"type": "enabled"}
+    }
+    # DeepSeek thinking + tool calls needs reasoning_content sent back, which LangChain doesn't do
+    deepseek = get_chat_model(settings(llm_provider="deepseek"), thinking=True)
+    assert deepseek.extra_body == {"thinking": {"type": "disabled"}}
+    assert "turned off" in caplog.text
+
+
+def test_vendor_recognized_from_url():
+    glm_cn = settings(llm_base_url="https://open.bigmodel.cn/api/paas/v4", llm_model="glm-4.7")
+    assert vendor_of(glm_cn).name == "glm"
+    assert get_chat_model(glm_cn).extra_body == {"thinking": {"type": "disabled"}}
+    assert vendor_of(settings(**OPENAI)) is None
+    lookalike = settings(llm_base_url="https://deepseek.com.example.org/v1", llm_model="x")
+    assert vendor_of(lookalike) is None
+
+
+def test_default_prices_are_flagged_for_other_models():
+    assert prices_are_defaults(settings(llm_provider="deepseek"))
+    assert "prices" in describe(settings(llm_provider="deepseek"))
+    priced = settings(
+        llm_provider="deepseek", llm_price_input_per_mtok=0.3, llm_price_output_per_mtok=1.2
+    )
+    assert not prices_are_defaults(priced)
+    assert not prices_are_defaults(settings())  # Kimi: the defaults are its prices
+    assert describe(settings(llm_provider="qwen"))["model"] == "qwen-plus"
 
 
 def test_router_model_override():

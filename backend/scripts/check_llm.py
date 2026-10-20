@@ -16,6 +16,7 @@ from app.compliance.policy import Permission  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.llm.client import (  # noqa: E402
     LLMNotConfiguredError,
+    describe,
     get_chat_model,
     get_router_model,
     provider_name,
@@ -30,8 +31,17 @@ def main() -> None:
     except LLMNotConfiguredError as exc:
         sys.exit(f"{exc}（复制 .env.example 为仓库根目录的 .env 并填写）")
 
-    router_name = settings.llm_router_model or settings.llm_model
-    print(f"提供方：{provider_name(settings)}　模型：{settings.llm_model}　路由模型：{router_name}")
+    info = describe(settings)
+    router_name = settings.llm_router_model or info["model"]
+    vendor = f"（{info['vendor']}）" if "vendor" in info else ""
+    print(
+        f"提供方：{provider_name(settings)}{vendor}　模型：{info['model']}　路由模型：{router_name}"
+    )
+    if "prices" in info:
+        print(
+            "提示：费用估算仍使用默认（Kimi）单价，请设置 "
+            "LLM_PRICE_INPUT_PER_MTOK / LLM_PRICE_OUTPUT_PER_MTOK"
+        )
     print("运行一次工具调用测试…")
     graph = build_graph(model, router)
     result = graph.invoke(

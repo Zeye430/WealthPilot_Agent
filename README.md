@@ -187,7 +187,7 @@ A reply that fails review is rewritten once with specific feedback. If it fails 
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts |
 | Backend | Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic |
 | Agent | LangGraph: one main agent with strongly typed tools |
-| Model | Kimi K2.6 by default. Pluggable through config: any OpenAI-compatible API (OpenAI, DeepSeek, Qwen, Ollama, vLLM, ...), Claude, Gemini or Azure OpenAI, with an optional cheaper model for topic routing |
+| Model | Kimi K2.6 by default. Pluggable through config: presets for DeepSeek, Qwen and GLM, any OpenAI-compatible API (OpenAI, Ollama, vLLM, ...), Claude, Gemini or Azure OpenAI, with an optional cheaper model for topic routing |
 | Data | PostgreSQL 16 + pgvector; local embeddings (fastembed) and speech recognition (SenseVoice) |
 | Ops | Docker Compose, Caddy (automatic HTTPS), GitHub Actions, uv, pytest, ruff |
 
@@ -217,16 +217,17 @@ You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and an API key fo
 
 <br>
 
-Set these in `.env`; `.env.example` has a ready-made block for each provider.
+Set `LLM_PROVIDER` and `LLM_API_KEY` in `.env`; `.env.example` lists every option.
 
 | Provider | `LLM_PROVIDER` | Also set |
 |---|---|---|
-| Kimi, OpenAI, DeepSeek, Qwen, Ollama, vLLM and other OpenAI-compatible APIs | `openai_compatible` | `LLM_BASE_URL`, `LLM_MODEL` |
+| Kimi, DeepSeek, Qwen, GLM | `kimi` / `deepseek` / `qwen` / `glm` | Nothing else: base URL and model have defaults, and each vendor's way of turning thinking off is applied |
+| Other OpenAI-compatible APIs (OpenAI, Ollama, vLLM, ...) | `openai_compatible` | `LLM_BASE_URL`, `LLM_MODEL` |
 | Claude | `anthropic` | `LLM_MODEL` |
 | Gemini | `gemini` | `LLM_MODEL` |
 | Azure OpenAI | `azure_openai` | `LLM_BASE_URL` (endpoint), `LLM_MODEL` (deployment), `LLM_API_VERSION` |
 
-`LLM_ROUTER_MODEL` can point topic routing at a cheaper model. Then run `cd backend && uv run python scripts/check_llm.py` for a smoke test, re-run the scenario evaluation, and set `LLM_PRICE_*` so cost tracking uses the new model's prices.
+`LLM_ROUTER_MODEL` can point topic routing at a cheaper model (e.g. `qwen-flash`). Then run `cd backend && uv run python scripts/check_llm.py` for a smoke test, re-run the scenario evaluation, and set `LLM_PRICE_*` to the model's prices; until you do, the readiness check flags that cost tracking still uses Kimi's prices.
 
 </details>
 

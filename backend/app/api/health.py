@@ -22,7 +22,7 @@ from app.core.observability import METRICS
 from app.db.models import DocumentChunk
 from app.db.session import get_engine
 from app.llm.breaker import get_breaker
-from app.llm.client import PROVIDERS, provider_name
+from app.llm.client import PROVIDERS, describe, provider_name
 from app.products.catalog import load_catalog
 from app.speech.recognizer import model_installed
 
@@ -51,14 +51,12 @@ def readiness() -> dict:
         checks["knowledge_index"] = {"ok": False, "required": False, "chunks": None}
     provider = provider_name(settings)
     fake = provider == "fake"
+    llm = {"provider": "fake", "model": "fake"} if fake else describe(settings)
     checks["llm"] = {
         "ok": fake or (provider in PROVIDERS and bool(settings.llm_api_key.get_secret_value())),
         "required": True,
-        "provider": provider,
-        "model": "fake" if fake else settings.llm_model,
+        **llm,
     }
-    if settings.llm_router_model and not fake:
-        checks["llm"]["router_model"] = settings.llm_router_model
     breaker = get_breaker().state
     # An open breaker doesn't make the instance unhealthy (it's an upstream fault); browsing
     # products and contacting the RM still work, so it isn't required

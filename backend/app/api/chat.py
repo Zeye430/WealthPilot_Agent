@@ -50,8 +50,10 @@ from app.handoff.service import (
 from app.llm.breaker import get_breaker
 from app.llm.client import (
     LLMNotConfiguredError,
+    describe,
     get_chat_model,
     get_router_model,
+    prices_are_defaults,
     provider_name,
 )
 from app.llm.fake import FakeChatModel
@@ -113,6 +115,12 @@ def _build_agent():
             FakeChatModel(latency_seconds=settings.fake_llm_latency_seconds),
             FakeChatModel(reply="FINANCE_KNOWLEDGE", latency_seconds=0.2, completion_tokens=3),
             max_tool_calls=settings.agent_max_tool_calls,
+        )
+    logger.info("LLM: %s", describe(settings))
+    if prices_are_defaults(settings):
+        logger.warning(
+            "费用估算仍使用默认（Kimi）单价：请在 .env 中设置 "
+            "LLM_PRICE_INPUT_PER_MTOK / LLM_PRICE_OUTPUT_PER_MTOK"
         )
     return build_graph(
         get_chat_model(settings),
