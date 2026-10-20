@@ -1,4 +1,4 @@
-"""金融计算基准用例，对应 docs/EVALUATION_PLAN.md §2。"""
+"""金融计算基准用例。"""
 
 from decimal import Decimal as D
 

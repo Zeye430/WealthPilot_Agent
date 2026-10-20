@@ -1,122 +1,260 @@
-# WealthPilot AI
+<div align="center">
 
-English | [中文](README.zh-CN.md)
+<img src="docs/images/logo.svg" width="88" alt="WealthPilot logo">
 
-An AI wealth assistant for retail customers of Chinese banks. Customers open it from their mobile banking app to plan, ask questions and find products that fit their needs. When a question needs a person, the assistant hands off to the customer's relationship manager.
+<h1>WealthPilot AI</h1>
 
-**The core design choice: compliance decisions live in deterministic code, not in the prompt.** The language model never decides a customer's risk rating, which products are eligible, whether a purchase is allowed or whether a human has taken over. It only reads those facts. Every reply passes 15 output rules in code before the customer sees it.
+<p><strong>A bank wealth assistant that gets things done.</strong><br>
+Timely product information, expert answers and personalized wealth plans, available any time.<br>
+Under strict compliance controls, it lifts wealth-product conversion and brings new assets to the bank.</p>
 
-> **Portfolio project.** All institutions, products and customers are fictional and labeled as synthetic. Nothing is sold and no real money is involved: the purchase flow stops at a confirmation page. This is not investment advice.
+<p>
+<a href="https://github.com/Zeye430/WealthPilot_Agent/actions/workflows/ci.yml"><img src="https://github.com/Zeye430/WealthPilot_Agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white" alt="Python 3.13">
+<img src="https://img.shields.io/badge/LangGraph-agent-1C3C3C?logo=langchain&logoColor=white" alt="LangGraph">
+<img src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white" alt="Next.js 16">
+<img src="https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL + pgvector">
+<img src="https://img.shields.io/badge/eval-zh%2073%2F75%20%C2%B7%20en%2072%2F75-1D5BD8" alt="Scenario evaluation: Chinese 73/75, English 72/75">
+<img src="https://img.shields.io/badge/data-100%25%20synthetic-6E7781" alt="All data synthetic">
+</p>
 
-<!-- Demo video: drag the compressed mp4 (under 10 MB) into GitHub's README editor here. Shot list: docs/DEMO_SCRIPT.md -->
+<p>
+<a href="#demo">Demo</a> ·
+<a href="#highlights">Highlights</a> ·
+<a href="#how-it-works">How it works</a> ·
+<a href="#evaluation">Evaluation</a> ·
+<a href="#quick-start">Quick start</a>
+</p>
 
-## What it does
+<p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-| | |
-|---|---|
-| **Plans and matches** | Learns the customer's amount, time horizon and liquidity needs, then suggests products within their risk rating, with reasons based on term, liquidity, fees and minimums. |
-| **Answers questions** | Explains wealth-management concepts from a hand-written knowledge base whose regulation excerpts are checked against the source. Answers cite entries like [K17], which expand to the original text. |
-| **Calculates** | Compound growth, fees and allocation scenarios, all computed in code with `Decimal`. Charts come straight from tool output. |
-| **Hands off** | Shares a summary with the relationship manager when the customer agrees. The handoff is a state machine, and the AI can never claim a human has joined. |
-| **Works like the real channel** | Opened from a simulated mobile banking app with a signed one-time ticket. Mobile-first web app, fully bilingual (Chinese and English), with voice input transcribed on our own server. |
+</div>
 
-## Design highlights
+> [!NOTE]
+> **Portfolio project.** All institutions, products and customers are fictional and labeled as synthetic. Nothing is sold and no real money moves: the purchase flow stops at a confirmation page. Not investment advice.
 
-**Compliance in code, three layers deep**
-- **Gate.** Before a valid risk assessment, the model isn't given any product tools at all. It can answer general questions and remind the customer to take the assessment.
-- **Tool checks.** Products above the customer's rating are hard-filtered before ranking. Ranking never uses returns. The customer's ID and rating are injected into tools, so the model can't see or change them.
-- **Output review.** 15 deterministic rules in Chinese and English. They catch guaranteed-return language, pressure tactics, product facts the tools didn't return, amounts that don't come from a tool, comparisons across different yield measures, false claims of actions and handoffs, and more. A failing reply is rewritten once with feedback; if it fails again, a safe fallback is shown. Every decision is logged with a rule version.
+## Why this project
 
-**Numbers never come from the model**
-All amounts are calculated in code. The output review checks every RMB amount in a reply against tool results, the customer's profile and the knowledge base. The one exception is an illustrative example. It must be a round figure, and the same sentence must say it's an assumption ("Suppose you have ¥600,000 at one bank"). Any result calculated from that example still has to come from a tool.
+**Customer pain points**
 
-**Recommends, but doesn't hard-sell**
-The assistant is allowed to recommend: it should help customers find suitable products and get to a purchase. But it may not use returns as a selling point, create urgency, tie gifts to specific products or suggest retaking the risk assessment to qualify for riskier products.
+- **The chatbot can't help.** Most banking apps have a customer-service bot that answers fixed questions. Ask "I have ¥200,000 I won't need for a year, what should I buy?" and it hands you off to a human.
+- **No one to reach.** Relationship managers aren't always available, and even less so after hours.
+- **Slow, uneven answers.** When you do reach someone, they may need time to look things up and run the numbers, and expertise varies from person to person.
+- **Hard-to-read information.** Product documents are long and use different yield measures (7-day annualized yield, performance benchmark), so comparing products is hard.
 
-**Measured quality**
-- 25 multi-turn scenarios per language (gate, manipulation, recommendations, rewards, product terms, citations, calculations, handoffs) run against the real model 3 times each. Checks are deterministic, plus an LLM judge.
-- Latest results: Chinese 73/75, English 72/75, with one fallback per language. Each run writes a report to `evaluations/reports/`, failures included.
-- Topic routing: 24/24. Retrieval Hit@1: 96%.
+**Bank pain points**
 
-**Built to be operated**
-- Every request carries an ID through response headers, JSON logs and per-turn metrics (latency, model calls, tokens, cost, tool results, review outcome).
-- An ops dashboard shows P50/P95 latency, fallback rate, rule hits and cost, without conversation content or customer IDs.
-- Failures behave predictably: a circuit breaker for the model, a 60-second turn budget, tool errors contained, and a fast 503 when overloaded. Each failure mode has a test.
-- A load test found that the database connection was held while waiting for the model. Fixing it took throughput at 40 concurrent users from 7 to 16 requests per second.
+- **Not enough people.** Relationship managers can only focus on a small number of high-net-worth clients; most customers get little timely wealth advice.
+- **Lost conversions.** Slow answers mean customers miss the moment to buy, and money sits in checking accounts or moves elsewhere.
+- **Poorly timed outreach.** Customers often don't know about new products, campaigns or tier benefits, and notifying them one by one is hard to time well.
+- **Compliance risk.** Human advice varies and can mislead. A general-purpose LLM is no fix: it may promise returns or recommend unsuitable products.
 
-**Secure by default**
-Server-side sessions with httpOnly cookies, role isolation (customer, relationship manager, ops), rate limits, cross-site write checks, log redaction and dependency scanning in CI. Each control has a test; see the [threat model](docs/SECURITY.md).
+**Our approach**
 
-**Real cost numbers**
-From 289 real turns: about $0.011 per turn before caching, with input at 97% of tokens. So the cost levers are prompt caching and context trimming, not shorter answers ([cost estimate](docs/COST_ESTIMATE.md)).
+WealthPilot is a wealth assistant that gets things done:
 
-## Architecture
+- **Always available, always consistent.** It knows the products, runs the numbers and builds plans, giving every customer timely, expert answers with one consistent voice.
+- **Proactive.** At the right moment it mentions new products, campaigns and tier benefits, lifting wealth-product conversion and asset inflows.
+- **Focused on wealth management.** Ideally, a bank's AI assistant could handle many kinds of business. This project focuses on the highest-value piece: wealth advice and planning.
+- **Compliance enforced in code.** Wealth management is heavily regulated. Code, not the model, decides the risk rating, which products can be recommended and whether a purchase is allowed.
+
+<h2 id="demo">Demo</h2>
+
+<!-- Demo video: drag the compressed mp4 (under 10 MB) into GitHub's README editor here. Shot list in the local design docs. -->
+
+<table>
+<tr>
+<td align="center" width="33%"><img src="docs/images/alloc-en.jpg" width="260" alt="Allocation simulation with every check passed"></td>
+<td align="center" width="33%"><img src="docs/images/tier-en.jpg" width="260" alt="Tier progress showing that moving money in would reach the Wealth tier, with benefits"></td>
+<td align="center" width="33%"><img src="docs/images/gate-en.jpg" width="260" alt="Before a risk assessment, the assistant declines to recommend products"></td>
+</tr>
+<tr>
+<td align="center" valign="top"><strong>Smart planning</strong><br><sub>"I have ¥1,000,000, want about 5% a year with low risk, and may need ¥200,000 any time." It builds an allocation and checks totals, liquidity and fees line by line.</sub></td>
+<td align="center" valign="top"><strong>Drives conversion</strong><br><sub>A Gold customer plans to move in ¥450,000. The assistant shows this would reach the Wealth tier and lists the benefits that come with it.</sub></td>
+<td align="center" valign="top"><strong>Risk control</strong><br><sub>An unprofiled customer asks for recommendations. No products are offered until the risk assessment is done.</sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/images/rm-en.jpg" alt="Relationship manager dashboard with the customer's goals, risk profile, products discussed and transcript"></td>
+<td align="center" width="50%"><img src="docs/images/ops-en.jpg" alt="Operations dashboard with latency, fallback rate, rule hits and cost"></td>
+</tr>
+<tr>
+<td align="center" valign="top"><strong>Relationship manager dashboard</strong><br><sub>Leads handed off by the AI arrive with the customer's goals, risk profile, products discussed and full transcript. The manager marks follow-up in one click.</sub></td>
+<td align="center" valign="top"><strong>Operations dashboard</strong><br><sub>Latency, fallback rate, compliance rule hits and cost per turn. No conversation content or customer IDs.</sub></td>
+</tr>
+</table>
+
+<h2 id="highlights">Highlights</h2>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Full-featured**<br>
+Product and terms Q&A with cited sources, needs-based matching, return and fee calculations, allocation simulation, and a path from recommendation to purchase confirmation. When a person is needed, it hands off to the customer's relationship manager with a summary.
+
+</td>
+<td width="50%" valign="top">
+
+**Drives conversion, never hard-sells**<br>
+It prompts at the right moment: upcoming products within the customer's rating when they have money to place, with a sale reminder once they agree; the benefits they'd unlock if planned money lifts them to a higher tier; current campaigns. Timelier service lifts conversion and asset inflows.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Compliance by design**<br>
+Three layers: a risk assessment before any recommendation, products above the customer's rating filtered out before ranking, and 15 output rules that block promised returns, pressure tactics and return-based pitches. Every compliance decision is made in code.
+
+</td>
+<td valign="top">
+
+**Trustworthy answers**<br>
+Amounts are calculated in code, never by the model. Product facts come only from the catalog. General answers cite their sources. 25 scenarios per language are re-run after every change, and reports keep the failures.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Secure by default**<br>
+Entry from the banking app with a one-time signed ticket; separate roles for customers, relationship managers and operations; rate limits and log redaction. Every control in the threat model has a test.
+
+</td>
+<td valign="top">
+
+**Built to operate**<br>
+A live ops dashboard for latency, fallback rate and rule hits; an automatic circuit breaker when the model fails; graceful timeouts; load-tested; one-command deployment with automatic backups.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Cost-efficient**<br>
+About $0.011 per turn, measured. Off-topic questions get a fixed reply without calling the main model. Tokens and cost are tracked for every turn.
+
+</td>
+<td valign="top">
+
+**Native to the banking app**<br>
+Runs as a module inside the mobile banking app. Mobile-first, fully bilingual in Chinese and English, with voice input.
+
+</td>
+</tr>
+</table>
+
+<h2 id="how-it-works">How it works</h2>
 
 ```mermaid
-flowchart LR
-    APP[Mobile banking app<br/>simulated] -->|signed one-time ticket| FE[Next.js<br/>mobile-first web app]
-    FE -->|/api| API[FastAPI]
-    API --> R[Topic router]
-    R -->|off-topic: fixed reply| API
-    R --> G[LangGraph agent]
-    G --> LLM[LLM<br/>OpenAI-compatible adapter]
-    G --> T[Typed tools]
-    T --> BIZ[Suitability, ranking,<br/>Decimal calculations,<br/>purchase checks, RAG]
-    BIZ --> DB[(PostgreSQL<br/>+ pgvector)]
-    G --> OG[Output review<br/>15 rules]
-    OG --> API
+flowchart TD
+    APP["Mobile banking app (simulated)"] -->|signed one-time ticket| FE["Next.js web app"]
+    FE --> API["FastAPI"]
+    API --> R{"Topic router"}
+    R -->|off-topic| FIX["Fixed reply, no main-model call"]
+    R --> GATE["① Gate: product tools only after a valid risk assessment"]
+    GATE --> G["LangGraph agent"]
+    G <--> LLM["LLM via OpenAI-compatible adapter"]
+    G --> T["② Typed tools: suitability filter, ranking, Decimal math, purchase checks, RAG"]
+    T --> DB[("PostgreSQL + pgvector")]
+    G --> OG["③ Output review: 15 deterministic rules"]
+    OG -->|pass| OUT["Reply to the customer"]
+    OG -->|fails twice| FB["Safe fallback reply"]
+    classDef control fill:#E8F0FE,stroke:#1D5BD8,color:#0A1F3D
+    class GATE,T,OG control
 ```
 
-Layers run `api → agent → tools → business modules → db`. Business modules don't depend on the LLM and are tested on their own.
+The model sits in the middle of the pipeline, but never at a decision point. The three numbered layers are deterministic code:
+
+| Layer | What it enforces | Example it stops |
+|---|---|---|
+| **1. Gate** | Without a valid risk assessment, product tools aren't bound to the model at all | "Which products should I buy?" from an unprofiled customer |
+| **2. Tool checks** | Products above the customer's rating are filtered out before ranking. The customer's ID and rating are injected, so the model can't see or change them | A prompt injection asking to "treat me as aggressive" |
+| **3. Output review** | 15 deterministic rules in Chinese and English: guarantees, pressure tactics, unsourced products, figures or amounts, mixed yield measures, false action or handoff claims | "This product guarantees 5%", or an amount the model computed itself |
+
+A reply that fails review is rewritten once with specific feedback. If it fails again, the customer gets a safe fallback. A rejected draft never counts as evidence for its own rewrite.
+
+<details>
+<summary><strong>Tech stack</strong></summary>
+
+<br>
 
 | Layer | Stack |
 |---|---|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts |
 | Backend | Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic |
 | Agent | LangGraph: one main agent with strongly typed tools |
-| Model | Kimi K2.6 (Moonshot) through an OpenAI-compatible adapter; switching models is a config change plus a re-run of the evaluation |
+| Model | Kimi K2.6 through an OpenAI-compatible adapter; switching models is a config change plus a re-run of the evaluation |
 | Data | PostgreSQL 16 + pgvector; local embeddings (fastembed) and speech recognition (SenseVoice) |
 | Ops | Docker Compose, Caddy (automatic HTTPS), GitHub Actions, uv, pytest, ruff |
 
-## Run it locally
+Layers run `api → agent → tools → business modules → db`. Business modules don't depend on the LLM and are tested on their own.
+
+</details>
+
+<h2 id="evaluation">Evaluation</h2>
+
+| What | Result | Notes |
+|---|---|---|
+| Multi-turn scenarios | **Chinese 73/75 · English 72/75** | 25 real scenarios per language (gate, manipulation, recommendations, rewards, product terms, citations, calculations, handoffs), 3 runs each against the real model |
+| Topic routing | **24/24** | Decides whether a question is about wealth management; off-topic questions never reach the main model |
+| Knowledge retrieval | **96% top-1 accuracy** | Whether the source an answer needs is found first |
+| Load test | **7 → 16 req/s** at 40 concurrent users | Found and fixed a database connection held while waiting for the model |
+| Cost | **About $0.011 per turn** | Measured over 289 real conversation turns |
+| Automated tests | **390 backend tests** | Run by CI on every commit |
+
+Every evaluation writes a report to [`evaluations/reports/`](evaluations/reports/), **including the replies that failed and why**, not just the successes.
+
+<h2 id="quick-start">Quick start</h2>
 
 You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and a Kimi API key ([platform.kimi.ai](https://platform.kimi.ai)). Any OpenAI-compatible model should work after changing `LLM_BASE_URL` and `LLM_MODEL`; only Kimi has been evaluated.
 
 ```bash
+git clone https://github.com/Zeye430/WealthPilot_Agent.git && cd WealthPilot_Agent
 cp .env.example .env          # set LLM_API_KEY
 ./scripts/dev.sh              # database, backend and frontend → http://localhost:3000
 ```
 
 Or run everything in containers: `docker compose up --build`.
 
-Start at **http://localhost:3000/bank**: sign in to the simulated banking app and open the assistant. Switch to English with the **中 / EN** button.
+Open **http://localhost:3000/bank**, sign in to the simulated banking app and tap **AI wealth assistant**. Switch languages with **中 / EN**.
 
-Demo accounts (local only; password `wealthpilot-demo`):
+<details>
+<summary><strong>Demo accounts</strong> (local only; password <code>wealthpilot-demo</code>)</summary>
 
-| Account | Role |
-|---|---|
-| `wang`, `chen` | Customers |
-| `li`, `zhou` | Relationship managers (`/rm`) |
-| `ops` | Operations dashboard (`/ops`) |
+<br>
 
-## Tests and evaluation
+| Account | Role | Where |
+|---|---|---|
+| `wang`, `chen` | Customers | `/bank` or `/login` |
+| `li`, `zhou` | Relationship managers | `/rm` |
+| `ops` | Operations | `/ops` |
+
+</details>
+
+<details>
+<summary><strong>Tests and evaluation</strong></summary>
+
+<br>
 
 ```bash
-cd backend && uv run pytest                                              # unit, agent flow (fake model), API integration
-cd backend && uv run python ../evaluations/run_scenarios.py --suite en --repeat 3   # real-model scenarios (costs about $2 per suite)
-cd backend && uv run python ../evaluations/run_router_eval.py             # topic routing
-cd backend && uv run python ../evaluations/run_rag_eval.py               # retrieval hit rate
+cd backend && uv run pytest                                                          # no API key needed
+cd backend && uv run python ../evaluations/run_scenarios.py --suite en --repeat 3   # real model, about $2 per suite
+cd backend && uv run python ../evaluations/run_router_eval.py
+cd backend && uv run python ../evaluations/run_rag_eval.py
 cd frontend && npm run lint && npm run build
 ```
 
-On every push, CI runs:
-- the backend tests, linting and dependency audits;
-- the frontend build;
-- a boot of the full production stack with a fake model, checking HTTPS, readiness, blocked internal endpoints, the access code and the image contents.
+On every push, CI runs the backend tests, linting and dependency audits, builds the frontend, and boots the full production stack with a fake model to check HTTPS, readiness, blocked internal endpoints, the access code and the image contents.
+
+</details>
 
 ## Deployment
 
-`deploy/` holds a production setup for one AWS Lightsail server (from $12 a month): database, backend, frontend, Caddy and daily backups. With an AWS access key configured, one command creates the server and one removes it:
+`deploy/` holds a production setup for one AWS Lightsail server (from $12 a month): database, backend, frontend, Caddy with automatic HTTPS, and daily backups.
 
 ```bash
 DRY_RUN=1 ./deploy/deploy.sh   # print every AWS and server command without creating anything
@@ -125,23 +263,24 @@ DRY_RUN=1 ./deploy/deploy.sh   # print every AWS and server command without crea
 ./deploy/destroy.sh            # export the database locally, then delete the server
 ```
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (in Chinese). In a bank, the system would run very differently: inside the bank's network, with SSO for staff and a private or approved model. [PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) covers that design and the gap list.
+<details>
+<summary><strong>Before the first deploy</strong></summary>
 
-## Documents
+<br>
 
-| Document | What it covers | Language |
-|---|---|---|
-| [US_REGULATORY_MAPPING.md](docs/US_REGULATORY_MAPPING.md) | How the controls map to Reg BI, FINRA 2111/2210/3110/4511, SEA 17a-4, Reg S-P and RN 24-09, and what a US pilot would still need | English |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture and 54 decision records with trade-offs | Chinese |
-| [COMPLIANCE_DESIGN.md](docs/COMPLIANCE_DESIGN.md) | Gate, suitability filter, all output rules and their history | Chinese |
-| [EVALUATION_PLAN.md](docs/EVALUATION_PLAN.md) | Scenario design, checks and results | Chinese |
-| [PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) | Production deployment diagram and the demo-to-production gap list | Chinese |
-| [COST_ESTIMATE.md](docs/COST_ESTIMATE.md) | Measured cost per turn and projections at scale | Chinese |
-| [RUNBOOK.md](docs/RUNBOOK.md) | Incident handling: breaker open, fallback spikes, complaints, key rotation | Chinese |
-| [SECURITY.md](docs/SECURITY.md) | Threat model with a test for each control | Chinese |
-| [DEVLOG.md](docs/DEVLOG.md) | Step-by-step build log, including problems found and how they were fixed | Chinese |
+1. In AWS IAM, create a user with Lightsail-only permissions, create an access key for it, and run `aws configure`. Use the access key, never the account password.
+2. `cp deploy/.env.production.example deploy/.env.production` and fill in the model key, passwords and the demo access code. The script refuses to deploy with empty secrets or the default demo password.
+3. Leave `DOMAIN` empty to get a free `<ip>.sslip.io` address with HTTPS, or point your own domain's A record at the server's static IP.
+4. Use `RAM_GB=4 ./deploy/deploy.sh` for the 4 GB server ($24 a month) if several people will use it at once.
 
-## Project layout
+</details>
+
+Inside a bank, the system would look different: it would run in the bank's own network, staff would sign in with single sign-on, and the model would be privately hosted or an approved service.
+
+<details>
+<summary><strong>Project layout</strong></summary>
+
+<br>
 
 ```text
 backend/app/
@@ -158,9 +297,10 @@ frontend/src/     customer app, RM and ops dashboards, simulated banking app
 data/             fictional products, customers, rewards and knowledge base
 evaluations/      scenario suites (zh/en) and reports
 deploy/           production compose, Caddy and deploy scripts
-docs/             design documents
 ```
 
-## Status
+</details>
 
-Core product, compliance, bilingual support, security, observability, reliability and deploy-ready infrastructure are done. In progress: the demo video and English versions of the key design documents.
+## Disclaimer
+
+WealthPilot is a portfolio project. Zhian Bank (知岸银行), Zhian Wealth Management (知岸理财) and Hongyu Wealth Management (鸿屿理财) are fictional, as are all products and customers; any resemblance to real institutions is unintended. Nothing here is investment, legal or compliance advice.

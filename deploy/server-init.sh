@@ -2,7 +2,7 @@
 # 服务器首次开机时执行（Lightsail user-data，以 root 运行）：交换空间 + Docker。
 set -euxo pipefail
 
-# 2 GB 交换空间：2 GB 内存的机型在构建前端、加载语音模型时需要（见 docs/DEPLOYMENT.md）
+# 2 GB 交换空间：2 GB 内存的机型在构建前端、加载语音模型时需要
 if [ ! -f /swapfile ]; then
   fallocate -l 2G /swapfile
   chmod 600 /swapfile

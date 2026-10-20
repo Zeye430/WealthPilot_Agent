@@ -1,5 +1,7 @@
 # 手动触发：把 main 的最新提交更新到已创建的 Lightsail 服务器（等同于本机运行 deploy/update.sh）。
-# 服务器需先用 deploy/deploy.sh 创建；需要的 Secrets 见 docs/DEPLOYMENT.md「从 GitHub 更新」。
+# 服务器需先用 deploy/deploy.sh 创建。需要在 production 环境中配置的 Secrets：
+#   DEPLOY_HOST（固定 IP）、DEPLOY_DOMAIN（访问地址）、DEPLOY_SSH_KEY（~/.ssh/wealthpilot-lightsail.pem 的内容）、
+#   DEPLOY_KNOWN_HOSTS（ssh-keygen -F <固定 IP> 的输出，固定服务器指纹）、DEPLOY_ENV_FILE（deploy/.env.production 的内容）
 # 使用 production 环境：可在仓库 Settings → Environments 中设置「需要审批」后才能执行。
 name: Deploy
 
@@ -23,7 +25,7 @@ jobs:
           ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
         run: |
           for v in SSH_KEY KNOWN_HOSTS ENV_FILE; do
-            [ -n "${!v}" ] || { echo "缺少 Secret：${v}（见 docs/DEPLOYMENT.md）"; exit 1; }
+            [ -n "${!v}" ] || { echo "缺少 Secret：${v}（见本文件开头的说明）"; exit 1; }
           done
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/wealthpilot-lightsail.pem

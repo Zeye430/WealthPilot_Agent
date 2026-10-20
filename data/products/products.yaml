@@ -1,5 +1,5 @@
 # 虚构产品要素（单一数据源）。机构与产品均为虚构，仅供 WealthPilot 演示。
-# 目录说明见 docs/PRODUCT_CATALOG.md；说明书由 scripts/generate_product_docs.py 根据本文件生成。
+# 说明书由 scripts/generate_product_docs.py 根据本文件生成。
 #
 # 字段约定
 #   operation_mode: OPEN 每日开放 | MIN_HOLDING 最短持有期 | CLOSED 封闭式 | PERIODIC_OPEN 定期开放

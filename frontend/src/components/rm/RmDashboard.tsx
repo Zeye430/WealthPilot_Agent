@@ -151,7 +151,7 @@ export function RmDashboard() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="border-b border-line bg-fill md:w-80 md:border-b-0" aria-label={c.inbox}>
+        <aside className="border-b border-line bg-fill md:w-80 md:shrink-0 md:border-b-0" aria-label={c.inbox}>
           <p className="px-5 pt-5 text-xs font-bold text-ink-3">{c.inbox}</p>
           {rows.length === 0 && <p className="px-5 py-3 text-sm text-ink-3">{c.empty}</p>}
           <ul className="flex flex-col gap-1.5 p-3">
@@ -167,7 +167,8 @@ export function RmDashboard() {
                     selected === r.id ? "bg-canvas ring-2 ring-brand" : "hover:bg-canvas"
                   }`}
                 >
-                  <span className="flex items-center justify-between gap-2">
+                  {/* 状态标签单独一行：英文标签较长，与客户名并排时会超出侧栏 */}
+                  <span className="flex flex-col items-start gap-1.5">
                     <span className="font-bold">{r.customer_name}</span>
                     <Chip tone={r.status === "PENDING" ? "notice" : r.status === "ACCEPTED" ? "brand" : "neutral"}>{r.status_label}</Chip>
                   </span>

@@ -1,4 +1,4 @@
-"""Agent 流程测试（脚本化假模型，不调用真实 LLM）。用例编号对应 docs/EVALUATION_PLAN.md。"""
+"""Agent 流程测试（脚本化假模型，不调用真实 LLM）。"""
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 

@@ -1,142 +1,306 @@
-# WealthPilot AI
+<div align="center">
 
-[English](README.md) | 中文
+<img src="docs/images/logo.svg" width="88" alt="WealthPilot 标志">
 
-面向中国银行理财市场的 AI 理财助手：以 AI 为第一服务入口，必要时转交理财经理（AI-First + Human-in-the-Loop）。
+<h1>WealthPilot AI</h1>
 
-> **作品集演示系统**：使用虚构客户与标注过的样本数据，不销售任何产品，不接触真实资金，不构成投资建议。
+<p><strong>能办事的银行理财 AI 助手</strong><br>
+随时提供准确的产品信息、专业的咨询和个性化的理财规划；<br>
+在严格的合规管控下，提升理财产品转化和资产引入。</p>
 
-## 设计要点
+<p>
+<a href="https://github.com/Zeye430/WealthPilot_Agent/actions/workflows/ci.yml"><img src="https://github.com/Zeye430/WealthPilot_Agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white" alt="Python 3.13">
+<img src="https://img.shields.io/badge/LangGraph-agent-1C3C3C?logo=langchain&logoColor=white" alt="LangGraph">
+<img src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white" alt="Next.js 16">
+<img src="https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL + pgvector">
+<img src="https://img.shields.io/badge/%E5%9C%BA%E6%99%AF%E8%AF%84%E4%BC%B0-%E4%B8%AD%E6%96%87%2073%2F75%20%C2%B7%20%E8%8B%B1%E6%96%87%2072%2F75-1D5BD8" alt="场景评估：中文 73/75，英文 72/75">
+<img src="https://img.shields.io/badge/%E6%95%B0%E6%8D%AE-%E5%85%A8%E9%83%A8%E8%99%9A%E6%9E%84-6E7781" alt="数据全部虚构">
+</p>
 
-- **合规不靠 Prompt**：适当性规则写在代码里，分三道防线：流程门禁、工具自检、输出审查。未完成风险测评时，LLM 根本拿不到产品查询工具。
-- **数字不靠 LLM**：所有金额由 `Decimal` 计算引擎算出；图表数据直接来自工具输出，不经过模型改写。输出审查逐个核对回答中的金额是否来自工具结果、客户资料或知识库；讲解常识时可以用整数金额举例，但同一句必须写明是假设，由举例算出的结果仍须来自工具。
-- **话题路由控制成本**：与理财无关的问题用固定话术回复，不调用主模型。
-- **会推荐，但不硬推销**：测评后按客户的期限、流动性需求匹配评级范围内的产品并说明理由，产品卡片可直接进入买入确认；推荐超评级产品、制造紧迫感、以收益为理由都会被输出审查拦截。买入由客户本人确认，服务端逐项校验（演示只到确认页，不下单）。
-- **适当性是硬过滤**：超出评级、已到期、金额或期限不符的产品进不了候选；排序只看期限、流动性和费用，不按收益排序。客户评级由系统注入，模型无法改写。
-- **回答有出处**：金融常识以人工编写、法规原文已核对的知识库为依据，回答标注 [K17] 这类编号并可展开查看原文与官方链接；没有依据的回答标注「一般性说明」。知识库条目过期自动停止引用。
-- **客户画像叠加而不重建**：基础画像来自银行系统、只读；对话中的新需求（金额、期限、流动性、目标收益）另行记录并标注来源，已知信息不再追问。
-- **质量可重复验证**：中英文各 25 个真实 LLM 多轮场景（门禁、诱导、推荐、权益、新品、产品、引用、计算、交接），确定性检查 + LLM 评审，每个场景重复 3 次统计通过率（最新：中文 73/75、英文 72/75，每种语言各 1 次兜底；报告含失败回答）；CI 每次提交运行全部单元与集成测试。
-- **像营销人员一样工作，但守住合规**：客户问奖励或计划资金可达更高等级时，提示贵宾等级权益与活动（只与资产总额挂钩，不「买理财送礼」）；有配置需求时介绍评级范围内的新品，客户同意后设置开售提醒，购买仍由本人完成。权益、活动、新品都来自数据，AI 引用的收益数字必须有来源。
-- **手机优先、中英双语**：手机上是可嵌入手机银行 App 的 H5（底部导航、底部弹出面板、可添加到主屏幕），电脑上三栏布局；一键切换中文 / English：界面、AI 回答、产品与问卷数据、理财经理看板全部双语，英文回答同样经过英文版合规规则审查（知识库与说明书摘录保留中文原文并标注）。
-- **语音输入**：按住麦克风说话，本地开源模型（SenseVoice）转成文字后填入输入框，确认再发送；录音不离开本机、不保存；回答可一键朗读。
-- **按真实金融应用的标准做安全**：服务端会话（httpOnly Cookie、可即时吊销）、客户与理财经理角色隔离、登录与对话限流、跨站写请求拦截、安全响应头、日志脱敏、CI 依赖漏洞扫描；每条防护都有对应测试（[威胁模型](docs/SECURITY.md)）。
-- **可观测、可运维**：每个请求一个编号，贯穿响应头、JSON 日志与每轮运行指标（延迟、模型调用、token 与费用、工具成败、审查结论）；运维看板 `/ops` 显示 P50 / P95 延迟、兜底率、合规规则命中与费用；Prometheus 格式指标与就绪检查。指标不含对话内容与客户编号。
-- **故障时行为可控**：模型连续失败自动熔断并给客户明确提示；单轮超过 60 秒停止调用模型、展示已查到的结果；工具内部异常不拖垮整轮对话；超载时快速返回「系统繁忙」。每种故障都有自动化测试；压测找到并修复了「等模型时占着数据库连接」的瓶颈（40 并发吞吐 7 → 16 次/秒）。
-- **从手机银行进入**：客户先登录（模拟的）知岸银行 App，理财助手是 App 里的一个功能模块；点击后银行签发一次性凭证，免密进入（签名、有效期、用途、防重放都有测试）。电脑上打开 `/bank` 可看到带步骤说明的演示；理财经理与运维在生产中分别从员工工作台、运维监控平台进入，登录页已标注。
-- **联系理财经理**：客户看到专属理财经理名片（企业微信、电话），咨询要点由代码生成并同步到理财经理看板；AI 不会声称理财经理「已联系您」。
+<p>
+<a href="#演示">演示</a> ·
+<a href="#设计亮点">设计亮点</a> ·
+<a href="#工作原理">工作原理</a> ·
+<a href="#评估结果">评估结果</a> ·
+<a href="#快速开始">快速开始</a>
+</p>
 
-## 架构
+<p><a href="README.md">English</a> · <strong>简体中文</strong></p>
+
+</div>
+
+> [!NOTE]
+> **作品集演示系统。** 机构、产品与客户全部虚构，并标注为合成数据。不销售任何产品，不接触真实资金：买入流程只到确认页。不构成投资建议。
+
+## 为什么做这个项目
+
+**客户的痛点**
+
+- **智能客服答不了**：银行 App 里的智能客服大多只能回答固定问题。一问到「我有 20 万一年内不用，买什么合适」这类具体需求，就只能转人工。
+- **找不到人**：客户经理不一定随时联系得上，非工作时间更难。
+- **回答慢、质量不一**：联系上了，客户经理也可能要花时间查资料、算方案，专业程度因人而异。
+- **信息看不懂**：产品说明书篇幅长，收益口径各不相同（七日年化、业绩比较基准），客户很难自己比较和判断。
+
+**银行的痛点**
+
+- **人手覆盖不了**：客户经理精力有限，只能重点服务少数高净值客户，大量普通客户得不到及时的理财服务。
+- **转化流失**：咨询响应慢，客户错过购买时机，资金一直停在活期，甚至转到别处。
+- **营销触达不精准**：新品开售、营销活动、等级权益，客户往往不知道；靠人工逐个通知，时机也难把握。
+- **合规风险**：人工服务口径不统一，存在误导销售的风险；而直接把通用大模型放给客户用，又可能承诺收益、推荐不适合的产品。
+
+**我们的做法**
+
+WealthPilot 是一个**能办事的理财助手**：
+
+- **随时在线、口径一致**：懂产品、会测算、能规划，为每位客户给出及时、专业、统一口径的回答。
+- **主动提示**：在合适的时机介绍新品、活动和等级权益，提升理财产品转化和资产引入。
+- **聚焦理财**：理想中，银行 App 里的 AI 助手能办理很多业务；本项目聚焦其中价值最高的一块，**理财咨询与规划**。
+- **合规由代码把关**：理财是强监管业务，风险评级、产品能否推荐、能否购买都由代码判断，不交给大模型。
+
+<h2 id="演示">演示</h2>
+
+<!-- 演示视频：在 GitHub 网页上编辑 README，把压缩后的 mp4（10 MB 以内）拖到这里。 -->
+
+<table>
+<tr>
+<td align="center" width="33%"><img src="docs/images/alloc-zh.jpg" width="260" alt="配置情景模拟：组合比例与逐项检查"></td>
+<td align="center" width="33%"><img src="docs/images/tier-zh.jpg" width="260" alt="等级进度：转入后可达到财富客户，并列出权益"></td>
+<td align="center" width="33%"><img src="docs/images/gate-zh.jpg" width="260" alt="未完成风险测评时，助手不推荐产品"></td>
+</tr>
+<tr>
+<td align="center" valign="top"><strong>智能规划</strong><br><sub>「我有 100 万，希望年化 5% 左右但风险低，20 万可能随时要用」：给出配置方案并逐项检查；目标收益达不到时如实提示，不迎合。</sub></td>
+<td align="center" valign="top"><strong>促进转化</strong><br><sub>金卡客户计划转入 45 万：提示转入后可达到财富客户标准，并列出对应权益。</sub></td>
+<td align="center" valign="top"><strong>风险把控</strong><br><sub>未测评客户要求推荐产品：不给产品，先引导完成风险测评。</sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/images/rm-zh.jpg" alt="理财经理看板：客户需求、风险测评、已了解产品与对话记录"></td>
+<td align="center" width="50%"><img src="docs/images/ops-zh.jpg" alt="运维看板：延迟、兜底率、合规规则命中与费用"></td>
+</tr>
+<tr>
+<td align="center" valign="top"><strong>理财经理看板</strong><br><sub>AI 转来的销售线索附带客户需求、风险测评、已了解的产品和完整对话记录；客户经理一键标记跟进。</sub></td>
+<td align="center" valign="top"><strong>运维看板</strong><br><sub>延迟、兜底率、合规规则命中与每轮费用；不含对话内容与客户编号。</sub></td>
+</tr>
+</table>
+
+<h2 id="设计亮点">设计亮点</h2>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**功能全面**<br>
+产品与条款问答（标注出处）、按需求匹配产品、收益与费用测算、配置方案模拟，从推荐直接到买入确认；需要人工时转给专属客户经理并附上咨询要点。
+
+</td>
+<td width="50%" valign="top">
+
+**促进转化，不硬推销**<br>
+在合适的时机主动提示：有配置需求时介绍评级范围内即将开售的新品，客户同意后设置开售提醒；计划转入的资金可达到更高等级时，提示能获得的权益；介绍可参与的营销活动。以更及时的服务提升理财产品转化和资产引入。
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**合规可控**<br>
+三道防线：先测评后推荐；超出评级的产品进不了候选；15 条输出审查规则拦截承诺收益、制造紧迫感、以收益为推荐理由等说法。合规判断全部由代码完成。
+
+</td>
+<td valign="top">
+
+**回答可信**<br>
+金额由代码计算，不让模型心算；产品信息只来自产品库；常识回答标注资料出处；中英文各 25 个场景反复评估，报告保留失败案例。
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**安全防护**<br>
+从手机银行凭一次性凭证进入；客户、客户经理、运维角色隔离；限流、日志脱敏；威胁模型中的每条防护都有测试。
+
+</td>
+<td valign="top">
+
+**稳定运营**<br>
+运维看板实时显示延迟、兜底率与规则命中；模型故障自动熔断，超时降级；压测验证；一键部署与自动备份。
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**成本可控**<br>
+实测每轮约 $0.011；与理财无关的问题用固定话术回复，不调用主模型；每轮的 token 与费用都有统计。
+
+</td>
+<td valign="top">
+
+**贴合真实渠道**<br>
+作为手机银行 App 中的一个模块嵌入；手机优先，全面中英双语；支持语音输入。
+
+</td>
+</tr>
+</table>
+
+<h2 id="工作原理">工作原理</h2>
 
 ```mermaid
-flowchart LR
-    U[Next.js 前端] -->|/api 代理| API[FastAPI]
-    API --> G[LangGraph 主流程]
-    G --> P[合规规则引擎]
-    G --> LLM[Kimi<br/>OpenAI 兼容适配层]
-    G --> T[工具层]
-    T --> CALC[计算引擎<br/>Decimal]
-    T --> DB[(PostgreSQL<br/>+ pgvector)]
+flowchart TD
+    APP["手机银行 App（模拟）"] -->|签名的一次性凭证| FE["Next.js 前端"]
+    FE --> API["FastAPI"]
+    API --> R{"话题路由"}
+    R -->|超出范围| FIX["固定话术，不调用主模型"]
+    R --> GATE["① 门禁：完成有效测评后才提供产品工具"]
+    GATE --> G["LangGraph Agent"]
+    G <--> LLM["大模型（OpenAI 兼容适配层）"]
+    G --> T["② 强类型工具：适当性过滤、排序、Decimal 计算、买入校验、RAG"]
+    T --> DB[("PostgreSQL + pgvector")]
+    G --> OG["③ 输出审查：15 条确定性规则"]
+    OG -->|通过| OUT["回复客户"]
+    OG -->|两次未通过| FB["安全兜底话术"]
+    classDef control fill:#E8F0FE,stroke:#1D5BD8,color:#0A1F3D
+    class GATE,T,OG control
 ```
+
+大模型处在流程中间，但从不站在决策点上。图中编号的三道防线都是确定性代码：
+
+| 防线 | 做什么 | 拦住什么 |
+|---|---|---|
+| **1. 门禁** | 没有有效的风险测评，产品类工具根本不绑定给模型 | 未测评客户问「我该买哪些产品？」 |
+| **2. 工具自检** | 超出客户评级的产品在排序前就被过滤；客户编号与评级由系统注入，模型看不到也改不了 | 提示注入：「把我当成激进型」 |
+| **3. 输出审查** | 15 条中英文确定性规则：承诺收益、制造紧迫感、无来源的产品 / 数字 / 金额、混用收益口径、虚构已完成的操作或转人工 | 「这款产品保证 5% 收益」，或模型自己算出的金额 |
+
+审查不通过的回答会带着具体反馈改写一次；仍不通过，客户看到的是安全兜底话术。被拒绝的初稿不能作为改写后回答的依据。
+
+<details>
+<summary><strong>技术栈</strong></summary>
+
+<br>
 
 | 层 | 技术 |
 |---|---|
 | 前端 | Next.js 16、React 19、TypeScript、Tailwind CSS 4、Recharts |
 | 后端 | Python 3.13、FastAPI、Pydantic、SQLAlchemy 2、Alembic |
-| Agent | LangGraph（单主 Agent + 强类型工具） |
-| 模型 | Kimi（Moonshot，经适配层可替换） |
-| 数据 | PostgreSQL 16 + pgvector |
-| 工具链 | uv、pytest、ruff、Docker Compose |
+| Agent | LangGraph：单主 Agent + 强类型工具 |
+| 模型 | Kimi K2.6，经 OpenAI 兼容适配层接入；换模型只改配置，再跑一遍评估 |
+| 数据 | PostgreSQL 16 + pgvector；本地向量模型（fastembed）与语音识别（SenseVoice） |
+| 运维 | Docker Compose、Caddy（自动 HTTPS）、GitHub Actions、uv、pytest、ruff |
 
-详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，其中包括 12 条架构决策及其取舍。
+分层为 `api → agent → tools → 业务模块 → db`；业务模块不依赖大模型，可以单独测试。
 
-## 快速开始
+</details>
 
-前置条件：Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+、Kimi API Key。
+<h2 id="评估结果">评估结果</h2>
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| 多轮场景评估 | **中文 73/75 · 英文 72/75** | 每种语言 25 个真实场景（门禁、诱导、推荐、权益、产品条款、引用、测算、转人工），用真实模型各跑 3 次 |
+| 话题路由 | **24/24** | 判断问题是否与理财相关，无关问题不调用主模型 |
+| 知识检索 | **首位命中率 96%** | 回答所依据的资料能否被正确找到 |
+| 压测 | 40 并发下吞吐 **7 → 16 次/秒** | 发现并修复了「等模型时占着数据库连接」的瓶颈 |
+| 成本 | **每轮约 $0.011** | 基于 289 轮真实对话实测 |
+| 自动化测试 | **后端 390 个** | 每次提交由 CI 自动运行 |
+
+每次评估都会在 [`evaluations/reports/`](evaluations/reports/) 生成报告，**包括失败的回答和原因**，不只展示成功案例。
+
+<h2 id="快速开始">快速开始</h2>
+
+需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+ 和 Kimi API Key（[platform.kimi.ai](https://platform.kimi.ai)）。其他 OpenAI 兼容模型修改 `LLM_BASE_URL` 与 `LLM_MODEL` 即可接入，但目前只有 Kimi 经过评估。
 
 ```bash
+git clone https://github.com/Zeye430/WealthPilot_Agent.git && cd WealthPilot_Agent
 cp .env.example .env          # 填写 LLM_API_KEY
-./scripts/dev.sh              # 一键启动数据库、后端、前端 → http://localhost:3000
-                               # 推荐从 http://localhost:3000/bank 体验客户入口（模拟手机银行）；演示账号：wang / chen（客户）、li / zhou（理财经理）、ops（运维看板），密码 wealthpilot-demo
+./scripts/dev.sh              # 启动数据库、后端与前端 → http://localhost:3000
 ```
 
-也可以分步手动启动：
+也可以全部用容器运行：`docker compose up --build`。
+
+打开 **http://localhost:3000/bank**，登录模拟手机银行，点击 **AI 理财助手**。用 **中 / EN** 切换语言。
+
+<details>
+<summary><strong>演示账号</strong>（仅限本地，密码 <code>wealthpilot-demo</code>）</summary>
+
+<br>
+
+| 账号 | 角色 | 入口 |
+|---|---|---|
+| `wang`、`chen` | 客户 | `/bank` 或 `/login` |
+| `li`、`zhou` | 理财经理 | `/rm` |
+| `ops` | 运维 | `/ops` |
+
+</details>
+
+<details>
+<summary><strong>测试与评估</strong></summary>
+
+<br>
 
 ```bash
-# 1. 数据库
-docker compose up -d db
-
-# 2. 后端（uv 会自动创建 .venv 虚拟环境）
-cd backend
-uv sync
-uv run alembic upgrade head
-uv run python scripts/check_llm.py   # 检查 Kimi 连通性与工具调用
-uv run uvicorn app.main:app --reload
-
-# 3. 前端（另开终端）
-cd frontend
-npm install
-npm run dev                    # http://localhost:3000
-```
-
-也可以全部用容器运行（只需要 Docker）：`docker compose up --build`。端口被占用时可改：`DB_PORT=5533 BACKEND_PORT=8100 FRONTEND_PORT=3300 docker compose up --build`（前端端口变化时，在 `.env` 的 `CORS_ORIGINS` 中加入新地址）。
-
-## 部署
-
-`deploy/` 中是演示环境的生产配置：一台 AWS Lightsail 服务器（$12 / 月起）上运行数据库、后端、前端、Caddy（自动 HTTPS）与每日备份。准备好 AWS 访问密钥并填写 `deploy/.env.production` 后：
-
-```bash
-DRY_RUN=1 ./deploy/deploy.sh   # 演练，不创建资源
-./deploy/deploy.sh             # 约 15 分钟后得到 https://<IP>.sslip.io
-./deploy/update.sh             # 更新代码（更新前自动备份数据库）
-./deploy/destroy.sh            # 导出数据库到本机后删除服务器，停止计费
-```
-
-详见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)（IAM 最小权限、自有域名、回滚、备份恢复、本机验证生产配置）。
-
-## 测试
-
-```bash
-cd backend && uv run pytest     # 计算、问卷计分、合规规则、Agent 流程（假模型）、API 集成（自动使用独立测试库 wealthpilot_test）
-cd backend && uv run python ../evaluations/run_scenarios.py --repeat 3   # 真实 Kimi 多轮场景评估，报告写入 evaluations/reports/
-cd backend && uv run python ../evaluations/run_scenarios.py --suite en --repeat 3   # 英文界面场景评估
-cd backend && uv run python ../evaluations/run_router_eval.py   # 用真实 Kimi 评估话题路由
-cd backend && uv run python ../scripts/load_test.py --help      # 压测（对独立测试库上以 LLM_PROVIDER=fake 启动的后端）
-cd backend && uv run python ../evaluations/run_rag_eval.py      # 检索命中率（不调用 LLM）
-cd backend && uv run python ../scripts/check_knowledge.py       # 知识库维护检查（核对法规原文）
+cd backend && uv run pytest                                                   # 不需要 API Key
+cd backend && uv run python ../evaluations/run_scenarios.py --repeat 3       # 真实模型，每套约 $2
+cd backend && uv run python ../evaluations/run_router_eval.py
+cd backend && uv run python ../evaluations/run_rag_eval.py
 cd frontend && npm run lint && npm run build
 ```
 
-语音输入需要本地识别模型（约 240MB，`./scripts/dev.sh` 首次启动时自动下载，也可手动运行 `cd backend && uv run python ../scripts/download_asr_model.py`；国内网络可设置 `HF_ENDPOINT=https://hf-mirror.com`）。未下载时麦克风按钮不显示，其他功能不受影响。
+每次推送，CI 都会运行后端测试、代码检查与依赖漏洞扫描，构建前端，并用假模型启动整套生产编排，检查 HTTPS、就绪状态、内部接口屏蔽、访问码与镜像内容。
 
-CI（`.github/workflows/ci.yml`）在每次 push / PR 时运行后端 ruff + pytest + 依赖漏洞扫描、前端 lint + build，并用假模型启动整套生产编排做冒烟测试（HTTPS、就绪检查、`/metrics` 对外屏蔽、访问码、镜像内容）。场景评估调用真实模型、有费用，不在 CI 中运行。
+</details>
 
-## 项目结构
+## 部署
 
-```text
-backend/
-  app/calculations/   纯函数金融计算（不依赖 LLM）
-  app/tools/          暴露给 LLM 的工具（校验 → 计算 → UI 块）
-  app/agent/          LangGraph 图与 Prompt
-  app/api/            REST 接口
-  app/db/             数据模型；migrations/ 为 Alembic 迁移
-  tests/              单元、流程、集成测试
-frontend/src/
-  components/blocks/  测算凭证、折线图等结构化回答组件
-deploy/               演示环境的生产编排、Caddy 配置与一键部署 / 更新 / 删除脚本
-docs/                 架构、合规、评估、路线图、部署手册（DEPLOYMENT）、录屏脚本（DEMO_SCRIPT）；生产落地与部署图（PRODUCTION_READINESS）、美国监管对照（US_REGULATORY_MAPPING）、成本（COST_ESTIMATE）、故障手册（RUNBOOK）
+`deploy/` 中是一台 AWS Lightsail 服务器（每月 $12 起）的生产配置：数据库、后端、前端、自动 HTTPS 的 Caddy，以及每日备份。
+
+```bash
+DRY_RUN=1 ./deploy/deploy.sh   # 演练：打印将执行的 AWS 与服务器命令，不创建任何资源
+./deploy/deploy.sh             # 约 15 分钟后得到 https://<IP>.sslip.io
+./deploy/update.sh             # 更新到最新提交（更新前自动备份数据库）
+./deploy/destroy.sh            # 先把数据库导出到本机，再删除服务器
 ```
 
-## 进度
+<details>
+<summary><strong>首次部署前的准备</strong></summary>
 
-| 阶段 | 状态 |
-|---|---|
-| P0 设计文档 | ✅ |
-| P1 骨架 + 计算器链路 | ✅ 已用真实 Kimi（kimi-k2.6）端到端验证 |
-| P2 风险测评门禁 + 规则引擎 | ✅ 话题路由评估 24/24 |
-| P3 产品库与适当性 | ✅ 16 个虚构产品；132 个测试 |
-| P4 条款 RAG + 知识库 | ✅ 检索 Hit@1 96%；52 条法规摘录自动核对通过 |
-| P5 客户画像 + 配置情景 | ✅ 基础画像（银行系统）+ 本次需求；主场景跑通 |
-| P6 人工交接 | ✅ 客户同意 → 理财经理看板 → 服务中 AI 暂停，全程留痕 |
-| P7 质量与完善 | 🔄 场景评估、测试隔离、CI、最近对话 |
-| P8 生产化与双语 | ✅ 安全、界面与中英双语、可观测性、可靠性、手机银行入口与判断力文档、部署就绪（按需上线） |
-| P9 交付 | 🔄 英文 README ✅；录屏与截图、关键设计文档英文版待做 |
+<br>
+
+1. 在 AWS IAM 中创建一个只有 Lightsail 权限的用户，为它生成访问密钥，然后运行 `aws configure`。使用访问密钥，不要用账号密码。
+2. `cp deploy/.env.production.example deploy/.env.production`，填写模型密钥、各项密码与演示访问码。必填项为空或使用默认演示密码时，脚本会拒绝部署。
+3. `DOMAIN` 留空即可得到免费的 `<IP>.sslip.io` 地址（同样有 HTTPS）；也可以把自有域名的 A 记录指向服务器的固定 IP。
+4. 多人同时使用时，用 `RAM_GB=4 ./deploy/deploy.sh` 部署 4 GB 机型（每月 $24）。
+
+</details>
+
+在银行里，部署形态会完全不同：运行在行内网络，员工通过单点登录进入，模型使用私有化部署或已备案的服务。
+
+<details>
+<summary><strong>项目结构</strong></summary>
+
+<br>
+
+```text
+backend/app/
+  compliance/     门禁、适当性过滤、输出审查（确定性代码）
+  calculations/   Decimal 金融计算，不依赖大模型
+  products/       产品目录加载与排序
+  purchases/      服务端买入校验（只到确认页）
+  agent/          LangGraph 流程与提示词
+  tools/          提供给模型的强类型工具
+  rag/            知识库检索（pgvector）
+  handoff/        理财经理交接状态机
+  bank_sim/       模拟手机银行（与 WealthPilot 严格分开）
+frontend/src/     客户端、理财经理与运维看板、模拟手机银行
+data/             虚构的产品、客户、权益与知识库
+evaluations/      中英文场景评估集与报告
+deploy/           生产编排、Caddy 配置与部署脚本
+```
+
+</details>
+
+## 免责声明
+
+WealthPilot 是作品集演示项目。知岸银行、知岸理财、鸿屿理财均为虚构机构，产品与客户也全部虚构，如与真实机构雷同纯属巧合。本项目内容不构成任何投资、法律或合规建议。

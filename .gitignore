@@ -19,3 +19,8 @@ backend/.models/
 deploy/.env.production
 deploy/.state
 deploy/backups/
+
+# 设计文档与开发约定只保留在本地，不上传 GitHub（产品负责人决定，2026-10-20）；README 用到的图片除外
+docs/*
+!docs/images/
+CLAUDE.md

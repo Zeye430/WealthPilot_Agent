@@ -1,5 +1,5 @@
 # 生产部署：数据库 + 后端 + 前端 + Caddy（HTTPS）+ 每日数据库备份。
-# 由 deploy/deploy.sh 在服务器上执行；本机验证：见 docs/DEPLOYMENT.md「本机验证生产配置」。
+# 由 deploy/deploy.sh 在服务器上执行；部署步骤见 README「部署」。
 # 只有 Caddy 对外开放端口；数据库、后端、前端只在容器网络内可达。
 name: wealthpilot-prod  # 与开发环境的 compose 项目（wealthpilot）区分，避免误用开发数据卷
 
@@ -70,7 +70,7 @@ services:
       - frontend
     restart: unless-stopped
 
-  # 每天导出一次数据库，保留最近 7 天；恢复步骤见 docs/DEPLOYMENT.md
+  # 每天导出一次数据库，保留最近 7 天
   backup:
     image: pgvector/pgvector:pg16
     environment:

@@ -47,7 +47,7 @@ def cjk_ratio(text: str) -> float:
     letters = [c for c in text if c.isalpha()]
     return len(CJK.findall(text)) / len(letters) if letters else 0.0
 CUSTOMERS = {"A": "eval_customer", "B": "eval_customer_b"}  # setup.customer 可选，默认 A
-RATING_ANSWERS = {  # 校准画像的答案（docs/RISK_QUESTIONNAIRE.md §6）
+RATING_ANSWERS = {  # 校准画像的答案
     "C1": "ECBAAAAAAA",
     "C2": "CCCBBBBBCB",
     "C3": "BCCCCCCCCC",

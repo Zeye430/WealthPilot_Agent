@@ -1,4 +1,4 @@
-"""LangGraph 主流程，见 docs/ARCHITECTURE.md §4。
+"""LangGraph 主流程。
 
     START → scope_router ─┬─ OUT_OF_SCOPE ─────────────────→ out_of_scope ───────┐
                           ├─ 要产品但未测评 ───────────────→ assessment_required ┤

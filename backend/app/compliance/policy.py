@@ -1,4 +1,4 @@
-"""Policy Engine：确定性的合规规则。规则见 docs/COMPLIANCE_DESIGN.md。
+"""Policy Engine：确定性的合规规则。
 
 本模块不依赖 LLM。LLM 能用哪些工具、能看到哪些数据，由这里的结论决定。
 """

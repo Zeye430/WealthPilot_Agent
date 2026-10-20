@@ -1,4 +1,4 @@
-"""真实认证与 HTTP 层安全（不使用身份替身）。对应 docs/SECURITY.md 的威胁模型。"""
+"""真实认证与 HTTP 层安全（不使用身份替身）。对应威胁模型中的认证与 HTTP 层防护。"""
 
 from datetime import UTC, datetime, timedelta
 

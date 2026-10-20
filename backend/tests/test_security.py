@@ -1,4 +1,4 @@
-"""LLM 相关的越权与注入防护（对应 docs/SECURITY.md）。
+"""LLM 相关的越权与注入防护。
 
 其余已覆盖的威胁见：
 - 测评前调用产品工具被拦截：test_agent_graph.py（BLOCK_TOOL）

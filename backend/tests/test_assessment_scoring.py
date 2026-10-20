@@ -1,4 +1,4 @@
-"""问卷计分测试：校准画像与 docs/RISK_QUESTIONNAIRE.md §6 保持一致。"""
+"""问卷计分测试：校准画像的计分结果保持稳定。"""
 
 import pytest
 

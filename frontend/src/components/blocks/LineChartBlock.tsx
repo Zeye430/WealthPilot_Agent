@@ -16,9 +16,26 @@ import { formatWan, formatYuan } from "@/lib/api";
 import { defineCopy, useCopy } from "@/lib/i18n";
 import type { LineChartBlock as Block } from "@/lib/types";
 
+// 英文坐标轴用国际通行的紧凑写法（¥1.6M），中文用「万」
+const compactEn = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
 const COPY = defineCopy({
-  zh: { table: "查看数据表", yuan: "（元）", point: (x: string | number, unit: string) => `第 ${x} ${unit}`, unit: "元" },
-  en: { table: "View data table", yuan: " (CNY)", point: (x: string | number, unit: string) => `${unit} ${x}`, unit: "CNY" },
+  zh: {
+    table: "查看数据表",
+    yuan: "（元）",
+    point: (x: string | number, unit: string) => `第 ${x} ${unit}`,
+    unit: "元",
+    yTick: formatWan,
+    xTick: (x: string | number, unit: string) => `${x}${unit}`,
+  },
+  en: {
+    table: "View data table",
+    yuan: " (CNY)",
+    point: (x: string | number, unit: string) => `${unit} ${x}`,
+    unit: "CNY",
+    yTick: (v: number) => `¥${compactEn.format(v)}`,
+    xTick: (x: string | number) => `Yr ${x}`,
+  },
 });
 
 // 颜色按系列顺序固定分配（已用 dataviz 校验脚本验证色盲可分辨），最多 5 条
@@ -44,13 +61,13 @@ export function LineChartBlock({ block }: { block: Block }) {
             <CartesianGrid stroke="var(--line)" strokeDasharray="2 4" vertical={false} />
             <XAxis
               dataKey="x"
-              tickFormatter={(x) => `${x}${block.x_label}`}
+              tickFormatter={(x) => c.xTick(x, block.x_label)}
               tick={{ fill: "var(--ink-3)", fontSize: 12 }}
               axisLine={{ stroke: "var(--line)" }}
               tickLine={false}
             />
             <YAxis
-              tickFormatter={formatWan}
+              tickFormatter={c.yTick}
               tick={{ fill: "var(--ink-3)", fontSize: 12 }}
               axisLine={false}
               tickLine={false}

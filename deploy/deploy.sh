@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 一键部署到 AWS Lightsail（美国）：创建服务器 → 固定 IP → 开放端口 → 上传代码 → 启动 → 等待就绪。
 #
-# 前提（详见 docs/DEPLOYMENT.md）：
+# 前提（详见 README「部署」）：
 #   1. 已安装 AWS CLI v2，并用只有 Lightsail 权限的 IAM 访问密钥执行过 aws configure
 #   2. 已填写 deploy/.env.production
 # 用法：

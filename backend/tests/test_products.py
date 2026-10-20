@@ -1,4 +1,4 @@
-"""产品目录、适当性规则、排序与说明书测试。用例编号对应 docs/EVALUATION_PLAN.md §3。"""
+"""产品目录、适当性规则、排序与说明书测试。"""
 
 import json
 from decimal import Decimal

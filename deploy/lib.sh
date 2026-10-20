@@ -15,7 +15,7 @@ INSTANCE="${INSTANCE_NAME:-wealthpilot}"
 STATIC_IP_NAME="${INSTANCE}-ip"
 KEY_NAME="${INSTANCE}-key"
 KEY_FILE="${KEY_FILE:-$HOME/.ssh/${INSTANCE}-lightsail.pem}"
-RAM_GB="${RAM_GB:-2}"              # 2 = $12/月；4 = $24/月（见 docs/DEPLOYMENT.md）
+RAM_GB="${RAM_GB:-2}"              # 2 = $12/月；4 = $24/月
 DRY_RUN="${DRY_RUN:-0}"
 
 info() { printf '\033[1m▶ %s\033[0m\n' "$*"; }
