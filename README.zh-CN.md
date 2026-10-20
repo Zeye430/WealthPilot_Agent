@@ -16,6 +16,7 @@
 <img src="https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL + pgvector">
 <img src="https://img.shields.io/badge/%E5%9C%BA%E6%99%AF%E8%AF%84%E4%BC%B0-%E4%B8%AD%E6%96%87%2073%2F75%20%C2%B7%20%E8%8B%B1%E6%96%87%2072%2F75-1D5BD8" alt="场景评估：中文 73/75，英文 72/75">
 <img src="https://img.shields.io/badge/%E6%95%B0%E6%8D%AE-%E5%85%A8%E9%83%A8%E8%99%9A%E6%9E%84-6E7781" alt="数据全部虚构">
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6E7781" alt="MIT 许可证"></a>
 </p>
 
 <p>
@@ -206,7 +207,7 @@ flowchart TD
 | 成本 | **每轮约 $0.011** | 基于 289 轮真实对话实测 |
 | 自动化测试 | **后端 405 个** | 每次提交由 CI 自动运行 |
 
-每次评估都会在 [`evaluations/reports/`](evaluations/reports/) 生成报告，**包括失败的回答和原因**，不只展示成功案例。
+每次评估都会在 [`evaluations/reports/`](evaluations/reports/) 生成报告（先看[索引](evaluations/reports/README.md)），**包括失败的回答和原因**，不只展示成功案例。
 
 ### 模型对比
 
@@ -336,6 +337,10 @@ deploy/           生产编排、Caddy 配置与部署脚本
 ```
 
 </details>
+
+## 许可证
+
+[MIT](LICENSE)。产品、客户与机构数据均为虚构。
 
 ## 免责声明
 

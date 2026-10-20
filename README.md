@@ -16,6 +16,7 @@ Under strict compliance controls, it lifts wealth-product conversion and brings 
 <img src="https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL + pgvector">
 <img src="https://img.shields.io/badge/eval-zh%2073%2F75%20%C2%B7%20en%2072%2F75-1D5BD8" alt="Scenario evaluation: Chinese 73/75, English 72/75">
 <img src="https://img.shields.io/badge/data-100%25%20synthetic-6E7781" alt="All data synthetic">
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6E7781" alt="MIT license"></a>
 </p>
 
 <p>
@@ -206,7 +207,7 @@ Layers run `api → agent → tools → business modules → db`. Business modul
 | Cost | **About $0.011 per turn** | Measured over 289 real conversation turns |
 | Automated tests | **405 backend tests** | Run by CI on every commit |
 
-Every evaluation writes a report to [`evaluations/reports/`](evaluations/reports/), **including the replies that failed and why**, not just the successes.
+Every evaluation writes a report to [`evaluations/reports/`](evaluations/reports/) (start with its [index](evaluations/reports/README.md)), **including the replies that failed and why**, not just the successes.
 
 ### Model comparison
 
@@ -336,6 +337,10 @@ deploy/           production compose, Caddy and deploy scripts
 ```
 
 </details>
+
+## License
+
+[MIT](LICENSE). Product, customer and institution data are fictional.
 
 ## Disclaimer
 
