@@ -204,13 +204,30 @@ flowchart TD
 | 知识检索 | **首位命中率 96%** | 回答所依据的资料能否被正确找到 |
 | 压测 | 40 并发下吞吐 **7 → 16 次/秒** | 发现并修复了「等模型时占着数据库连接」的瓶颈 |
 | 成本 | **每轮约 $0.011** | 基于 289 轮真实对话实测 |
-| 自动化测试 | **后端 390 个** | 每次提交由 CI 自动运行 |
+| 自动化测试 | **后端 405 个** | 每次提交由 CI 自动运行 |
 
 每次评估都会在 [`evaluations/reports/`](evaluations/reports/) 生成报告，**包括失败的回答和原因**，不只展示成功案例。
 
+### 模型对比
+
+同一天、同一套提示词，每种语言 25 个场景各跑 3 次。评审固定使用 Kimi，避免模型给自己打分。
+
+| 模型 | 中文 | 英文 | 每轮费用 | 延迟 P50 / P95 | 兜底次数（共 180 轮） |
+|---|---|---|---|---|---|
+| Kimi K2.6（默认） | **73/75** | **72/75** | $0.011 | 5.7 秒 / 13.0 秒 | 1 |
+| DeepSeek Flash（V4.1） | **72/75** | **69/75** | **$0.0033** | **4.5 秒 / 7.7 秒** | 2 |
+| 通义千问 Qwen Plus | 54/75 | 64/75 | $0.0047 | 6.8 秒 / 24.4 秒 | 15 |
+
+- **DeepSeek Flash 是性价比最高的选择**：质量与 Kimi 只差几次运行，每轮费用不到三分之一，速度也最快。
+- **Qwen Plus 目前不建议直接用于本项目**：更常自己心算金额，或不调用转人工工具就说「已为您联系」。这些大多被输出审查拦下，客户看到的是安全兜底话术，而不是违规内容。
+- **对比还暴露了提示词的一个缺陷**：Qwen 会照抄提示词里举例的资料编号（如 `[K17]`），而不去检索。改为「从本轮检索结果中原样复制编号」后，Qwen 从 51/59 提高到 54/64，Kimi 不受影响。
+- **评审还发现了几处规则尚未覆盖的问题**，如没有来源的回撤数字、英文中隐性的收益口径比较。已记录在报告中，是下一步要补的规则。
+
+每轮费用按平均 token 数和官方「缓存未命中」单价计算（2026-10 核对）：Kimi 每百万输入 / 输出 token $0.95 / $4.00；DeepSeek 高峰时段 ¥2 / ¥8（按 ¥7.2 兑 1 美元约 $0.28 / $1.11，低谷时段半价）；Qwen Plus（新加坡）$0.40 / $1.20。
+
 <h2 id="快速开始">快速开始</h2>
 
-需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+，以及一个支持工具调用的模型 API Key。默认使用 Kimi（[platform.kimi.ai](https://platform.kimi.ai)），也是目前唯一完整评估过的模型。
+需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+，以及一个支持工具调用的模型 API Key。默认使用 Kimi（[platform.kimi.ai](https://platform.kimi.ai)）；DeepSeek 和通义千问也做过完整评估（见[模型对比](#模型对比)）。
 
 <details>
 <summary><strong>使用其他模型</strong></summary>
@@ -227,7 +244,7 @@ flowchart TD
 | Gemini | `gemini` | `LLM_MODEL` |
 | Azure OpenAI | `azure_openai` | `LLM_BASE_URL`（终结点）、`LLM_MODEL`（部署名）、`LLM_API_VERSION` |
 
-`LLM_ROUTER_MODEL` 可以让话题路由使用更便宜的模型（如 `qwen-flash`）。切换后运行 `cd backend && uv run python scripts/check_llm.py` 做冒烟测试，再跑一遍场景评估，并把 `LLM_PRICE_*` 改成该模型的单价；在此之前，就绪检查会提示费用统计仍按 Kimi 的单价计算。
+Kimi、DeepSeek、通义千问做过完整评估；其他厂商可通过同一适配层接入，但尚未评估。`LLM_ROUTER_MODEL` 可以让话题路由使用更便宜的模型（如 `qwen-flash`）。切换后运行 `cd backend && uv run python scripts/check_llm.py` 做冒烟测试，再跑一遍场景评估，并把 `LLM_PRICE_*` 改成该模型的单价；在此之前，就绪检查会提示费用统计仍按 Kimi 的单价计算。
 
 </details>
 

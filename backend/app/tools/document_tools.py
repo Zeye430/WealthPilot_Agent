@@ -129,7 +129,7 @@ def search_documents(
         for h in result.hits
     )
     rules = (
-        "回答时只使用资料中的事实；在用到资料的句子末尾标注编号，如 [K17] 或 [ZA-F03#四]；"
+        "回答时只使用资料中的事实；在用到资料的句子末尾，把上面 <资料> 的编号原样写在方括号里；"
         "资料没有覆盖的部分不要补充具体规定，直接说明资料中未找到。"
     )
     content = f"{DATA_NOTICE}\n\n{docs}\n\n{rules}"

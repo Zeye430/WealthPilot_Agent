@@ -204,13 +204,30 @@ Layers run `api → agent → tools → business modules → db`. Business modul
 | Knowledge retrieval | **96% top-1 accuracy** | Whether the source an answer needs is found first |
 | Load test | **7 → 16 req/s** at 40 concurrent users | Found and fixed a database connection held while waiting for the model |
 | Cost | **About $0.011 per turn** | Measured over 289 real conversation turns |
-| Automated tests | **390 backend tests** | Run by CI on every commit |
+| Automated tests | **405 backend tests** | Run by CI on every commit |
 
 Every evaluation writes a report to [`evaluations/reports/`](evaluations/reports/), **including the replies that failed and why**, not just the successes.
 
+### Model comparison
+
+The same 25 scenarios per language, 3 runs each, run on the same day with the same prompts. The judge is always Kimi, so no model grades itself.
+
+| Model | Chinese | English | Cost per turn | Latency P50 / P95 | Fallbacks (of 180 turns) |
+|---|---|---|---|---|---|
+| Kimi K2.6 (default) | **73/75** | **72/75** | $0.011 | 5.7 s / 13.0 s | 1 |
+| DeepSeek Flash (V4.1) | **72/75** | **69/75** | **$0.0033** | **4.5 s / 7.7 s** | 2 |
+| Qwen Plus | 54/75 | 64/75 | $0.0047 | 6.8 s / 24.4 s | 15 |
+
+- **DeepSeek Flash is the best low-cost option**: within a few runs of Kimi's quality, at under a third of the cost per turn, and the fastest.
+- **Qwen Plus isn't recommended for this agent as is.** It more often computes amounts itself and claims a handoff without calling the handoff tool. The output review blocks most of these, so customers see a safe fallback instead of a violation.
+- **The comparison exposed a prompt weakness.** Qwen copied the example source IDs from the prompt (such as `[K17]`) without searching. Replacing the examples with "copy the ID from this turn's search results" lifted Qwen from 51/59 to 54/64, with no change for Kimi.
+- **The judge also found a few issues no rule covers yet**, such as an unsourced drawdown figure and an implicit yield comparison in English. They're in the reports and next on the rule backlog.
+
+Cost is the average tokens per turn at official cache-miss list prices, checked 2026-10: Kimi $0.95 / $4.00 per million input / output tokens; DeepSeek ¥2 / ¥8 at peak hours (about $0.28 / $1.11 at ¥7.2 per USD; half price off-peak); Qwen Plus (Singapore) $0.40 / $1.20.
+
 <h2 id="quick-start">Quick start</h2>
 
-You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and an API key for a model that supports tool calling. Kimi ([platform.kimi.ai](https://platform.kimi.ai)) is the default and the only model evaluated end to end.
+You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and an API key for a model that supports tool calling. Kimi ([platform.kimi.ai](https://platform.kimi.ai)) is the default; DeepSeek and Qwen have also been evaluated (see [Model comparison](#model-comparison)).
 
 <details>
 <summary><strong>Using another model</strong></summary>
@@ -227,7 +244,7 @@ Set `LLM_PROVIDER` and `LLM_API_KEY` in `.env`; `.env.example` lists every optio
 | Gemini | `gemini` | `LLM_MODEL` |
 | Azure OpenAI | `azure_openai` | `LLM_BASE_URL` (endpoint), `LLM_MODEL` (deployment), `LLM_API_VERSION` |
 
-`LLM_ROUTER_MODEL` can point topic routing at a cheaper model (e.g. `qwen-flash`). Then run `cd backend && uv run python scripts/check_llm.py` for a smoke test, re-run the scenario evaluation, and set `LLM_PRICE_*` to the model's prices; until you do, the readiness check flags that cost tracking still uses Kimi's prices.
+Kimi, DeepSeek and Qwen have been evaluated end to end; the other providers work through the same adapter but haven't been. `LLM_ROUTER_MODEL` can point topic routing at a cheaper model (e.g. `qwen-flash`). Then run `cd backend && uv run python scripts/check_llm.py` for a smoke test, re-run the scenario evaluation, and set `LLM_PRICE_*` to the model's prices; until you do, the readiness check flags that cost tracking still uses Kimi's prices.
 
 </details>
 

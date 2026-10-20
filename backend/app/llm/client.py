@@ -14,7 +14,8 @@ Providers (LLM_PROVIDER):
   LLM_API_VERSION the API version.
 - fake: canned replies for load testing (see app/llm/fake.py; wired in app/api/chat.py).
 
-Only Kimi has been evaluated end to end. Switching providers is a config change, but re-run
+Kimi, DeepSeek and Qwen have been evaluated end to end (see the README's model comparison).
+Switching providers is a config change, but re-run
 evaluations/run_scenarios.py before trusting a new model.
 """
 

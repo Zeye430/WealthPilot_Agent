@@ -10,7 +10,8 @@ Usage (from backend/, with LLM_API_KEY set and the database running):
     (scenarios_en.yaml)
 Reports go to evaluations/reports/scenarios-<date>.md and a matching .json (scenarios-en-<date> for
 the English suite);
-partial runs include the scenario IDs in the file name, so full reports aren't overwritten.
+partial runs include the scenario IDs in the file name, so full reports aren't overwritten; models
+other than Kimi add their name (e.g. scenarios-<date>-deepseek).
 """
 
 import argparse
@@ -19,12 +20,14 @@ import re
 import sys
 import time
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 import yaml  # noqa: E402
+from dotenv import dotenv_values  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
 from sqlalchemy import select  # noqa: E402
@@ -33,10 +36,10 @@ from app.agent.prompts import SAFE_FALLBACK_REPLY  # noqa: E402
 from app.core.i18n import all_versions, use_locale  # noqa: E402
 from app.compliance.output_guard import _negated, check_output  # noqa: E402
 from app.compliance.policy import Permission  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
+from app.core.config import Settings, get_settings  # noqa: E402
 from app.db.models import PolicyDecisionLog  # noqa: E402
 from app.db.session import get_engine  # noqa: E402
-from app.llm.client import get_chat_model, provider_name  # noqa: E402
+from app.llm.client import describe, get_chat_model, provider_name, vendor_of  # noqa: E402
 from app.main import app  # noqa: E402
 from app.api.deps import get_current_user  # noqa: E402
 from tests.identity import header_identity  # noqa: E402
@@ -89,13 +92,26 @@ def shown_text(blocks: list[dict]) -> str:
     return "\n".join(lines)[:1500]
 
 
+@lru_cache
+def judge_model():
+    """The judge stays on the default model configured in the repo's .env file, even when the model
+    under test is switched through environment variables, so results across models are comparable
+    (a model shouldn't grade itself)."""
+    values = {k.lower(): v for k, v in dotenv_values(ROOT / ".env").items() if k.startswith("LLM_")}
+    values.setdefault("llm_provider", "openai_compatible")
+    values.setdefault("llm_router_model", "")
+    values.setdefault("llm_temperature", None)
+    values["llm_agent_thinking"] = False
+    return Settings(**values)
+
+
 def judge(question: str, reply: str, blocks: list[dict], rubric: str, locale: str = "zh") -> tuple[bool, str]:
     note = "\n（客户使用英文界面，回答与界面内容为英文；按同样的标准评审。）" if locale == "en" else ""
     content = (
         f"客户问题：{question}\n\n助手回答：{reply}\n\n界面同时展示的内容：\n{shown_text(blocks)}"
         f"\n\n评审标准：{rubric}{note}"
     )
-    output = get_chat_model(thinking=False, max_tokens=300).invoke(
+    output = get_chat_model(judge_model(), thinking=False, max_tokens=300).invoke(
         [SystemMessage(JUDGE_PROMPT), HumanMessage(content)]
     ).content
     match = re.search(r"\{.*\}", str(output), re.S)
@@ -249,6 +265,10 @@ def write_report(results: list[dict], only: list[str] | None = None, suite: str 
     out_dir = ROOT / "evaluations/reports"
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = f"-{'-'.join(only)}" if only else ""
+    # Models other than Kimi (the default) get their own file names, so comparisons don't overwrite
+    vendor = vendor_of(get_settings())
+    model_tag = vendor.name if vendor else provider_name(get_settings())
+    suffix = (f"-{model_tag}" if model_tag != "kimi" else "") + suffix
     prefix = "scenarios-en" if suite == "en" else "scenarios"
     stem = out_dir / f"{prefix}-{date.today()}{suffix}"
     stem.with_suffix(".json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -262,8 +282,9 @@ def write_report(results: list[dict], only: list[str] | None = None, suite: str 
     lines = [
         f"# 场景评估报告{'（英文界面）' if suite == 'en' else ''}（{date.today()}）",
         "",
-        f"- 模型：{provider_name(get_settings())} / {get_settings().llm_model}"
+        f"- 被测模型：{provider_name(get_settings())} / {describe(get_settings())['model']}"
         f"（思考模式：{'开启' if get_settings().llm_agent_thinking else '关闭'}）",
+        f"- 评审模型：{describe(judge_model())['model']}（固定使用 .env 中的默认模型）",
         f"- 运行通过：**{passed}/{len(results)}**（{len(by_id)} 个场景，每个 {len(results) // len(by_id)} 次）；"
         f"全部通过的场景 {sum(all(v) for v in by_id.values())}/{len(by_id)}；"
         f"检查项通过：{sum(c['pass'] for c in checks)}/{len(checks)}",
