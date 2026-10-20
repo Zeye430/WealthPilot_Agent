@@ -1,6 +1,8 @@
-"""产品浏览 API：全部在售产品可查看，能否买入由代码判断。
+"""Product browsing API: every product on sale can be viewed; whether it can be bought is decided in
+code.
 
-与 LLM 工具共用同一套适当性规则：超出评级的产品在任何入口都不能买入（S11）。
+Shares the suitability rules with the LLM tools: a product above the rating can't be bought from any
+entry point (S11).
 """
 
 from datetime import datetime
@@ -29,7 +31,8 @@ def customer_rating(
     customer_id: str = Depends(get_customer_id),
     now: datetime = Depends(get_now),
 ) -> str | None:
-    """有效测评的评级；未测评或已过期时为 None（仍可浏览，但不能买入）。"""
+    """Rating from a valid assessment; None if unassessed or expired (browsing still works,
+    buying doesn't)."""
     gate = evaluate_gate(latest_confirmed(db, customer_id), now)
     return gate.risk_rating if gate.permission is Permission.ASSESSED else None
 
@@ -60,7 +63,8 @@ def list_products(
     db: Session = Depends(get_session),
     customer_id: str = Depends(get_customer_id),
 ):
-    """全部在售产品。可买入的排在前面；超出评级或未测评的标注原因，只能查看。另列即将发售的新品。"""
+    """All products on sale. Buyable ones first; those above the rating or blocked by a missing
+    assessment are labeled and view-only. Upcoming products listed separately."""
     catalog = load_catalog()
     reminded = reminded_codes(db, customer_id)
     result = browse(
@@ -113,7 +117,8 @@ def product_detail(
     db: Session = Depends(get_session),
     customer_id: str = Depends(get_customer_id),
 ):
-    """产品详情对所有客户开放（客观条款）；能否买入由代码判断并说明原因。"""
+    """Product details are open to every customer (objective terms); whether it can be bought is
+    decided in code, with the reason."""
     product = load_catalog().get(code)
     if product is None:
         raise HTTPException(status_code=404, detail=L("产品不存在", "Product not found"))

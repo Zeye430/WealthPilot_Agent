@@ -1,4 +1,4 @@
-"""产品目录、适当性规则、排序与说明书测试。"""
+"""Product catalog, suitability rules, ranking and prospectus tests."""
 
 import json
 from decimal import Decimal
@@ -36,12 +36,12 @@ def raw_catalog() -> dict:
     return yaml.safe_load(CATALOG_PATH.read_text(encoding="utf-8"))
 
 
-# ---------- 目录与校验 ----------
+# ---------- Catalog and validation ----------
 
 
 def test_catalog_distribution_matches_product_catalog_doc():
     levels = sorted(p.effective_risk_level for p in CATALOG.products)
-    assert len(levels) == 18  # 16 款在售 / 已到期 + 2 款即将发售
+    assert len(levels) == 18  # 16 on sale / matured + 2 upcoming
     assert {lv: levels.count(lv) for lv in set(levels)} == {
         "PR1": 2,
         "PR2": 10,
@@ -58,7 +58,7 @@ def test_parse_rate_is_exact():
         parse_rate("0.10")
 
 
-def test_effective_risk_takes_higher_rating():  # 评级取高
+def test_effective_risk_takes_higher_rating():  # take the higher rating
     assert p("HY-P01").issuer_risk_level == "PR2"
     assert p("HY-P01").effective_risk_level == "PR3"
 
@@ -92,7 +92,7 @@ def test_find_by_partial_name():
     assert CATALOG.find_by_name("不存在的产品") is None
 
 
-# ---------- 适当性规则 ----------
+# ---------- Suitability rules ----------
 
 
 def test_c2_cannot_buy_pr3_and_above():  # S04
@@ -116,10 +116,10 @@ def test_below_minimum_investment():  # S08
 def test_horizon_mismatch():  # S09
     ctx = CustomerContext(risk_rating="C2", horizon_days=months_to_days(12))
     assert HORIZON_MISMATCH in evaluate(p("HY-F02"), ctx).reason_codes
-    assert evaluate(p("ZA-F03"), ctx).eligible  # 一年持有 ≤ 12 个月
+    assert evaluate(p("ZA-F03"), ctx).eligible  # one-year holding ≤ 12 months
 
 
-def test_ended_product_not_eligible():  # S12 类
+def test_ended_product_not_eligible():  # S12 type
     assert NOT_ON_SALE in evaluate(p("ZA-F05"), C2).reason_codes
 
 
@@ -136,7 +136,7 @@ def test_c5_sees_everything_on_sale():
     assert result.excluded == {NOT_ON_SALE: 1}
 
 
-# ---------- 排序与查询 ----------
+# ---------- Ranking and queries ----------
 
 
 def test_search_excludes_and_counts():
@@ -148,13 +148,14 @@ def test_search_excludes_and_counts():
 
 
 def test_upcoming_products_follow_same_suitability_rules():
-    assert [x.code for x in upcoming(CATALOG, C2)] == ["ZA-F06"]  # PR3 新品对 C2 不展示
+    assert [x.code for x in upcoming(CATALOG, C2)] == ["ZA-F06"]  # PR3 new product not shown to C2
     assert {x.code for x in upcoming(CATALOG, CustomerContext(risk_rating="C3"))} == {
         "ZA-F06",
         "HY-P02",
     }
     short = CustomerContext(risk_rating="C3", horizon_days=90)
-    assert upcoming(CATALOG, short) == []  # 封闭 365 天、持有 180 天都超过 90 天期限
+    # 365-day closed and 180-day holding both exceed a 90-day horizon
+    assert upcoming(CATALOG, short) == []
     message = evaluate(p("ZA-F06"), C2).messages[0]
     assert "尚未开售" in message and "10 月 26 日" in message
 
@@ -173,7 +174,7 @@ def test_filters_apply_before_suitability():
 
 
 def test_ranking_ignores_benchmark():
-    # 两个仅业绩比较基准不同的产品，排序结果不应改变
+    # Two products differing only in benchmark must rank the same
     a, b = p("ZA-F02"), p("HY-F01")
     boosted = b.model_copy(deep=True)
     boosted.metrics[0].high = Decimal("0.10")
@@ -187,7 +188,7 @@ def test_ranking_is_deterministic_and_explainable():
     assert "期限匹配" in first[0].explanation()
 
 
-# ---------- 工具（风险评级来自注入的状态） ----------
+# ---------- Tools (risk rating from the injected state) ----------
 
 
 def test_tools_hide_rating_from_llm():
@@ -221,11 +222,12 @@ def test_tool_rejects_missing_rating():
         get_product_details.func(state={}, product="ZA-F01")
 
 
-# ---------- 说明书 ----------
+# ---------- Prospectuses ----------
 
 
 def test_generated_docs_are_up_to_date():
-    """说明书是要素的派生物：改了 products.yaml 必须重新生成。"""
+    """Prospectuses derive from product terms: after editing products.yaml they must be
+    regenerated."""
     for product in CATALOG.products:
         path = DOCS_DIR / f"{product.code}.md"
         assert path.exists(), f"缺少 {path.name}，请运行 scripts/generate_product_docs.py"
@@ -239,7 +241,7 @@ def test_docs_have_fiction_notice_and_sections():
     assert doc.startswith("【虚构演示文件】")
     for section in ("## 四、产品费用", "## 七、风险揭示"):
         assert section in doc
-    assert "2025 年度" in doc  # 过往业绩按会计年度展示
+    assert "2025 年度" in doc  # past performance shown by fiscal year
 
 
 def test_cash_doc_mentions_same_day_redemption_limit():

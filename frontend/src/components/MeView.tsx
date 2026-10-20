@@ -44,7 +44,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 「我的」：资产总览卡片 + 四个快捷入口 + 列表行（参考 PayPal 首页的信息组织方式）。 */
+/** Me: asset overview card + four shortcuts + list rows (information layout inspired by the PayPal home screen). */
 export function MeView({
   user,
   state,

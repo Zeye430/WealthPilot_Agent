@@ -1,7 +1,9 @@
-"""根据产品要素生成虚构产品说明书（Markdown）。
+"""Generate fictional product prospectuses (Markdown) from product terms.
 
-说明书是 products.yaml 的派生物：要素只写一次，说明书由此生成，保证产品卡片、对比表与 RAG 检索到的
-条款完全一致。章节结构参考公开说明书的常见结构，文字为本系统编写。
+Prospectuses derive from products.yaml: terms are written once and the prospectus is generated, so
+product cards, comparison tables and RAG results
+always agree. The section structure follows common public prospectuses; the text is written for this
+system.
 """
 
 from app.products import presenter

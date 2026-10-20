@@ -1,5 +1,5 @@
-# 开发：只启动数据库  docker compose up -d db
-# 演示：全部启动      docker compose up --build
+# Development: database only   docker compose up -d db
+# Demo: everything             docker compose up --build
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: wealthpilot
       POSTGRES_DB: wealthpilot
     ports:
-      - "${DB_PORT:-5433}:5432"  # 宿主机默认用 5433，避免与本机已有的 Postgres 冲突；端口被占用时可设 DB_PORT 等变量
+      - "${DB_PORT:-5433}:5432"  # host port 5433 by default, to avoid clashing with a local Postgres; set DB_PORT etc. if a port is taken
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,25 +18,25 @@ services:
 
   backend:
     build:
-      context: .                         # 仓库根目录：镜像中包含 backend/ 与 data/
+      context: .                         # repo root: the image includes backend/ and data/
       dockerfile: backend/Dockerfile
     env_file:
       - path: .env
         required: false
     environment:
       DATABASE_URL: postgresql+psycopg://wealthpilot:wealthpilot@db:5432/wealthpilot
-      WARMUP_ON_START: "true"            # 启动后在后台加载向量模型并建检索索引，第一个问题不必等待
+      WARMUP_ON_START: "true"            # load the embedding model and build the search index in the background at startup, so the first question doesn't wait
       EMBEDDING_CACHE_DIR: /app/.cache/fastembed
-    # 本地语音识别模型不打进镜像，只读挂载本机已下载的模型；未下载时语音输入自动隐藏
+    # The local speech model isn't baked into the image; mount the downloaded model read-only (voice input hides itself if it's missing)
     volumes:
       - ./backend/.models:/app/.models:ro
-      - model-cache:/app/.cache          # 向量模型缓存，重建容器不必重新下载
+      - model-cache:/app/.cache          # embedding model cache, so rebuilding the container doesn't re-download it
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
-    # 就绪检查：数据库与模型配置都可用才算就绪（存活检查 /health 不依赖外部服务）
+    # Readiness: ready only when the database and model config are available (liveness /health doesn't depend on external services)
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3).status == 200 else 1)"]
       interval: 15s

@@ -9,7 +9,7 @@ import { Button, Chip } from "@/components/ui";
 import { defineCopy, useCopy, useSeparators } from "@/lib/i18n";
 import type { ComparisonTableBlock, ProductDetailBlock, ProductListBlock } from "@/lib/types";
 
-/** 对话中先展示匹配度最高的 3 款，其余折叠，避免一次给客户太多选择。 */
+/** In chat, show the top 3 matches first and collapse the rest, so customers aren't given too many choices at once. */
 const FIRST_SHOWN = 3;
 
 const COPY = defineCopy({

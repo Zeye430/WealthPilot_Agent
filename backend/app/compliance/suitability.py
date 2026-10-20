@@ -1,6 +1,6 @@
-"""产品级适当性规则：判断某个产品对某位客户是否可进入候选。
+"""Product-level suitability: whether a product may enter a customer's candidate list.
 
-每个产品都返回原因代码，而不是只给结果——被排除的产品也能说清「为什么」。
+Every product gets reason codes, not just a verdict, so excluded products can explain why.
 """
 
 from decimal import Decimal
@@ -12,12 +12,12 @@ from app.core.i18n import L, is_en
 from app.products.catalog import DataQuality, Product, ProductStatus
 from app.products.presenter import format_money, lockup_text, sale_window
 
-# 不可进入候选的原因（硬过滤）
+# Reasons a product can't enter the candidate list (hard filter)
 RISK_EXCEEDS = "PRODUCT_RISK_EXCEEDS_RATING"
 NOT_ON_SALE = "PRODUCT_NOT_ON_SALE"
 BELOW_MINIMUM = "BELOW_MINIMUM_INVESTMENT"
 HORIZON_MISMATCH = "HORIZON_MISMATCH"
-# 可展示但不参与排序
+# Can be shown but isn't ranked
 UNVERIFIED = "UNVERIFIED_PRODUCT_DATA"
 
 REASON_LABELS = {
@@ -48,10 +48,10 @@ class CustomerContext(BaseModel):
 
 class Eligibility(BaseModel):
     code: str
-    eligible: bool  # 可进入候选
-    rankable: bool  # 可参与排序
+    eligible: bool  # may enter the candidate list
+    rankable: bool  # may be ranked
     reason_codes: list[str]
-    messages: list[str]  # 给客户看的说明
+    messages: list[str]  # explanations shown to the customer
 
 
 def evaluate(product: Product, ctx: CustomerContext) -> Eligibility:

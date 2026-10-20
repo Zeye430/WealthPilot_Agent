@@ -1,6 +1,9 @@
-"""客户等级与营销活动工具：与具体产品无关，测评前也可使用。
+"""Customer tier and campaign tool: unrelated to specific products, so it is available before an
+assessment.
 
-等级、差距与活动全部由代码按资产数据计算；AI 只转述，不得编造权益或承诺升级。
+Tiers, gaps and campaigns are all computed in code from asset data; the AI only relays them and must
+not invent benefits or promise upgrades. Tool docstrings are the tool descriptions sent to the
+model, so they stay in Chinese like the prompts.
 """
 
 import json

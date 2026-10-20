@@ -1,8 +1,11 @@
-"""识别结果的领域词纠错：虚构品牌和产品名（如「知岸稳享」）不在识别模型的词汇里，常被识别成同音词。
+"""Domain-term correction for recognized text: fictional brand and product names aren't in the
+model's vocabulary and are often heard as homophones.
 
-做法：从产品目录和等级数据生成词表，若识别文字中某一片段的拼音（不计声调）与词表词相同或非常接近，
-则替换为词表词。只收录 3 个字以上、较有区分度的词，避免把「定向」之类的常用词改成「定享」。
-词表来自数据文件（单一数据源），新增产品后自动生效。
+Approach: build a term list from the product catalog and tier data; if the pinyin (ignoring tones)
+of a span in the text equals or is very close to a term,
+replace it with the term. Only distinctive terms of 3+ characters are included, so common words
+aren't "corrected" into product names.
+The list comes from the data files (single source of truth), so new products work automatically.
 """
 
 import re
@@ -23,18 +26,20 @@ def domain_terms() -> tuple[str, ...]:
         if not run:
             continue
         head = run.group()
-        terms.add(head if len(head) <= 5 else head[:4])  # 「知岸稳享每日开放」→「知岸稳享」
+        # long product name → its 4-character brand prefix
+        terms.add(head if len(head) <= 5 else head[:4])
         if len(head) == 5:
-            terms.add(head[2:])  # 「知岸活钱宝」→「活钱宝」
+            terms.add(head[2:])  # drop the 2-character brand prefix
     for tier in load_benefits().tiers:
         terms.add(tier.card_name)
         if tier.card_name.startswith("知岸") and len(tier.card_name) >= 5:
-            terms.add(tier.card_name[2:])  # 「知岸臻享卡」→「臻享卡」
+            terms.add(tier.card_name[2:])  # card name without the brand prefix
     return tuple(sorted((t for t in terms if len(t) >= MIN_TERM_LEN), key=len, reverse=True))
 
 
 def _pinyin(text: str) -> list[str]:
-    from pypinyin import lazy_pinyin  # 延迟导入：只在语音识别时加载拼音词典
+    # lazy import: load the pinyin dictionary only for speech recognition
+    from pypinyin import lazy_pinyin
 
     return lazy_pinyin(text)
 
@@ -51,7 +56,7 @@ def _distance(a: str, b: str) -> int:
 
 def _close(window: str, term: str) -> bool:
     w, t = _pinyin(window), _pinyin(term)
-    if w[0] != t[0]:  # 首字读音必须一致，降低误改
+    if w[0] != t[0]:  # the first character's sound must match, to reduce false corrections
         return False
     allowed = 1 if len(term) <= 4 else 2
     return _distance("".join(w), "".join(t)) <= allowed

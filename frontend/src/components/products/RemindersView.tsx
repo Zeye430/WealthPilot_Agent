@@ -31,7 +31,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 我的提醒：已预约的新品开售提醒。提醒不等于购买，开售后由客户本人确认买入。 */
+/** My reminders: sale reminders for upcoming products. A reminder isn't a purchase; at launch the customer confirms the purchase themselves. */
 export function RemindersView({ onBrowse }: { onBrowse: () => void }) {
   const c = useCopy(COPY);
   const { open } = useProductActions();

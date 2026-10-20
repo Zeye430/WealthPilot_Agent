@@ -56,14 +56,14 @@ const COPY = defineCopy({
   },
 });
 
-/** 买入确认、预约提醒成功时派发（AppShell 据此更新办理进度第 4 步） */
+/** Dispatched when a purchase is confirmed or a reminder is set (AppShell uses it to update step 4 of the progress bar) */
 export function notifyActed() {
   window.dispatchEvent(new Event("wp:acted"));
 }
 
 /**
- * 买入流程（演示，只做到确认页）：输入金额 → 确认页（金额、费用、文件确认、风险揭示）→ 演示结果。
- * 每一步都由后端重新校验评级、起购金额和可用余额；不下单、不扣款。
+ * Purchase flow (demo, stops at confirmation): enter amount → confirmation (amount, fees, document acknowledgement, risk disclosure) → demo result.
+ * The backend re-checks rating, minimum amount and available balance at every step; no order is placed and nothing is charged.
  */
 export function PurchaseFlow({ product, onBack, onDone }: { product: ProductDetail; onBack: () => void; onDone: () => void }) {
   const c = useCopy(COPY);

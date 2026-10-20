@@ -1,18 +1,18 @@
-# 反向代理：自动申请并续期 HTTPS 证书（Let's Encrypt）；健康检查直接转给后端，其余流量转给前端（前端再把 /api 转给后端）。
-# DOMAIN 为 localhost 时使用 Caddy 本地签发的证书，用于本机验证生产配置。
+# Reverse proxy: obtains and renews HTTPS certificates automatically (Let's Encrypt); health checks go straight to the backend, everything else to the frontend (which proxies /api to the backend).
+# With DOMAIN=localhost, Caddy uses a locally issued certificate, for verifying the production config on this machine.
 {$DOMAIN} {
 	encode zstd gzip
 
-	# Prometheus 指标只给行内监控抓取，不对公网开放（另有令牌保护）
+	# Prometheus metrics are for internal monitoring only, never public (also protected by a token)
 	@internal path /metrics /metrics/*
 	respond @internal 404
 
-	# 健康检查直接转给后端，不经过前端：部署脚本据此判断后端是否就绪
+	# Health checks go straight to the backend, bypassing the frontend: the deploy script uses them to tell whether the backend is ready
 	@health path /health /health/*
 	reverse_proxy @health backend:8000
 
 	reverse_proxy frontend:3000 {
-		# 覆盖客户端自带的 X-Forwarded-For，防止伪造 IP 绕过登录限流
+		# Overwrite any client-supplied X-Forwarded-For so a forged IP can't bypass the sign-in rate limit
 		header_up X-Forwarded-For {remote_host}
 	}
 

@@ -1,4 +1,5 @@
-"""可观测性（P8-3）：请求编号、每轮指标、模型遥测、Prometheus 指标、运维看板权限、结构化日志。"""
+"""Observability (P8-3): request IDs, turn metrics, model telemetry, Prometheus metrics, ops
+dashboard access, structured logs."""
 
 import json
 import logging
@@ -54,7 +55,7 @@ def test_request_id_header_is_generated_or_propagated(client):
     assert len(generated) == 32
     given = client.get("/health", headers={"X-Request-ID": "lb-abc12345"})
     assert given.headers["X-Request-ID"] == "lb-abc12345"
-    # 不合法的编号（可能用于日志注入）不沿用
+    # Invalid IDs (possibly log injection) aren't reused
     bad = client.get("/health", headers={"X-Request-ID": "x\nforged log line"})
     assert bad.headers["X-Request-ID"] != "x\nforged log line"
 
@@ -75,7 +76,7 @@ def test_chat_turn_records_metrics_with_request_id(client):
     assert m.request_id == resp.headers["X-Request-ID"]
     assert m.conversation_id == resp.json()["conversation_id"]
     assert (m.outcome, m.intent, m.guard_decision) == ("ANSWERED", "CALCULATION", "PASS")
-    assert m.llm_calls == 3  # 路由 + 两次主模型（调用工具、作答）
+    assert m.llm_calls == 3  # router + two main-model calls (tool call, answer)
     assert m.prompt_tokens == 1000 and m.completion_tokens == 50
     assert m.tools == [{"name": "calculate_growth", "status": "success"}]
     assert m.cost_usd > 0
@@ -105,31 +106,31 @@ def test_ops_overview_requires_ops_role_and_aggregates(client):
         main=[AIMessage("这类产品稳赚。"), AIMessage("理财不保本。")], router=["FINANCE_KNOWLEDGE"]
     )
     client.post("/api/v1/chat", json={"message": "理财稳吗"})
-    assert client.get("/api/v1/ops/overview").status_code == 403  # 客户不能看
+    assert client.get("/api/v1/ops/overview").status_code == 403  # customers can't see it
     assert client.get("/api/v1/ops/overview", headers={"X-Demo-User": "rm_li"}).status_code == 403
     body = client.get("/api/v1/ops/overview?hours=1", headers=OPS).json()
     assert body["kpis"]["turns"] == 1
     assert body["kpis"]["rewrite_rate"] == 1.0
     assert body["guard"]["rules"] == {"O-PROHIBITED_CLAIM": 1}
     assert body["health"]["checks"]["database"]["ok"] is True
-    # 近 1 小时按 5 分钟分桶，没有对话的时间段补 0，延迟留空
+    # The last hour in 5-minute buckets; periods without conversations are 0, latency left empty
     assert body["bucket_seconds"] == 300
     assert 12 <= len(body["series"]) <= 13
     assert sum(b["turns"] for b in body["series"]) == 1
     assert any(b["p50_ms"] is None for b in body["series"])
-    # 看板不含对话内容
+    # The dashboard contains no conversation content
     assert "理财稳吗" not in json.dumps(body, ensure_ascii=False)
 
 
 def test_metrics_endpoint_requires_token(client, monkeypatch):
-    assert client.get("/metrics").status_code == 404  # 未配置令牌时关闭
+    assert client.get("/metrics").status_code == 404  # off when no token is configured
     monkeypatch.setattr(
         get_settings(), "metrics_token", type(get_settings().demo_password)("t0ken")
     )
     assert client.get("/metrics").status_code == 401
     body = client.get("/metrics", headers={"Authorization": "Bearer t0ken"}).text
     assert "# TYPE wealthpilot_http_requests_total counter" in body
-    assert 'route="/health"' in body  # 按路由模板归类
+    assert 'route="/health"' in body  # grouped by route template
 
 
 def test_prometheus_histogram_format():
@@ -164,4 +165,4 @@ def test_readiness_reports_database_down(client, monkeypatch):
     resp = client.get("/health/ready")
     assert resp.status_code == 503
     assert resp.json()["checks"]["database"]["ok"] is False
-    assert client.get("/health").status_code == 200  # 存活检查不依赖数据库
+    assert client.get("/health").status_code == 200  # liveness doesn't depend on the database

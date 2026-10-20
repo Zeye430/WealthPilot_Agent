@@ -1,7 +1,9 @@
-"""关键词检索：jieba 分词 + BM25（内存）。
+"""Keyword search: jieba tokenization + BM25 (in memory).
 
-语料只有一两百块，内存检索足够；不必给 PostgreSQL 安装中文分词扩展（D10）。
-自定义词典补充金融术语，避免「业绩比较基准」被切成「业绩 / 比较 / 基准」后与无关段落误配。
+The corpus has only one or two hundred chunks, so in-memory search is enough; no Chinese tokenizer
+extension for PostgreSQL is needed (D10).
+A custom dictionary adds financial terms so "performance benchmark" isn't split into three words
+that match unrelated passages.
 """
 
 import logging
@@ -72,10 +74,12 @@ class KeywordIndex:
     def search(
         self, query: str, allowed: set[str], k: int, drop: frozenset[str] = frozenset()
     ) -> list[tuple[str, float]]:
-        """返回 (chunk_id, 分数)，只在 allowed 范围内排序；分数为 0 的不返回。
+        """Return (chunk_id, score), ranked only within allowed; zero scores are dropped.
 
-        drop：本次检索中不计分的词。例如已限定在某款产品的说明书内时，「产品」只是指代该产品，
-        没有区分章节的作用，反而会让「产品」出现最多的章节排到前面。
+        drop: words that don't score in this search. E.g. when limited to one product's prospectus,
+        "product" just refers to that product
+        and doesn't distinguish sections; scoring it would push the sections that say "product" most
+        often to the top.
         """
         tokens = [t for t in tokenize(query) if t not in drop]
         scores = self._bm25.get_scores(tokens)

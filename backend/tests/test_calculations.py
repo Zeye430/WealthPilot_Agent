@@ -1,4 +1,4 @@
-"""金融计算基准用例。"""
+"""Benchmark cases for financial calculations."""
 
 from decimal import Decimal as D
 
@@ -110,7 +110,7 @@ def test_net_proceeds_no_double_counting():
     "call",
     [
         lambda: compound_future_value(D("-1"), D("0.05"), 1),
-        lambda: compound_future_value(D("1000"), D("5"), 1),  # 5% 误写成 5
+        lambda: compound_future_value(D("1000"), D("5"), 1),  # 5% mistyped as 5
         lambda: compound_future_value(D("1000"), D("-1"), 1),
         lambda: compound_future_value(D("1000"), D("0.05"), -1),
         lambda: compound_future_value(D("1000"), D("0.05"), 1, periods_per_year=3),

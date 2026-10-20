@@ -1,6 +1,7 @@
-"""对话运行指标：每轮写入 turn_metrics，并汇总给运维看板。
+"""Turn metrics: written to turn_metrics every turn and aggregated for the ops dashboard.
 
-写入失败只记日志、不影响客户收到回答：可观测性不能成为新的故障点。
+A failed write is only logged and never affects the customer's reply: observability must not become
+a new point of failure.
 """
 
 import logging
@@ -19,7 +20,8 @@ from app.llm.telemetry import TurnTelemetry
 
 logger = logging.getLogger(__name__)
 
-# 不同结果对客户的含义：前三类是正常完成，其余需要关注
+# What each outcome means for the customer: the first three are normal completions; the rest need
+# attention
 NORMAL_OUTCOMES = ("ANSWERED", "OUT_OF_SCOPE", "ASSESSMENT_REQUIRED")
 DEGRADED_OUTCOMES = ("FALLBACK", "TOOL_LIMIT", "TIMEOUT")
 FAILED_OUTCOMES = ("ERROR", "BREAKER_OPEN")
@@ -99,7 +101,7 @@ def _publish_metrics(record: TurnRecord, telemetry: TurnTelemetry) -> None:
         METRICS.inc("wealthpilot_guard_violations_total", {"code": code})
 
 
-# ---------- 看板汇总 ----------
+# ---------- Dashboard aggregates ----------
 
 
 def _rate(part: int, total: int) -> float:
@@ -107,7 +109,8 @@ def _rate(part: int, total: int) -> float:
 
 
 def bucket_seconds(hours: int) -> int:
-    """趋势图的时间粒度：近 1 小时每 5 分钟、近 24 小时每小时、更长时每 6 小时。"""
+    """Trend chart granularity: every 5 minutes for the last hour, hourly for 24 hours, every 6
+    hours for longer."""
     if hours <= 1:
         return 300
     if hours <= 24:
@@ -195,7 +198,8 @@ def overview(db: Session, now: datetime, hours: int) -> dict:
             .group_by(bucket)
         ).all()
     }
-    # 补齐没有对话的时间段：对话量记 0，延迟留空（图上断开而不是画成 0 秒）
+    # Fill periods with no conversations: volume is 0 and latency is left empty (a gap in the chart
+    # rather than 0 s)
     first = origin + timedelta(seconds=((since - origin).total_seconds() // step) * step)
     series = []
     start = first

@@ -1,9 +1,9 @@
-# 英文界面场景评估集（P8-2b）：与 scenarios.yaml 的 25 个场景一一对应（同编号），客户用英文提问。
-# 运行：cd backend && uv run python ../evaluations/run_scenarios.py --suite en [--repeat 3]
+# English UI scenario evaluation set (P8-2b): mirrors the 25 scenarios in scenarios.yaml (same IDs), with the customer writing in English.
+# Run: cd backend && uv run python ../evaluations/run_scenarios.py --suite en [--repeat 3]
 #
-# 检查项与 scenarios.yaml 相同；英文套件额外自动检查：回答使用英文（中文字符占比 < 5%）。
-# 输出审查在英文语境下运行，中英文规则同时生效。
-# 知识库与说明书仍为中文原文：search_documents 用中文检索，回答用英文转述并标注编号。
+# Same checks as scenarios.yaml; the English suite also checks automatically that replies are in English (under 5% Chinese characters).
+# Output review runs in the English context, with both rule sets applied.
+# The knowledge base and prospectuses stay in Chinese: search_documents queries in Chinese, and replies paraphrase in English with source IDs.
 
 - id: G01
   name: Unassessed customer asks for recommendations

@@ -1,4 +1,5 @@
-"""真实认证与 HTTP 层安全（不使用身份替身）。对应威胁模型中的认证与 HTTP 层防护。"""
+"""Real authentication and HTTP-layer security (no identity double), covering the authentication
+and HTTP controls in the threat model."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -38,7 +39,7 @@ pytestmark = pytest.mark.skipif(not _db_available(), reason="需要 PostgreSQL")
 
 @pytest.fixture
 def client():
-    app.dependency_overrides.pop(get_current_user, None)  # 使用真实的会话认证
+    app.dependency_overrides.pop(get_current_user, None)  # use real session authentication
     with sessionmaker(bind=get_engine())() as db:
         ensure_demo_accounts(db)
         db.execute(update(User).values(disabled=False))
@@ -56,7 +57,7 @@ def login(client, username="wang", password=PASSWORD, **extra):
     )
 
 
-# ---------- 登录与会话 ----------
+# ---------- Sign-in and sessions ----------
 
 
 def test_login_sets_httponly_session_cookie(client):
@@ -77,7 +78,7 @@ def test_wrong_password_and_unknown_user_look_the_same(client):
 
 
 def test_header_identity_is_not_trusted(client):
-    # 旧版用 X-Demo-User 请求头切换身份，任何人都能冒充；现在只认会话 Cookie
+    # The old X-Demo-User header let anyone impersonate anyone; now only the session cookie counts
     resp = client.get("/api/v1/me", headers={"X-Demo-User": "demo_customer_1"})
     assert resp.status_code == 401
 
@@ -123,7 +124,7 @@ def test_access_code_required_when_configured(client, monkeypatch):
     assert login(client, access_code="open-sesame").status_code == 200
 
 
-# ---------- 角色隔离 ----------
+# ---------- Role isolation ----------
 
 
 def test_customer_cannot_use_rm_dashboard(client):
@@ -138,7 +139,7 @@ def test_rm_cannot_use_customer_endpoints(client):
     assert client.post("/api/v1/chat", json={"message": "你好"}).status_code == 403
 
 
-# ---------- 限流 ----------
+# ---------- Rate limiting ----------
 
 
 def test_login_brute_force_is_rate_limited(client, monkeypatch):
@@ -162,7 +163,7 @@ def test_chat_is_rate_limited_per_user(client, monkeypatch):
     assert codes == [200, 200, 429]
 
 
-# ---------- HTTP 层 ----------
+# ---------- HTTP layer ----------
 
 
 def test_cross_origin_writes_are_rejected(client):

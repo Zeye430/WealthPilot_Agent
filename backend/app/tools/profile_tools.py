@@ -1,4 +1,6 @@
-"""需求记录与配置模拟工具。客户身份与评级均来自流程状态（InjectedState），LLM 不可见。"""
+"""Needs recording and allocation simulation tools. Customer identity and rating come from the
+flow state (InjectedState), invisible to the LLM. Tool docstrings are the tool descriptions
+sent to the model, so they stay in Chinese like the prompts."""
 
 import json
 from datetime import UTC, datetime
@@ -89,11 +91,12 @@ class AllocationItem(BaseModel):
     amount: float = Field(description="配置金额（元）")
 
 
-MAX_SIMULATIONS_PER_TURN = 2  # 首次模拟 + 按检查结果调整一次
+MAX_SIMULATIONS_PER_TURN = 2  # first simulation + one adjustment based on the checks
 
 
 def _simulations_this_turn(state: dict) -> int:
-    """本轮（最后一条客户消息之后）模型发起的配置模拟次数，含正在执行的这次。"""
+    """Allocation simulations the model has started this turn (after the last customer message),
+    including the one running now."""
     from langchain_core.messages import AIMessage, HumanMessage
 
     messages = state.get("messages", [])
@@ -125,7 +128,7 @@ def simulate_allocation(
             )
         )
     if _simulations_this_turn(state) > MAX_SIMULATIONS_PER_TURN:
-        # 场景评估 V02：模型反复调整组合，耗尽本轮工具调用次数
+        # Scenario V02: the model kept adjusting the mix and used up the turn's tool calls
         raise ToolException(
             L(
                 f"本轮已模拟 {MAX_SIMULATIONS_PER_TURN} 次配置，"

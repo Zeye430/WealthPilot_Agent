@@ -1,4 +1,5 @@
-"""测评记录的读写：提交、确认、查询当前有效测评。计分本身在 scoring.py。"""
+"""Reading and writing assessment records: submit, confirm, get the current valid one. Scoring
+lives in scoring.py."""
 
 import calendar
 from datetime import datetime, timedelta
@@ -15,18 +16,19 @@ SUPERSEDED = "SUPERSEDED"
 
 
 class AssessmentFlowError(ValueError):
-    """流程不允许的操作（冷却期内重测、确认不存在的测评等），信息直接展示给客户。"""
+    """An action the flow doesn't allow (retaking during the cooldown, confirming a missing
+    assessment, etc.); the message is shown to the customer."""
 
 
 def add_months(dt: datetime, months: int) -> datetime:
     month_index = dt.month - 1 + months
     year, month = dt.year + month_index // 12, month_index % 12 + 1
-    day = min(dt.day, calendar.monthrange(year, month)[1])  # 2 月 29 日 + 12 个月 → 2 月 28 日
+    day = min(dt.day, calendar.monthrange(year, month)[1])  # Feb 29 + 12 months → Feb 28
     return dt.replace(year=year, month=month, day=day)
 
 
 def latest_confirmed(db: Session, customer_id: str) -> RiskAssessment | None:
-    """最近一次已确认的测评（可能已过期，是否过期由 Policy Engine 判断）。"""
+    """The latest confirmed assessment (it may have expired; the policy engine decides)."""
     return db.scalars(
         select(RiskAssessment)
         .where(RiskAssessment.customer_id == customer_id, RiskAssessment.status == CONFIRMED)
@@ -50,7 +52,8 @@ def _check_cooldown(db: Session, customer_id: str, now: datetime) -> None:
 def submit(
     db: Session, customer_id: str, answers: dict[str, str], now: datetime
 ) -> tuple[RiskAssessment, AssessmentResult]:
-    """计分并保存为待确认状态。确认前重新作答不受冷却限制，旧的待确认记录作废。"""
+    """Score and save as pending confirmation. Re-answering before confirming isn't subject to
+    the cooldown; the old pending record is voided."""
     _check_cooldown(db, customer_id, now)
     result = score_answers(load_questionnaire(), answers)
     db.execute(

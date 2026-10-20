@@ -58,7 +58,7 @@ const COPY = defineCopy({
 const NAV_ICONS: Record<View, IconName> = { chat: "chat", products: "grid", reminders: "bell", me: "user" };
 const VIEWS: View[] = ["chat", "products", "reminders", "me"];
 
-/** 买入确认、预约提醒成功时由对应组件派发，用于更新办理进度的第 4 步。 */
+/** Dispatched by the components when a purchase is confirmed or a reminder is set, to update step 4 of the progress bar. */
 export const ACTED_EVENT = "wp:acted";
 
 export function AppShell() {
@@ -90,7 +90,7 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
-    // 未登录时接口返回 401，统一跳转登录页；理财经理账号进入看板
+    // When not signed in the API returns 401: go to the sign-in page; RM accounts go to the dashboard
     getSessionUser()
       .then((u) => {
         if (u.role !== "customer") {
@@ -101,11 +101,11 @@ export function AppShell() {
         refreshState();
         refreshHistory();
       })
-      // 从手机银行进入时没有 WealthPilot 登录页：会话失效就回到手机银行重新进入
+      // Entered from the banking app, there's no WealthPilot sign-in page: if the session expires, go back to the bank app to re-enter
       .catch(() => (isEmbedded() ? window.location.assign(BANK_APP_HOME) : router.replace("/login")));
   }, [router, refreshState, refreshHistory]);
 
-  // 切换语言后重新读取资料与会话标题：等级、评级名称等由后端按语言返回
+  // After switching language, reload the profile and conversation titles: tier and rating names come from the backend per language
   useEffect(() => {
     if (!user) return;
     refreshState();
@@ -122,7 +122,7 @@ export function AppShell() {
   function newChat() {
     setOpenConversation(null);
     setMatched(false);
-    setChatKey((k) => k + 1); // 改变 key 会重新挂载 Chat，即开始新对话
+    setChatKey((k) => k + 1); // changing the key remounts Chat, starting a new conversation
     setView("chat");
   }
 
@@ -147,7 +147,7 @@ export function AppShell() {
   async function signOut() {
     await logout().catch(() => undefined);
     if (embedded) {
-      // 离开理财助手：结束 WealthPilot 会话，回到手机银行（银行的会话不受影响）
+      // Leave the assistant: end the WealthPilot session and return to the banking app (the bank session is unaffected)
       window.location.assign(BANK_APP_HOME);
       return;
     }
@@ -156,7 +156,7 @@ export function AppShell() {
 
   const startAssessment = () => setAssessing(true);
 
-  // 办理进度：了解需求 → 风险测评 → 匹配产品 → 预约或买入（未测评不能推荐，是真实的先后顺序）
+  // Progress: needs → risk assessment → matching → reserve or buy (no recommendations before an assessment, so this is the real order)
   const done = [
     !!state?.profile.needs.some((n) => n.value),
     !!state?.assessment,
@@ -182,7 +182,7 @@ export function AppShell() {
   return (
     <ProductActionsProvider onStartAssessment={startAssessment}>
       <div className="flex h-full bg-canvas">
-        {/* 电脑端左栏 */}
+        {/* Desktop left column */}
         <aside className="hidden w-64 shrink-0 flex-col gap-6 overflow-y-auto bg-fill px-5 py-7 lg:flex" aria-label="WealthPilot">
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-extrabold tracking-tight">WealthPilot</span>
@@ -248,11 +248,11 @@ export function AppShell() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* 手机端顶栏 */}
+          {/* Mobile top bar */}
           <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-4 pb-2 lg:hidden">
-            {/* 「我的」页自带问候语标题，顶栏不再重复 */}
+            {/* The Me page has its own greeting title, so the top bar doesn't repeat it */}
             <div className="flex min-w-0 items-center gap-1.5">
-              {/* 嵌入手机银行时，左上角返回 App（相当于 App 原生导航栏的返回键） */}
+              {/* Embedded in the banking app: back to the app at the top left (like the native navigation bar's back button) */}
               {embedded && (
                 <button type="button" onClick={signOut} aria-label={c.backToBank} className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full hover:bg-fill">
                   <Icon name="back" size={22} />
@@ -288,7 +288,7 @@ export function AppShell() {
                 onLogout={signOut}
               />
             )}
-            {/* 对话保持挂载，切换页面时只隐藏，避免丢失对话内容 */}
+            {/* Chat stays mounted and is only hidden when switching pages, so the conversation isn't lost */}
             <div className={`min-h-0 flex-1 ${view === "chat" ? "" : "hidden"}`}>
               <Chat
                 key={chatKey}
@@ -302,7 +302,7 @@ export function AppShell() {
             </div>
           </main>
 
-          {/* 手机端底部导航 */}
+          {/* Mobile bottom navigation */}
           <nav className="grid h-[68px] shrink-0 grid-cols-4 border-t border-line bg-canvas pb-[env(safe-area-inset-bottom)] lg:hidden">
             {VIEWS.map((v) => (
               <button
@@ -321,7 +321,7 @@ export function AppShell() {
           </nav>
         </div>
 
-        {/* 电脑端右栏：只在对话页显示，产品、提醒等页面使用全宽 */}
+        {/* Desktop right column: only on the chat page; products, reminders, etc. use the full width */}
         <aside
           className={`hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-line px-6 py-7 ${view === "chat" ? "xl:flex" : ""}`}
           aria-label={c.nav.me}

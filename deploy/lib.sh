@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 本文件定义的变量在引用它的脚本中使用
+# Variables defined here are used by the scripts that source this file
 # shellcheck disable=SC2034
-# 部署脚本的公共函数。由 deploy.sh / update.sh / destroy.sh 引用，不单独运行。
-# DRY_RUN=1：只打印将要执行的 AWS 与服务器命令，不实际执行（用于检查流程、不产生费用）。
+# Shared functions for the deploy scripts. Sourced by deploy.sh / update.sh / destroy.sh, not run on its own.
+# DRY_RUN=1: print the AWS and server commands instead of running them (to check the flow at no cost).
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,14 +15,14 @@ INSTANCE="${INSTANCE_NAME:-wealthpilot}"
 STATIC_IP_NAME="${INSTANCE}-ip"
 KEY_NAME="${INSTANCE}-key"
 KEY_FILE="${KEY_FILE:-$HOME/.ssh/${INSTANCE}-lightsail.pem}"
-RAM_GB="${RAM_GB:-2}"              # 2 = $12/月；4 = $24/月
+RAM_GB="${RAM_GB:-2}"              # 2 = $12/month; 4 = $24/month
 DRY_RUN="${DRY_RUN:-0}"
 
 info() { printf '\033[1m▶ %s\033[0m\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 die() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
-# 执行 AWS Lightsail 命令；演练模式下打印命令，并返回给定的占位值（第一个参数）
+# Run an AWS Lightsail command; in dry-run mode print it and return the given placeholder (first argument)
 aws_ls() {
   local placeholder="$1"; shift
   if [ "$DRY_RUN" = 1 ]; then
@@ -43,7 +43,7 @@ upload() {
   scp -q -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new "$1" "ubuntu@$IP:$2"
 }
 
-env_value() { # 读取 .env.production 中的值（不执行文件内容）
+env_value() { # read a value from .env.production (without executing the file)
   grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
 
@@ -60,7 +60,7 @@ check_env_file() {
 }
 
 load_state() {
-  # 优先使用环境变量（GitHub Actions 中由 Secrets 提供），否则读取本机部署状态
+  # Prefer environment variables (provided by Secrets in GitHub Actions), otherwise read the local deploy state
   if [ -n "${DEPLOY_HOST:-}" ]; then
     IP="$DEPLOY_HOST"; DOMAIN="${DEPLOY_DOMAIN:?DEPLOY_DOMAIN 未设置}"
     return
@@ -70,7 +70,7 @@ load_state() {
   source "$STATE"
 }
 
-# 上传当前提交的代码与配置，在服务器上构建并启动
+# Upload the current commit's code and config, then build and start on the server
 ship() {
   local sha tmp
   sha="$(git -C "$ROOT" rev-parse --short HEAD)"

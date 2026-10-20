@@ -1,8 +1,11 @@
-"""RAG 检索评估：命中率与「资料中未找到」判定（不调用 LLM，结果确定、零成本）。
+"""RAG retrieval evaluation: hit rate and "not found in sources" decisions (no LLM calls,
+deterministic, free).
 
-用法（在 backend/ 下）：
-    uv run python ../evaluations/run_rag_eval.py               # 评估线上检索器（混合 + 配额 + 置信度）
-    uv run python ../evaluations/run_rag_eval.py --diagnose    # 输出置信度相关分数，用于校准阈值
+Usage (from backend/):
+    uv run python ../evaluations/run_rag_eval.py               # evaluate the production retriever
+    (hybrid + quotas + confidence)
+    uv run python ../evaluations/run_rag_eval.py --diagnose    # print confidence-related scores,
+    for calibrating thresholds
 """
 
 import argparse

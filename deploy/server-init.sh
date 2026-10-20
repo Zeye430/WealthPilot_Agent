@@ -1,8 +1,8 @@
 #!/bin/bash
-# 服务器首次开机时执行（Lightsail user-data，以 root 运行）：交换空间 + Docker。
+# Runs on the server's first boot (Lightsail user data, as root): swap + Docker.
 set -euxo pipefail
 
-# 2 GB 交换空间：2 GB 内存的机型在构建前端、加载语音模型时需要
+# 2 GB swap: 2 GB servers need it while building the frontend and loading the speech model
 if [ ! -f /swapfile ]; then
   fallocate -l 2G /swapfile
   chmod 600 /swapfile

@@ -1,6 +1,6 @@
-# 模拟风险承受能力测评问卷 v1
-# 2026-10-17 产品负责人审核通过（含计分校准验证）。
-# 修改题目或分值时，请新建 questionnaire_v2.yaml，不要改动已用于测评的版本。
+# Simulated risk tolerance questionnaire v1
+# Approved by the product owner on 2026-10-17 (including scoring calibration).
+# To change questions or scores, create questionnaire_v2.yaml; never edit a version already used for assessments.
 
 version: v1
 title: 风险承受能力测评（模拟）
@@ -117,7 +117,7 @@ questions:
     dimension_en: "Loss tolerance"
     text: 您能接受的最大本金亏损幅度是？
     text_en: "What is the largest loss of principal you can accept?"
-    veto_option: A   # 选 A 时无论总分多少，评为 C1（最低类别）
+    veto_option: A   # choosing A rates the customer C1 (lowest) regardless of the total score
     options:
       - { id: A, text: 不能接受任何本金亏损, text_en: "I can't accept any loss of principal", score: 0 }
       - { id: B, text: 5% 以内, text_en: "Up to 5%", score: 3 }

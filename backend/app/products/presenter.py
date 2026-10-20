@@ -1,4 +1,5 @@
-"""产品要素的展示格式。产品卡片、对比表、工具返回给 LLM 的文本都用这里的函数，保证口径一致。"""
+"""Display formats for product terms. Product cards, comparison tables and tool output for the
+LLM all use these, so wording stays consistent."""
 
 from decimal import Decimal
 
@@ -25,13 +26,13 @@ def format_rate(rate: Decimal | None) -> str:
         return L("未核实", "Unverified")
     if rate == 0:
         return "0%"
-    # 金融文件惯例保留两位小数：0.40%、4.00%
+    # Financial documents conventionally show two decimals: 0.40%, 4.00%
     return f"{(rate * 100).quantize(Decimal('0.01'))}%"
 
 
 def format_money(amount: Decimal) -> str:
     if is_en():
-        # 英文习惯按 million / billion 读大额（5 亿元 → ¥500 million）
+        # English reads large amounts in millions / billions (¥500 million)
         for unit, name in ((Decimal(10) ** 9, "billion"), (Decimal(10) ** 6, "million")):
             if amount >= unit and amount % (unit / 10) == 0:
                 return f"¥{(amount / unit).normalize():f} {name}"
@@ -44,7 +45,7 @@ def format_money(amount: Decimal) -> str:
 
 
 def sale_window(product: Product) -> str | None:
-    """新发产品的募集期，如「10 月 26 日–10 月 30 日」。"""
+    """Subscription period of a new product, e.g. "Oct 26 - Oct 30"."""
     if product.sale_start is None or product.sale_end is None:
         return None
     start, end = product.sale_start, product.sale_end
@@ -67,7 +68,7 @@ def lockup_text(product: Product) -> str:
 
 
 def settlement_text(product: Product) -> str:
-    """赎回到账时间，如「到期后 T+2 兑付」。"""
+    """When redemption proceeds arrive, e.g. "paid T+2 after maturity"."""
     text = product.redemption_settlement
     if not is_en():
         return text
@@ -89,7 +90,8 @@ def redemption_fee_text(product: Product) -> str:
 
 
 def metric_text(product: Product, metric_type: MetricType) -> str | None:
-    """某一口径的收益指标文字；产品没有该口径时返回 None（对比表显示「—」，不跨口径填充）。"""
+    """Text for one return measure; None if the product doesn't have it (the comparison table
+    shows "-" rather than filling from another measure)."""
     m = product.metric(metric_type)
     if m is None:
         return None
@@ -114,7 +116,7 @@ def metric_text(product: Product, metric_type: MetricType) -> str | None:
 
 
 def headline_metric(product: Product) -> dict:
-    """卡片上展示的主要收益指标：始终带口径标签。"""
+    """Main return metric shown on the card, always labeled with its measure."""
     for t in CURRENT_METRIC_ORDER:
         if (text := metric_text(product, t)) is not None:
             return {"type": t.value, "label": metric_label(t), "text": text}
@@ -157,7 +159,8 @@ def card(product: Product) -> dict:
 
 
 def detail(product: Product) -> dict:
-    """产品详情：卡片字段 + 投资范围、费用明细、各口径收益指标（含业绩比较基准测算依据）。"""
+    """Product details: card fields + investment scope, fee breakdown, every return measure
+    (including how the benchmark was set)."""
     fees = product.fees
     fee_rows = [
         {

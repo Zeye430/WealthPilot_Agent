@@ -1,12 +1,14 @@
-"""LangGraph 主流程。
+"""Main LangGraph flow.
 
     START → scope_router ─┬─ OUT_OF_SCOPE ─────────────────→ out_of_scope ───────┐
-                          ├─ 要产品但未测评 ───────────────→ assessment_required ┤
-                          └─ 其他 → agent ⇄ tools → output_guard ─(未通过)→ agent │
-                                                       └─(通过)───────────────→ finalize → END
+                          ├─ product, not assessed ────────→ assessment_required ┤
+                          └─ other → agent ⇄ tools → output_guard ─(fail)→ agent │
+                                                       └─(pass)───────────────→ finalize → END
 
-权限（permission / risk_rating）由 API 层从数据库算出后传入，图内只读。
-合规三道防线：①按权限绑定工具（agent）②工具执行前再校验（tools）③输出审查（output_guard）。
+Permissions (permission / risk_rating) are computed by the API layer from the database and passed
+in; the graph only reads them.
+Three compliance layers: (1) tools bound by permission (agent), (2) re-checked before execution
+(tools), (3) output review (output_guard).
 """
 
 import json
@@ -62,7 +64,8 @@ EVIDENCE_BLOCK_TYPES = {
     "comparison_table",
     "allocation",
 }
-# 流程性结果（转人工、测评入口、记录需求）不含事实陈述，不需要标注「一般性说明」
+# Process results (handoff, assessment entry, recorded needs) state no facts, so they don't need the
+# "general information" label
 PROCEDURAL_BLOCK_TYPES = {"rm_contact", "assessment_prompt", "needs_update"}
 
 
@@ -82,7 +85,8 @@ CITATION_RE = re.compile(r"\[(K\d{2}|[A-Z]{2}-[A-Z]\d{2}#[^\]\s]+)\]")
 class AgentState(MessagesState):
     customer_id: str
     conversation_id: str
-    customer_context: str  # 基础画像 + 本次需求，由 API 层每条消息重新组装
+    # base profile + current needs, rebuilt by the API layer for every message
+    customer_context: str
     permission: Permission
     risk_rating: str | None
     gate_reasons: list[str]
@@ -90,13 +94,14 @@ class AgentState(MessagesState):
     reply: str
     ui_blocks: list[dict]
     guard_attempts: int
-    deadline: float  # 单轮截止时间（time.monotonic），由 API 层按 chat_turn_budget_seconds 设置
+    # turn deadline (time.monotonic), set by the API layer from chat_turn_budget_seconds
+    deadline: float
     timed_out: bool
     policy_decisions: Annotated[list[dict], operator.add]
 
 
 def current_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
-    """最近一条用户消息之后的所有消息，即本轮产生的消息。"""
+    """All messages after the latest user message, i.e. the ones produced in this turn."""
     for i in range(len(messages) - 1, -1, -1):
         if isinstance(messages[i], HumanMessage):
             return messages[i + 1 :]
@@ -154,7 +159,8 @@ def build_graph(
     def agent(state: AgentState):
         deadline = state.get("deadline")
         if deadline is not None and clock() > deadline:
-            # 超过单轮时长上限：不再调用模型；已执行的工具结果（产品列表、测算等）照常展示
+            # Over the turn time budget: stop calling the model; tool results already produced
+            # (product lists, calculations) are still shown
             return {
                 "timed_out": True,
                 "reply": localized(TURN_TIMEOUT_REPLY),
@@ -178,7 +184,8 @@ def build_graph(
         return "tools"
 
     def tools(state: AgentState, config: RunnableConfig):
-        """第二道防线：即使模型调用了未绑定的工具，执行前也会按权限拦截。"""
+        """Second layer: even if the model calls a tool that isn't bound, it is blocked by
+        permission before execution."""
         last: AIMessage = state["messages"][-1]
         allowed = [c for c in last.tool_calls if tool_allowed(state["permission"], c["name"])]
         blocked = [c for c in last.tool_calls if c not in allowed]
@@ -193,8 +200,10 @@ def build_graph(
         ]
         if allowed:
             permitted = last.model_copy(update={"tool_calls": allowed})
-            # 传入完整状态：产品工具通过 InjectedState 读取客户评级（LLM 不可见）
-            # 传入本轮完整消息（最后一条为待执行的调用），工具可据此限制本轮的重复调用
+            # Pass the full state: product tools read the customer's rating via InjectedState
+            # (invisible to the LLM)
+            # Pass this turn's messages (the last one is the pending call) so tools can limit
+            # repeated calls within the turn
             result = tool_node.invoke(
                 {**state, "messages": [*state["messages"][:-1], permitted]}, config
             )
@@ -203,14 +212,17 @@ def build_graph(
         return {"messages": messages, "policy_decisions": decisions}
 
     def tool_limit(state: AgentState):
-        """工具调用达到上限：不再执行工具，让模型根据已有结果作答（不绑定工具）。
+        """Tool-call limit reached: run no more tools and let the model answer from existing results
+        (no tools bound).
 
-        已产生的界面块照常展示；总结仍需通过输出审查，未通过或为空时才用固定话术。
+        UI blocks already produced are still shown; the summary still goes through output review,
+        and the fixed reply is used only if it fails or is empty.
         """
         prompt = system_prompt(
             state["permission"], state.get("risk_rating"), state.get("customer_context", "")
         )
-        # 去掉未执行的工具调用消息，避免模型接口要求补齐工具结果
+        # Drop the unexecuted tool-call message so the model API doesn't require matching tool
+        # results
         earlier = state["messages"][:-1]
         summary = model.invoke(
             [SystemMessage(prompt), *earlier, SystemMessage(TOOL_LIMIT_INSTRUCTION)]
@@ -232,7 +244,8 @@ def build_graph(
         return {"reply": text, "policy_decisions": [_decision("TOOL", "TOOL_LIMIT_SUMMARY")]}
 
     def guard(state: AgentState):
-        """第三道防线：首次未通过让模型改写一次，再次未通过使用安全兜底回答。"""
+        """Third layer: on the first failure the model rewrites once; on a second failure a safe
+        fallback reply is used."""
         reply = _text(state["messages"][-1])
         rating = state.get("risk_rating")
 
@@ -262,7 +275,8 @@ def build_graph(
                 "policy_decisions": [_decision("OUTPUT", "REWRITE", [*violations, *snippets])],
             }
         if violations == ["O-REASSESSMENT_STEERING"]:
-            # 改写后仍有诱导句：删去这些句子，其余内容通过复查则保留，避免整条回答退化为兜底
+            # Steering sentences survive the rewrite: remove them and keep the rest if it passes
+            # re-review, instead of falling back entirely
             redacted = output_guard.remove_steering(reply)
             if redacted and not check(redacted):
                 return {
@@ -283,7 +297,8 @@ def build_graph(
             if isinstance(m, ToolMessage) and m.status == "success" and m.artifact:
                 blocks.extend(m.artifact)
         reply = state.get("reply") or _text(state["messages"][-1])
-        # 免责声明和测评提醒由代码追加，而不是依赖 LLM 自己记得写
+        # Disclaimers and assessment reminders are appended by code instead of relying on the LLM to
+        # remember them
         has_calculation = any(b["type"] in CALCULATION_BLOCK_TYPES for b in blocks)
         if has_calculation and localized(HYPOTHETICAL_NOTE) not in reply:
             reply = f"{reply}\n\n> {localized(HYPOTHETICAL_NOTE)}"
@@ -295,7 +310,7 @@ def build_graph(
         ):
             reply = f"{reply}\n\n> {localized(output_guard.NO_GUARANTEE_NOTE)}"
         blocks = latest_allocation_only(blocks)
-        # 模型可能重复调用同一工具，界面上去掉内容完全相同的块
+        # The model may call the same tool repeatedly; drop identical blocks from the UI
         blocks = list(
             {json.dumps(b, sort_keys=True, ensure_ascii=False): b for b in blocks}.values()
         )
@@ -336,11 +351,14 @@ def build_graph(
 
 
 def _tool_error_message(error: Exception) -> str:
-    """工具执行异常的统一处理（P8-4 故障注入发现）。
+    """Uniform handling of tool exceptions (found during P8-4 fault injection).
 
-    LangGraph 默认只处理参数校验错误，工具内部的其他异常（如向量库不可用）会让整轮对话失败。
-    这里记录完整异常（带请求编号），只给模型一句不含内部细节的说明，由模型照常作答；
-    ToolMessage 状态为 error，运行指标中计为工具失败。业务上预期的错误（ToolException）原样返回。
+    By default LangGraph only handles argument validation errors; any other exception inside a tool
+    (e.g. the vector store is down) fails the whole turn.
+    Here the full exception is logged (with the request ID) and the model gets one sentence with no
+    internal details, so it can still answer;
+    the ToolMessage status is error and counts as a tool failure in metrics. Expected business
+    errors (ToolException) are returned as is.
     """
     if isinstance(error, ToolException):
         return str(error)
@@ -353,9 +371,11 @@ def _tool_error_message(error: Exception) -> str:
 
 
 def latest_allocation_only(blocks: list[dict]) -> list[dict]:
-    """同一轮多次模拟配置时只展示一份：最后一次通过检查的；都没通过则展示最后一次。
+    """When the same turn simulates several allocations, show only one: the last that passed its
+    checks, or the last one if none passed.
 
-    其余是调整前的草稿，并列展示会互相矛盾；模型通常也按通过检查的方案作答（场景评估 V02）。
+    The others are drafts before adjustment and would contradict each other side by side; the model
+    usually answers with the passing plan (scenario V02).
     """
     allocations = [i for i, b in enumerate(blocks) if b["type"] == "allocation"]
     if len(allocations) <= 1:
@@ -376,14 +396,16 @@ def _source_blocks(messages: list[BaseMessage]) -> list[dict]:
 
 
 def _retrieved_ids(state: AgentState) -> set[str]:
-    """本轮检索到的资料编号：回答中的 [编号] 必须在其中，否则视为编造出处。"""
+    """Source IDs retrieved this turn: every [ID] in the reply must be among them, otherwise it's
+    a fabricated citation."""
     return {i["id"] for b in _source_blocks(current_turn(state["messages"])) for i in b["items"]}
 
 
 def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple[list[dict], dict]:
-    """标注回答依据：已引用的资料 / 检索到但未引用的参考资料 / 一般性说明。
+    """Label what the reply is based on: cited sources / retrieved but uncited references / general
+    information.
 
-    同时生成审计记录：引用了哪些资料的哪个版本。
+    Also produces the audit record: which sources were cited, in which version.
     """
     cited = set(CITATION_RE.findall(reply))
     labelled, codes, decision = [], [], "GENERAL"
@@ -392,7 +414,9 @@ def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple
             labelled.append(b)
             continue
         if not b["confident"] or not b["items"]:
-            continue  # 未找到资料：不展示空的出处块，由下方一般性说明标注
+            # nothing found: don't show an empty sources block; the general-information label below
+            # applies
+            continue
         used = [i for i in b["items"] if i["id"] in cited]
         items = used or b["items"]
         labelled.append({**b, "items": items, "cited": bool(used)})
@@ -412,29 +436,37 @@ def _label_evidence(blocks: list[dict], reply: str, intent: str | None) -> tuple
 
 
 def _grounding(state: AgentState) -> str:
-    """回答之前已出现的内容，用于核对回答提到的产品是否有来源。
+    """Content that appeared before the reply, used to check that products mentioned in the reply
+    have a source.
 
-    测评前只认客户自己说过的产品名和客户资料中的已有持仓；测评后还包括历史回答和工具结果。
+    Before an assessment only product names the customer said and existing holdings in the profile
+    count; after it, earlier replies and tool results count too.
     """
     earlier = _evidence(state)
     if state["permission"] is Permission.ASSESSMENT_REQUIRED:
         earlier = [m for m in earlier if isinstance(m, HumanMessage)]
-    # 客户资料（含银行系统中的已有持仓）：提到客户自己持有的产品不算泄露（场景评估 R01）
+    # Customer profile (including holdings in the bank's system): mentioning the customer's own
+    # holdings isn't a leak (scenario R01)
     profile = state.get("customer_context", "")
     return "\n".join([profile, *(_text(m) for m in earlier)])
 
 
 def _facts(state: AgentState) -> str:
-    """金额核对的依据：客户资料 + 此前所有消息与工具结果（不分测评状态，测算工具测评前也可用）。"""
+    """Basis for checking amounts: customer profile + all earlier messages and tool results
+    (regardless of assessment state; calculators work before an assessment)."""
     return "\n".join([state.get("customer_context", ""), *(_text(m) for m in _evidence(state))])
 
 
 def _evidence(state: AgentState) -> list[BaseMessage]:
-    """可以作为依据的此前消息：客户的话、工具结果、以往轮次的最终回答（都已经过审查）。
+    """Earlier messages that may serve as evidence: customer messages, tool results, and final
+    replies from earlier turns (all already reviewed).
 
-    不含系统消息，也不含本轮模型自己写的内容：被审查拒绝的初稿如果算作依据，
-    改写时重复同一个编造的金额或产品就能通过（场景评估 R01 发现，2026-10-19）。
-    历史消息从数据库加载，只有每轮审查后的最终回答，因此未经审查的内容只会出现在本轮。
+    Excludes system messages and anything the model wrote in this turn: if a draft rejected by
+    review counted as evidence,
+    a rewrite could pass by repeating the same made-up amount or product (found in scenario R01,
+    2026-10-19).
+    History is loaded from the database and holds only reviewed final replies, so unreviewed content
+    can only appear in this turn.
     """
     earlier = state["messages"][:-1]
     turn_start = len(earlier) - len(current_turn(earlier))

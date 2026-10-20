@@ -1,4 +1,5 @@
-"""产品查询服务：LLM 工具和 REST API 共用，保证两条路径的过滤规则完全一致。"""
+"""Product query service shared by the LLM tools and the REST API, so both paths apply exactly
+the same filters."""
 
 import re
 from collections import Counter
@@ -23,9 +24,9 @@ class SearchFilters(BaseModel):
 
 
 class SearchResult(BaseModel):
-    ranked: list[RankedProduct]  # 合格且已核实，按排序
-    unranked: list[tuple[Product, Eligibility]]  # 合格但数据未核实，展示但不排序
-    excluded: dict[str, int]  # 被适当性规则排除的数量，按首要原因统计
+    ranked: list[RankedProduct]  # eligible and verified, in rank order
+    unranked: list[tuple[Product, Eligibility]]  # eligible but unverified: shown, not ranked
+    excluded: dict[str, int]  # how many were excluded by suitability rules, by primary reason
 
 
 def _matches(product: Product, filters: SearchFilters) -> bool:
@@ -39,7 +40,7 @@ def _matches(product: Product, filters: SearchFilters) -> bool:
             f"{product.name_en}{product.investment_scope_en}"
         ).lower()
         keyword = filters.keyword.lower()
-        # 英文关键词忽略空格与标点（「1 Year」与「1-Year」视为相同）
+        # English keywords ignore spaces and punctuation ("1 Year" and "1-Year" are the same)
         loose = re.sub(r"[^0-9a-z]", "", keyword) if re.search(r"[a-z]", keyword) else ""
         if keyword not in haystack and not (loose and loose in re.sub(r"[^0-9a-z]", "", haystack)):
             return False
@@ -47,15 +48,17 @@ def _matches(product: Product, filters: SearchFilters) -> bool:
 
 
 class BrowseResult(BaseModel):
-    ranked: list[RankedProduct]  # 可买入：评级范围内、在售且已核实，按排序
-    other: list[tuple[Product, list[str]]]  # 仅可查看：附原因（超出评级、未测评、未核实等）
+    ranked: list[RankedProduct]  # buyable: within the rating, on sale and verified, in rank order
+    # view only, with reasons (above the rating, unassessed, unverified, etc.)
+    other: list[tuple[Product, list[str]]]
 
 
 def browse(catalog: Catalog, rating: str | None, filters: SearchFilters) -> BrowseResult:
-    """产品浏览页：展示全部在售产品（产品负责人决定，2026-10-18）。
+    """Product browsing page: shows every product on sale (product-owner decision, 2026-10-18).
 
-    评级范围内的产品排在前面并参与排序；超出评级或未测评时只能查看条款，不能买入。
-    与对话中的 search_products 不同：对话推荐只在评级范围内进行。
+    Products within the rating come first and are ranked; above the rating or without an assessment,
+    terms can be viewed but not bought.
+    Unlike search_products in chat, where recommendations stay within the rating.
     """
     candidates, other = [], []
     for product in catalog.products:
@@ -70,7 +73,7 @@ def browse(catalog: Catalog, rating: str | None, filters: SearchFilters) -> Brow
         else:
             other.append((product, result.messages))
     if rating is None:
-        # 未测评：按流动性和费用排序展示，不区分能否买入
+        # Unassessed: sort by liquidity and fees without separating buyable products
         verified = [p for p, _ in other if p.data_quality is DataQuality.VERIFIED]
         order = {r.product.code: i for i, r in enumerate(rank(verified))}
         other.sort(key=lambda item: order.get(item[0].code, len(order)))
@@ -78,19 +81,21 @@ def browse(catalog: Catalog, rating: str | None, filters: SearchFilters) -> Brow
 
 
 def upcoming(catalog: Catalog, ctx: CustomerContext | None) -> list[Product]:
-    """即将发售的新品。传入客户条件时，只返回评级、期限、起购金额都符合的（与在售产品同一套规则）。"""
+    """Upcoming products. With customer criteria, only those matching rating, horizon and minimum
+    amount (same rules as products on sale)."""
     products = [p for p in catalog.products if p.status is ProductStatus.UPCOMING]
     if ctx is None:
         return products
-    allowed = {NOT_ON_SALE, UNVERIFIED}  # 「尚未开售」本身不是不合格
+    allowed = {NOT_ON_SALE, UNVERIFIED}  # "not yet on sale" alone doesn't make it ineligible
     return [p for p in products if set(evaluate(p, ctx).reason_codes) <= allowed]
 
 
 def search(catalog: Catalog, ctx: CustomerContext, filters: SearchFilters) -> SearchResult:
-    """先按客户的查询条件筛选，再做适当性硬过滤，最后只对合格产品排序。"""
+    """Filter by the customer's query first, then apply the suitability hard filter, then rank
+    only eligible products."""
     candidates, unranked, excluded = [], [], Counter()
     for product in catalog.products:
-        # 即将发售的新品单独返回（upcoming），不算作被排除
+        # Upcoming products are returned separately (upcoming), not counted as excluded
         if product.status is ProductStatus.UPCOMING or not _matches(product, filters):
             continue
         result = evaluate(product, ctx)

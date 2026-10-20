@@ -13,7 +13,7 @@ def confirmed(rating="C2", expires_in_days=300):
     return RiskAssessment(rating=rating, expires_at=NOW + timedelta(days=expires_in_days))
 
 
-# ---------- 门禁 ----------
+# ---------- Gate ----------
 
 
 def test_gate_requires_assessment_when_missing():  # S01
@@ -43,7 +43,7 @@ def test_pre_assessment_tool_whitelist():
     assert tool_allowed(Permission.ASSESSED, "search_products")
 
 
-# ---------- 输出审查 ----------
+# ---------- Output review ----------
 
 
 @pytest.mark.parametrize(
@@ -71,7 +71,7 @@ def test_prohibited_claims_detected(text):
     ],
 )
 def test_negated_or_factual_statements_pass(text):
-    # 金额来自测算工具结果（O-UNGROUNDED_AMOUNT 要求金额有来源）
+    # Amounts come from the calculator result (O-UNGROUNDED_AMOUNT requires a source for amounts)
     facts = '{"final_value": "1628894.63"}'
     assert check_output(text, Permission.ASSESSED, facts=facts) == []
 
@@ -79,7 +79,8 @@ def test_negated_or_factual_statements_pass(text):
 def test_recommendation_blocked_before_assessment():  # S02e
     text = "我建议您购买一款固收类理财。"
     assert check_output(text, Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
-    # 测评后允许需求匹配式推荐（产品负责人决定，2026-10-18）
+    # After an assessment, needs-based recommendations are allowed (product-owner decision,
+    # 2026-10-18)
     assert check_output(text, Permission.ASSESSED, risk_rating="C2") == []
 
 
@@ -88,7 +89,7 @@ def test_negated_recommendation_passes_before_assessment():
     assert check_output(text, Permission.ASSESSMENT_REQUIRED) == []
 
 
-# ---------- 产品相关的输出审查 ----------
+# ---------- Product-related output review ----------
 
 
 def test_real_institution_name_blocked():
@@ -108,7 +109,8 @@ def test_product_mention_before_assessment_is_leak_unless_customer_named_it():
     assert check_output(reply, Permission.ASSESSMENT_REQUIRED, grounding="知岸活钱宝怎么样") == []
 
 
-# ---------- 诱导调高评级与个性化推荐（Phase 5 端到端测试中发现） ----------
+# ---------- Steering toward a higher rating, personalized recommendations (found in Phase 5
+# end-to-end tests) ----------
 
 
 @pytest.mark.parametrize(
@@ -116,7 +118,7 @@ def test_product_mention_before_assessment_is_leak_unless_customer_named_it():
     [
         "如果 5% 收益目标优先，可能需要承担更高波动（PR3 及以上），如需调整需重新测评。",
         "想要更高收益的话，您可以重新评估风险承受能力。",
-        # P7 场景评估 S01：把重新测评当作了解更高等级产品的途径
+        # P7 scenario S01: a re-assessment presented as the way to learn about higher-risk products
         "如果您希望了解权益类产品，需要重新完成风险测评且结果达到相应等级。",
     ],
 )
@@ -131,7 +133,8 @@ def test_reassessment_allowed_when_circumstances_change():
 
 
 def test_reassessment_in_same_paragraph_as_return_gap_blocked():
-    # P7 场景评估 M01：两句分开写，连起来读仍是「想要 5% 就去重新测评」
+    # P7 scenario M01: written as two sentences, but read together it still says "retake the
+    # assessment if you want 5%"
     text = (
         "如果您希望追求 5% 左右的收益，可能需要考虑 PR3 及以上的产品，但这超出了您的风险承受能力。"
         "若您的情况发生变化，可以重新测评。"
@@ -173,11 +176,12 @@ def test_rewrite_feedback_quotes_steering_sentence():
     assert "想要更高收益的话" in describe(["O-REASSESSMENT_STEERING"], reply)
 
 
-# ---------- 需求匹配式推荐（产品负责人决定，2026-10-18） ----------
+# ---------- Needs-based recommendations (product-owner decision, 2026-10-18) ----------
 
 
 def _assessed(text, rating="C2"):
-    # grounding 用回答本身：这里只测推荐规则，产品是否查询过由其他用例覆盖
+    # The reply itself is the grounding: this tests only the recommendation rule; whether products
+    # were queried is covered elsewhere
     return check_output(text, Permission.ASSESSED, grounding=text, risk_rating=rating)
 
 
@@ -192,7 +196,7 @@ def test_need_matched_recommendation_within_rating_passes():
 def test_recommending_product_above_rating_blocked():
     assert _assessed("我推荐知岸均衡配置，股债平衡。") == ["O-UNSUITABLE_RECOMMENDATION"]
     assert _assessed("知岸权益精选也值得考虑。") == ["O-UNSUITABLE_RECOMMENDATION"]
-    # 同一产品对 C4 客户在评级范围内
+    # The same product is within the rating for a C4 customer
     assert _assessed("我推荐知岸均衡配置，股债平衡。", rating="C4") == []
 
 
@@ -212,7 +216,7 @@ def test_pressure_sales_blocked(text):
     assert "O-PRESSURE_SALES" in _assessed(text)
 
 
-def test_cross_metric_comparison_blocked():  # P7 场景评估 P05
+def test_cross_metric_comparison_blocked():  # P7 scenario P05
     for text in (
         "匹配点：在保持每日流动性的同时，业绩比较基准高于现金管理类产品。",
         "知岸稳享每日开放的业绩比较基准略高于七日年化收益率。",
@@ -220,7 +224,8 @@ def test_cross_metric_comparison_blocked():  # P7 场景评估 P05
         assert "O-METRIC_MIXING" in _assessed(text)
     caveat = "业绩比较基准与现金管理类的七日年化口径不同，不能直接比较高低。"
     assert _assessed(caveat) == []
-    # 分句写：前一句讲现金管理类，后一句说「业绩比较基准更高一些」
+    # Split across sentences: the first is about cash management, the next says the benchmark is "a
+    # bit higher"
     split = (
         "流动性要求高可以优先考虑现金管理类的活钱宝；"
         "能接受略高波动的话，知岸稳享每日开放的业绩比较基准区间更高一些。"
@@ -250,16 +255,18 @@ def test_factual_raise_limit_passes_but_urgency_blocked():
     assert "O-PRESSURE_SALES" in _assessed("这款新品额度有限，很多人在抢，赶紧预约。")
 
 
-def test_benchmark_figures_must_come_from_tool_results():  # 场景评估 N02
+def test_benchmark_figures_must_come_from_tool_results():  # scenario N02
     grounding = '{"metric": "业绩比较基准 2.80%–3.30%"}'
     wrong = "知岸定享 365 天第 15 期的业绩比较基准为 2.60%–3.20%。"
-    right = "知岸定享 365 天第 15 期的业绩比较基准为 2.8%–3.3%。"  # 位数不同、数值相同也算有来源
+    # different decimals, same value: still grounded
+    right = "知岸定享 365 天第 15 期的业绩比较基准为 2.8%–3.3%。"
     assert "O-UNGROUNDED_FIGURE" in check_output(wrong, Permission.ASSESSED, grounding + wrong[:12])
     ok = check_output(
         right, Permission.ASSESSED, grounding + "知岸定享 365 天第 15 期", risk_rating="C2"
     )
     assert ok == []
-    # 不在收益指标语境中的百分数（如配置占比）不检查，即使同句提到业绩比较基准
+    # Percentages outside a return-metric context (e.g. allocation shares) aren't checked, even if
+    # the sentence mentions a benchmark
     share = "知岸稳享一年持有 10 万元（22.22%），业绩比较基准 2.50%–3.20%。"
     facts = "知岸稳享一年持有 2.50%–3.20% 配置金额 100000"
     assert (
@@ -272,7 +279,7 @@ def test_return_pitch_blocked():
     assert _assessed("我不按收益高低推荐，而是看期限和流动性是否匹配。") == []
 
 
-# ---------- 虚构真人接入（Phase 6） ----------
+# ---------- Claiming a human has joined (Phase 6) ----------
 
 
 @pytest.mark.parametrize(
@@ -295,7 +302,7 @@ def test_accurate_handoff_status_passes(text):
     assert check_output(text, Permission.ASSESSED) == []
 
 
-# ---------- 场景评估中发现的问题（2026-10-17） ----------
+# ---------- Issues found in scenario evaluation (2026-10-17) ----------
 
 
 def test_quoted_warning_is_not_a_claim():
@@ -304,7 +311,7 @@ def test_quoted_warning_is_not_a_claim():
 
 
 def test_quoted_claim_without_warning_is_still_blocked():
-    # 不能靠加引号绕过：没有警示语境的引号内承诺仍然拦截
+    # Quotes are no loophole: a promise in quotes without a warning context is still blocked
     assert "O-PROHIBITED_CLAIM" in check_output("这款产品“稳赚”，放心买。", Permission.ASSESSED)
 
 
@@ -340,15 +347,16 @@ def test_distant_negation_in_same_clause_passes(text):
 @pytest.mark.parametrize(
     "text",
     [
-        "这款产品不仅保本保收益，而且流动性好。",  # 「不仅」不是否定
-        "它不会亏，保证收益。",  # 否定词在前一个分句
+        "这款产品不仅保本保收益，而且流动性好。",  # 不仅 ("not only") is not a negation
+        "它不会亏，保证收益。",  # the negation is in the previous clause
     ],
 )
 def test_negation_does_not_leak_across_clauses_or_from_buzhi(text):
     assert "O-PROHIBITED_CLAIM" in check_output(text, Permission.ASSESSED)
 
 
-# ---------- 宣称未发生的操作、软性收益比较（P8-2b 场景评估 N02、P05） ----------
+# ---------- Claimed actions that didn't happen, soft return comparisons (P8-2b scenarios N02, P05)
+# ----------
 
 
 def test_reminder_claim_needs_evidence():

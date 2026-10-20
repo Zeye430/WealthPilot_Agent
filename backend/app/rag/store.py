@@ -1,8 +1,10 @@
-"""pgvector 向量存储与增量索引同步。
+"""pgvector store and incremental index sync.
 
-document_chunks 是可随时重建的派生索引：语料的唯一来源是知识库与说明书文件。
-同步时按内容哈希比较，只为新增或变更的块重新计算向量，并删除已不在语料中的块
-（例如知识库条目过期或下线后，它会在下次同步时退出索引）。
+document_chunks is a derived index that can be rebuilt any time: the only source of the corpus is
+the knowledge-base and prospectus files.
+Sync compares content hashes, recomputes vectors only for new or changed chunks, and deletes chunks
+no longer in the corpus
+(e.g. a knowledge-base entry that expired or was retired leaves the index at the next sync).
 """
 
 import logging

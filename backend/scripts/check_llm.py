@@ -1,6 +1,7 @@
-"""检查 Kimi 连通性：列出可用模型，并用真实模型跑一次工具调用冒烟测试。
+"""Check Kimi connectivity: list available models and run one tool-calling smoke test with the real
+model.
 
-用法（在 backend/ 下）：uv run python scripts/check_llm.py
+Usage (from backend/): uv run python scripts/check_llm.py
 """
 
 import sys
@@ -38,7 +39,7 @@ def main() -> None:
     print("调用的工具：", called or "无")
     print("回答：", result["reply"])
     reply = result["reply"].replace(",", "").replace(" ", "")
-    # 接受完整金额或「万元」近似写法（162.89万），两者都来自工具结果
+    # Accept the exact amount or the rounded 万 form (162.89万); both come from the tool result
     ok = "calculate_growth" in called and ("1628894.63" in reply or "162.89万" in reply)
     print("\n结果：", "通过 ✅" if ok else "需要检查 ⚠️（未调用工具或数字不一致）")
 

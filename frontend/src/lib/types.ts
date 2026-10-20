@@ -1,4 +1,4 @@
-// 与后端 API 及 UI 块一一对应（backend/app/tools、backend/app/api）
+// Mirrors the backend API and UI blocks one to one (backend/app/tools, backend/app/api)
 
 export type CalculationResultBlock = {
   type: "calculation_result";
@@ -41,12 +41,12 @@ export type ProductCard = {
   synthetic: boolean;
   rank?: number | null;
   rank_factors?: string;
-  /** 匹配理由（期限、流动性、费用），不涉及收益 */
+  /** Match reasons (horizon, liquidity, fees), never returns */
   highlights?: string[];
-  /** 能否买入：由后端按评级、在售状态等规则判断 */
+  /** Whether it can be bought: decided by the backend from rating, sale status, etc. */
   purchasable?: boolean;
   warnings?: string[];
-  /** 即将发售的新品：募集期与募集规模上限 */
+  /** Upcoming products: subscription period and size cap */
   sale_window?: string | null;
   raise_limit?: string | null;
 };
@@ -106,7 +106,7 @@ export type ProductDetail = ProductCard & {
   metrics: { label: string; text: string; basis: string | null }[];
   eligible: boolean;
   eligibility_messages: string[];
-  /** needs_assessment：未测评导致不能买入（界面据此显示「去测评」，不解析原因文字） */
+  /** needs_assessment: can't be bought because there's no assessment (the UI shows "take the assessment" without parsing the reason text) */
   purchase?: { allowed: boolean; reasons: string[]; needs_assessment?: boolean };
   remind?: RemindState | null;
 };
@@ -154,7 +154,7 @@ export type SourceItem = {
   title: string;
   section: string | null;
   source_label: string;
-  /** 摘录原文的语言：知识库与说明书均为中文，英文界面会标注「原文为中文」 */
+  /** Language of the excerpt: the knowledge base and prospectuses are in Chinese, so the English UI labels them "Source text in Chinese" */
   source_language?: "zh" | "en";
   version: string;
   excerpt: string;
@@ -228,7 +228,7 @@ export type HandoffView = {
   reason: string;
 };
 
-/** 理财经理名片：只含理财经理信息与联系方式，不展示客户资料 */
+/** RM contact card: only the RM's details and contact methods, no customer data */
 export type RmContactBlock = {
   type: "rm_contact";
   rm_name: string;
@@ -256,7 +256,7 @@ export type UIBlock =
 
 export type ChatMessage =
   | { role: "user" | "assistant"; content: string; ui_blocks: UIBlock[] }
-  // 仅前端展示的系统提示（如「测评已完成」），不发送给后端
+  // System notices shown only in the frontend (e.g. "assessment completed"), never sent to the backend
   | { role: "notice"; content: string; ui_blocks: [] };
 
 export type AssessmentSummary = {

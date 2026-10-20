@@ -1,7 +1,9 @@
-"""金融知识库解析与校验。
+"""Parsing and validating the financial knowledge base.
 
-知识库以 Markdown 维护（便于人工审核），本模块按 `### Kxx` 切分条目，解析元数据、问法、回答与出处。
-只有「已审核」且未过复核到期日的条目可以被检索使用（过期自动降级）。
+The knowledge base is kept in Markdown (easy to review by hand); this module splits entries on `###
+Kxx` and parses metadata, phrasings, answers and sources.
+Only entries marked reviewed and within their review date can be retrieved (expired ones drop out
+automatically).
 """
 
 import re
@@ -30,11 +32,11 @@ class Source(BaseModel):
     title: str
     doc_number: str
     date: str
-    url: str | None  # 本系统说明类来源没有链接
+    url: str | None  # explanatory sources from this system have no link
 
 
 class Citation(BaseModel):
-    """条目中的一条出处：引用的来源编号、条款及原文摘录。"""
+    """One source in an entry: the cited source ID, clause and excerpt of the original text."""
 
     source_ids: list[str]
     text: str
@@ -59,7 +61,8 @@ class Entry(BaseModel):
 
     @property
     def search_text(self) -> str:
-        """用于检索的文本：标题 + 常见问法 + 回答。问法让口语化提问也能命中。"""
+        """Text used for retrieval: title + common phrasings + answer. Phrasings let casual
+        questions match too."""
         return f"{self.question}\n常见问法：{'；'.join(self.aliases)}\n{self.answer}"
 
 

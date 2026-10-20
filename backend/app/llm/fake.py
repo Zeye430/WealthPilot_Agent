@@ -1,7 +1,10 @@
-"""压测专用假模型（LLM_PROVIDER=fake）：固定回复 + 模拟延迟，不调用外部服务、不计费。
+"""Fake model for load testing (LLM_PROVIDER=fake): canned replies + simulated latency, no external
+calls, no cost.
 
-用途是测系统本身的吞吐与瓶颈（线程池、数据库连接池、审查与工具开销），把模型延迟当作可控变量。
-启动时会打印警告；就绪检查与运维看板显示 provider=fake，避免误用于真实服务。
+It measures the system's own throughput and bottlenecks (thread pool, DB pool, review and tool
+overhead) with model latency as a controlled variable.
+It logs a warning at startup, and readiness and the ops dashboard show provider=fake, so it can't be
+mistaken for the real service.
 """
 
 import time
@@ -19,7 +22,7 @@ FAKE_ANSWER = (
 class FakeChatModel(BaseChatModel):
     reply: str = FAKE_ANSWER
     latency_seconds: float = 1.5
-    prompt_tokens: int = 1800  # 接近真实系统提示词 + 客户资料的规模，便于估算费用
+    prompt_tokens: int = 1800  # close to the real system prompt + customer data, for cost estimates
     completion_tokens: int = 120
 
     @property

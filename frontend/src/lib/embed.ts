@@ -3,9 +3,9 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * 嵌入模式：客户从手机银行 App 进入时，理财助手是 App 里的一个模块。
- * 此时不显示 WealthPilot 自己的登录 / 退出，改为「返回手机银行」；会话失效时回到手机银行而不是登录页。
- * 标记保存在 sessionStorage（只对当前 WebView 有效，关掉即清除）。
+ * Embedded mode: when the customer enters from the banking app, the assistant is a module inside the app.
+ * WealthPilot's own sign-in / sign-out are hidden in favor of "Back to banking app"; an expired session returns to the bank app instead of the sign-in page.
+ * The flag lives in sessionStorage (valid only for the current WebView, cleared when it closes).
  */
 
 const KEY = "wp_entry";
@@ -16,7 +16,7 @@ export function setEmbedded(on: boolean) {
     if (on) sessionStorage.setItem(KEY, "bank_app");
     else sessionStorage.removeItem(KEY);
   } catch {
-    // 无法写入时按独立网页处理
+    // If storage can't be written, treat it as a standalone page
   }
 }
 
@@ -28,7 +28,7 @@ export function isEmbedded(): boolean {
   }
 }
 
-/** 组件中读取嵌入模式；服务端渲染时视为非嵌入，挂载后按实际值更新 */
+/** Read embedded mode in components; server rendering treats it as not embedded, updated with the real value after mount */
 export function useEmbedded(): boolean {
   return useSyncExternalStore(
     () => () => {},
@@ -37,7 +37,7 @@ export function useEmbedded(): boolean {
   );
 }
 
-/** 嵌入页通知外层演示框架当前进行到哪一步（只在电脑端演示页 /bank 中有接收方） */
+/** The embedded page tells the outer demo frame which step it reached (only the desktop demo page /bank listens) */
 export function notifyDemoStep(step: number) {
   if (typeof window !== "undefined" && window.parent !== window) {
     window.parent.postMessage({ type: "wp-demo-step", step }, window.location.origin);

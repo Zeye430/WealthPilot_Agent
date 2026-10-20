@@ -1,9 +1,12 @@
-"""新品开售提醒：客户本人预约，开售后由客户本人买入。
+"""New-product sale reminders: set by the customer; after launch, the customer buys.
 
-规则（产品负责人确认，2026-10-18）：
-- 只能预约「即将发售」且在客户风险等级范围内的产品；未测评不能预约（开售后也无法买入）。
-- 提醒只由客户发起：界面按钮，或客户在对话中明确同意后由 AI 代为设置。
-- 提醒不等于购买：开售后客户仍需本人确认买入，买入时照常校验。
+Rules (confirmed by the product owner, 2026-10-18):
+- Only upcoming products within the customer's risk level can be reserved; not without an assessment
+(they couldn't be bought at launch either).
+- Only the customer creates reminders: the UI button, or the AI sets one after the customer
+explicitly agrees in chat.
+- A reminder isn't a purchase: at launch the customer must still confirm the purchase, with the
+usual checks.
 """
 
 from datetime import datetime
@@ -76,7 +79,7 @@ def reminded_codes(db: Session, customer_id: str) -> set[str]:
 def create_reminder(
     db: Session, customer_id: str, product: Product, rating: str | None, source: str, now: datetime
 ) -> SaleReminder:
-    """同一产品已有提醒时直接返回，不重复创建。"""
+    """If the product already has a reminder, return it instead of creating another."""
     check_remindable(product, rating)
     for r in active_reminders(db, customer_id):
         if r.product_code == product.code:

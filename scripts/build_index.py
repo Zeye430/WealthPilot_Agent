@@ -1,7 +1,9 @@
-"""同步检索索引（知识库 + 产品说明书 → pgvector）。只为新增或变更的内容重新计算向量。
+"""Sync the search index (knowledge base + product prospectuses → pgvector). Vectors are recomputed
+only for new or changed content.
 
-用法（在 backend/ 下）：uv run python ../scripts/build_index.py
-修改知识库或重新生成说明书后运行；scripts/dev.sh 启动时会自动执行。
+Usage (from backend/): uv run python ../scripts/build_index.py
+Run after editing the knowledge base or regenerating prospectuses; scripts/dev.sh runs it at
+startup.
 """
 
 import sys

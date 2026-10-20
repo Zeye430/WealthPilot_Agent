@@ -1,8 +1,11 @@
-"""资料检索工具：金融知识库 + 虚构产品说明书。
+"""Source search tool: financial knowledge base + fictional product prospectuses.
 
-- 测评前也可使用，但只检索知识库（金融常识）；产品说明书属于产品信息，测评后才可检索。
-  检索范围由流程状态中的权限决定（InjectedState），LLM 无法改变。
-- 资料内容作为不可信数据包装后交给 LLM，其中的任何指令都无效（防提示注入）。
+- Available before an assessment, but then only the knowledge base (general knowledge); prospectuses
+are product information and need an assessment.
+  The scope comes from the permission in the flow state (InjectedState), which the LLM can't change.
+- Source content is wrapped as untrusted data before reaching the LLM, so any instructions in it
+have no effect (prompt-injection defense). Tool docstrings are the tool descriptions sent to the
+model, so they stay in Chinese like the prompts.
 """
 
 import json
@@ -55,10 +58,12 @@ def _title(chunk: Chunk) -> str:
 
 
 def _source_item(chunk: Chunk) -> dict:
-    """前端展示用的出处：知识库条目附法规摘录与链接，说明书章节附正文节选。
+    """Sources for display: knowledge-base entries with regulation excerpts and links; prospectus
+    sections with text excerpts.
 
-    英文界面只翻译标题和来源类型；摘录保持中文原文（source_language=zh，界面标注），
-    不机器翻译法规条文，避免译文被当作原文引用。
+    The English UI translates only titles and source types; excerpts stay in the original Chinese
+    (source_language=zh, labeled in the UI),
+    because machine-translated regulation text could be quoted as if it were the original.
     """
     item = {
         "id": chunk.chunk_id,
@@ -71,7 +76,7 @@ def _source_item(chunk: Chunk) -> dict:
     if chunk.kind is ChunkKind.KNOWLEDGE:
         kb = load_knowledge_base()
         entry = kb.get(chunk.chunk_id)
-        item["excerpt"] = entry.answer.replace("**", "")  # 前端按纯文本展示
+        item["excerpt"] = entry.answer.replace("**", "")  # the frontend shows plain text
         item["citations"] = [c.text for c in entry.citations]
         item["links"] = [
             {"title": kb.sources[sid].title, "url": kb.sources[sid].url}
@@ -104,7 +109,7 @@ def search_documents(
     product_code = None
     if product:
         if state.get("permission") is not Permission.ASSESSED:
-            product = None  # 测评前不检索产品说明书，只查知识库
+            product = None  # before an assessment, search the knowledge base only, not prospectuses
         else:
             found = load_catalog().find_by_name(product)
             if found is None:

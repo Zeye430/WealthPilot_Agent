@@ -10,8 +10,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 朗读回答：使用浏览器 / 系统自带的中文语音合成（免费、离线）。
- * 只读文字结论；表格、卡片和图表读不出来，结尾提示「详细内容请看屏幕」。风险提示仍以文字为准。
+ * Read replies aloud with the browser's / system's built-in speech synthesis (free, offline).
+ * Reads only the text; tables, cards and charts can't be read, so it ends with "see the screen for details". Risk disclosures remain authoritative in text.
  */
 export function ReadAloud({ text, hasBlocks }: { text: string; hasBlocks: boolean }) {
   const c = useCopy(COPY);
@@ -19,7 +19,7 @@ export function ReadAloud({ text, hasBlocks }: { text: string; hasBlocks: boolea
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
-    // 首次渲染在服务端，挂载后才能判断浏览器能力
+    // The first render happens on the server; browser capabilities are known only after mounting
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSupported(typeof window !== "undefined" && "speechSynthesis" in window);
     return () => {
@@ -36,8 +36,8 @@ export function ReadAloud({ text, hasBlocks }: { text: string; hasBlocks: boolea
       setSpeaking(false);
       return;
     }
-    synth.cancel(); // 同一时间只朗读一条
-    // 朗读语言跟随回答内容：含中文按中文读，否则按英文读
+    synth.cancel(); // read one reply at a time
+    // The voice follows the reply's language: Chinese if it contains Chinese, otherwise English
     const lang = /[\u4e00-\u9fff]/.test(text) ? "zh-CN" : "en-US";
     const utterance = new SpeechSynthesisUtterance(speakable(text, hasBlocks ? c.seeScreen : null));
     utterance.lang = lang;
@@ -61,18 +61,18 @@ export function ReadAloud({ text, hasBlocks }: { text: string; hasBlocks: boolea
   );
 }
 
-/** 去掉 Markdown 标记、表格和资料编号，转成适合朗读的文字。 */
+/** Strip Markdown, tables and source IDs to get text suitable for reading aloud. */
 export function speakable(markdown: string, suffix: string | null): string {
   const lines = markdown
     .split("\n")
-    .filter((line) => !line.trim().startsWith("|")) // 表格
+    .filter((line) => !line.trim().startsWith("|")) // tables
     .map((line) =>
       line
         .replace(/^\s*#{1,6}\s*/, "")
         .replace(/^\s*>\s?/, "")
         .replace(/^\s*[-*]\s+/, "")
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // 链接只读文字
-        .replace(/\[[A-Z]{1,3}[-\w#]*\]/g, "") // 资料编号，如 [K17]、[ZA-F03#四]
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // read only the link text
+        .replace(/\[[A-Z]{1,3}[-\w#]*\]/g, "") // source IDs such as [K17] or [ZA-F03#<section>]
         .replace(/[*_`~]/g, ""),
     );
   const text = lines.join("\n").replace(/\n{2,}/g, "\n").trim();

@@ -1,12 +1,16 @@
-"""模型熔断器：模型服务连续失败时暂停调用，直接给客户明确提示，而不是让每个请求都等到超时。
+"""Model circuit breaker: when the model service keeps failing, stop calling it and tell customers
+clearly instead of letting every request time out.
 
-状态：
-    CLOSED（正常）──连续失败达到阈值──▶ OPEN（暂停调用，持续 cooldown 秒）
-    OPEN ──冷却结束──▶ HALF_OPEN（只放行一个探测请求）
-    HALF_OPEN ──探测成功──▶ CLOSED；探测失败 ──▶ OPEN（重新计时）
+States:
+    CLOSED (normal) ──consecutive failures reach the threshold──▶ OPEN (calls paused for cooldown
+    seconds)
+    OPEN ──cooldown ends──▶ HALF_OPEN (one probe request allowed)
+    HALF_OPEN ──probe succeeds──▶ CLOSED; probe fails ──▶ OPEN (timer restarts)
 
-只统计模型服务本身的失败（超时、连接错误、限流、服务端错误），工具或业务代码的异常不触发熔断。
-单进程内存状态；多实例部署时各实例独立熔断（对上游故障足够，且不引入共享存储的新故障点）。
+Only failures of the model service itself count (timeouts, connection errors, rate limits, server
+errors); tool or business-code exceptions don't trip it.
+In-memory per process; with multiple instances each breaks independently (enough for upstream
+outages, without adding shared storage as a new point of failure).
 """
 
 import threading
@@ -49,7 +53,8 @@ class CircuitBreaker:
         return self._state
 
     def allow(self) -> bool:
-        """是否放行本次请求。半开状态只放行一个探测请求，其余继续快速失败。"""
+        """Whether to let this request through. Half-open lets one probe through; the rest keep
+        failing fast."""
         with self._lock:
             state = self._current_state()
             if state == CLOSED:
@@ -97,7 +102,7 @@ def get_breaker() -> CircuitBreaker:
 
 
 def reset_breaker() -> None:
-    """测试用：恢复初始状态。"""
+    """For tests: reset to the initial state."""
     global _breaker
     _breaker = None
     METRICS.set("wealthpilot_llm_circuit_state", 0)

@@ -1,4 +1,4 @@
-"""客户基础画像、上下文组装与配置模拟测试（不依赖数据库）。"""
+"""Customer base profile, context assembly and allocation simulation tests (no database)."""
 
 from decimal import Decimal as D
 
@@ -35,13 +35,13 @@ def status(result, label):
     return [c.status for c in result.checks if c.label == label]
 
 
-# ---------- 基础画像 ----------
+# ---------- Base profile ----------
 
 
 def test_base_profile_is_read_from_bank_system():
     base = get_customer_info_system().get("demo_customer_1")
     assert base.age == 52 and base.kyc_verified
-    # 活期 15 万 + 每日开放的知岸活钱宝 5 万；定期不计入
+    # ¥150,000 checking + ¥50,000 in daily-open Zhian Ready Cash; time deposits don't count
     assert base.assets_at_bank.liquid_total() == D(200000)
     summary = base.summary()
     assert summary["source"] == "知岸银行客户信息系统（模拟）"
@@ -67,7 +67,7 @@ def test_prompt_section_layers_base_and_needs():
     assert "不要再向客户询问" in text
 
 
-# ---------- 配置模拟 ----------
+# ---------- Allocation simulation ----------
 
 
 def test_main_scenario_allocation_passes_with_target_warning():  # S14
@@ -75,7 +75,7 @@ def test_main_scenario_allocation_passes_with_target_warning():  # S14
     assert r.passed
     assert sum(s.pct for s in r.slices) == 1
     assert status(r, "流动性") == [OK]
-    assert status(r, "目标收益") == [WARN]  # 3.20% 上限低于 5% 目标
+    assert status(r, "目标收益") == [WARN]  # 3.20% ceiling is below the 5% target
     assert r.annual_fee == D("5405.00")  # 640 + 2520 + 1300 + 945
 
 
@@ -118,8 +118,8 @@ def test_invalid_items_raise():
         simulate([("知岸活钱宝", D(0))], CATALOG, "C2", MAIN_NEEDS)
 
 
-def test_age_conflict_note_when_reply_ignores_bank_record():  # P7 场景评估 M02
-    base = get_customer_info_system().get("demo_customer_1")  # 52 岁
+def test_age_conflict_note_when_reply_ignores_bank_record():  # P7 scenario M02
+    base = get_customer_info_system().get("demo_customer_1")  # age 52
     note = age_conflict_note("我今年35岁，帮我看看产品", "以下是产品……", base)
     assert note and "52 岁" in note and "网点更新" in note
     assert age_conflict_note("我今年35岁", "根据登记，您的年龄为 52 岁……", base) is None
@@ -127,11 +127,12 @@ def test_age_conflict_note_when_reply_ignores_bank_record():  # P7 场景评估 
     assert age_conflict_note("我想买理财", "以下是产品……", base) is None
 
 
-# ---------- 客户等级与营销活动（2026-10-18） ----------
+# ---------- Customer tiers and campaigns (2026-10-18) ----------
 
 
 def test_bank_recorded_tier_matches_benefit_thresholds():
-    """基础画像中的客户等级（银行系统记录）应与等级规则一致，防止演示数据前后矛盾。"""
+    """The tier in the base profile (bank records) must match the tier rules, so demo data stays
+    consistent."""
     system = get_customer_info_system()
     for cid in ("demo_customer_1", "demo_customer_2", "pytest_customer", "eval_customer"):
         base = system.get(cid)
@@ -139,7 +140,7 @@ def test_bank_recorded_tier_matches_benefit_thresholds():
 
 
 def test_tier_gap_and_projection_with_new_money():
-    chen = get_customer_info_system().get("demo_customer_2")  # 8 万，金卡客户
+    chen = get_customer_info_system().get("demo_customer_2")  # ¥80,000, Gold
     status = tier_status(chen, D(450000))
     assert status.tier.name == "金卡客户" and status.next_tier.name == "财富客户"
     assert status.gap == D(420000)
@@ -165,10 +166,10 @@ def test_campaigns_filtered_by_period_and_tier():
         "FIRST_WEALTH_2026Q4",
     }
     assert {c.id for c in active_campaigns(wealth, date(2026, 10, 18))} == {"NEW_ASSET_2026Q4"}
-    assert active_campaigns(gold, date(2027, 1, 5)) == []  # 活动已结束
+    assert active_campaigns(gold, date(2027, 1, 5)) == []  # campaign has ended
 
 
-def test_tier_upgrade_note_once_per_conversation():  # 场景评估 V02
+def test_tier_upgrade_note_once_per_conversation():  # scenario V02
     chen = get_customer_info_system().get("demo_customer_2")
     needs = Needs(investment_amount=D(450000))
     note = tier_upgrade_note(chen, needs, "为您推荐以下产品……", history="")

@@ -1,7 +1,8 @@
-"""根据 data/products/products.yaml 生成虚构产品说明书到 data/products/docs/。
+"""Generate fictional product prospectuses from data/products/products.yaml into
+data/products/docs/.
 
-修改产品要素后运行（在 backend/ 下）：uv run python ../scripts/generate_product_docs.py
-测试 test_generated_docs_are_up_to_date 会检查说明书是否与要素同步。
+Run after changing product terms (from backend/): uv run python ../scripts/generate_product_docs.py
+The test test_generated_docs_are_up_to_date checks that prospectuses match the terms.
 """
 
 import sys

@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 
 
 def _warmup() -> None:
-    """后台预热：加载向量模型并同步检索索引（首次部署约需几十秒，之后只计算有变化的内容）。"""
+    """Background warm-up: load the embedding model and sync the search index (tens of seconds on
+    first deploy, then only changed content)."""
     from datetime import date
 
     from app.rag.service import get_retriever
@@ -64,7 +65,8 @@ app = FastAPI(title="WealthPilot AI", version=get_settings().app_version, lifesp
 
 @app.exception_handler(PoolTimeoutError)
 async def busy(_: Request, exc: PoolTimeoutError) -> JSONResponse:
-    """数据库连接池耗尽（流量超出容量）：明确告知客户稍后再试，而不是笼统的 500。"""
+    """Database pool exhausted (traffic beyond capacity): tell the customer to try again shortly
+    instead of a generic 500."""
     logger.error("database pool exhausted", exc_info=exc)
     METRICS.inc(
         "wealthpilot_http_requests_total",
@@ -87,7 +89,8 @@ app.add_middleware(
     allow_headers=["Content-Type"],
     expose_headers=["X-Request-ID"],
 )
-# 最外层：请求编号与访问日志覆盖所有请求（包括被安全中间件拒绝的）
+# Outermost: request IDs and access logs cover every request (including those rejected by the
+# security middleware)
 app.add_middleware(RequestContextMiddleware)
 app.include_router(health.router)
 app.include_router(auth.router)
@@ -102,4 +105,4 @@ app.include_router(speech.router)
 app.include_router(ops.router)
 app.include_router(
     bank_sim_api.router
-)  # 模拟手机银行（演示）；BANK_SIM_ENABLED=false 时接口返回 404
+)  # simulated mobile banking (demo); returns 404 when BANK_SIM_ENABLED=false

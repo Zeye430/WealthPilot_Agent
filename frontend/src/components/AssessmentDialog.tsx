@@ -55,7 +55,7 @@ type Props = {
   onConfirmed: (state: CustomerState, result: AssessmentResult) => void;
 };
 
-/** 问卷以固定表单呈现，计分完全在后端；LLM 不参与提问和计分。手机上从底部弹出。 */
+/** The questionnaire is a fixed form and scoring happens entirely in the backend; the LLM neither asks nor scores. Opens as a bottom sheet on phones. */
 export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
   const c = useCopy(COPY);
   const ref = useRef<HTMLDialogElement>(null);
@@ -73,7 +73,7 @@ export function AssessmentDialog({ open, onClose, onConfirmed }: Props) {
       getQuestionnaire()
         .then((q) => {
           setQuestionnaire(q);
-          setAnswers(q.prefill); // 银行系统已有的信息（如年龄）预选，客户确认或修改
+          setAnswers(q.prefill); // preselect what the bank system already knows (e.g. age) for the customer to confirm or change
         })
         .catch((e) => setError(e instanceof ApiError ? e.message : c.loadFailed));
     }
@@ -272,7 +272,7 @@ function ResultView({ result }: { result: AssessmentResult }) {
   );
 }
 
-/** 五级评级刻度：当前评级高亮，帮助客户理解自己处在哪一档。 */
+/** Five-level rating scale with the current rating highlighted, so customers see where they stand. */
 function RatingScale({ current }: { current: string }) {
   const c = useCopy(COPY);
   const index = RATINGS.indexOf(current);

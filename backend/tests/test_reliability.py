@@ -1,6 +1,8 @@
-"""可靠性（P8-4）：故障注入、模型熔断、单轮时长上限、金额必须有来源。
+"""Reliability (P8-4): fault injection, model circuit breaker, turn time budget, amounts must have a
+source.
 
-每种故障都验证两件事：系统行为可控（不崩溃、不卡住），以及客户看到明确的提示。
+Each fault checks two things: the system behaves predictably (no crash, no hang), and the customer
+sees a clear message.
 """
 
 import httpx
@@ -34,7 +36,7 @@ def timeout_error() -> openai.APITimeoutError:
 
 
 class FailingChatModel(BaseChatModel):
-    """模拟模型服务故障：每次调用都抛出指定异常，并记录调用次数。"""
+    """Simulated model outage: every call raises the given exception, and calls are counted."""
 
     calls: int = 0
     error: str = "timeout"
@@ -86,7 +88,7 @@ def outcomes() -> list[str]:
         )
 
 
-# ---------- 熔断器（纯逻辑） ----------
+# ---------- Circuit breaker (pure logic) ----------
 
 
 def test_breaker_opens_after_consecutive_failures_and_recovers():
@@ -99,7 +101,7 @@ def test_breaker_opens_after_consecutive_failures_and_recovers():
     assert b.state == OPEN and not b.allow()
     clock.t += 31
     assert b.state == HALF_OPEN
-    assert b.allow()  # 只放行一个探测请求
+    assert b.allow()  # lets exactly one probe through
     assert not b.allow()
     b.record_success()
     assert b.state == CLOSED and b.allow()
@@ -125,7 +127,7 @@ def test_success_resets_failure_count():
     assert b.state == CLOSED
 
 
-# ---------- 故障注入（端到端） ----------
+# ---------- Fault injection (end to end) ----------
 
 
 @db_required
@@ -156,9 +158,9 @@ def test_breaker_opens_and_fails_fast_without_calling_model(client, monkeypatch)
     assert resp.status_code == 503
     assert resp.json()["detail"] == BREAKER_OPEN_REPLY
     assert int(resp.headers["Retry-After"]) > 0
-    assert failing.calls + router.calls == calls_before  # 熔断中不再调用模型
+    assert failing.calls + router.calls == calls_before  # no model calls while the circuit is open
     assert outcomes() == ["ERROR", "ERROR", "BREAKER_OPEN"]
-    # 熔断期间其他功能照常可用
+    # Other features keep working while the circuit is open
     assert client.get("/api/v1/products").status_code == 200
     with use_locale("en"):
         client.cookies.set("wp_locale", "en")
@@ -179,7 +181,8 @@ def test_router_failure_falls_back_and_still_answers(client):
 
 @db_required
 def test_tool_internal_error_is_contained(client, monkeypatch):
-    """检索服务（向量库）内部异常：工具返回错误，模型照常作答，指标记录工具失败。"""
+    """Search service (vector store) fails internally: the tool returns an error, the model still
+    answers, and metrics record a tool failure."""
     import app.tools.document_tools as docs
 
     def broken(*_args, **_kwargs):
@@ -200,11 +203,11 @@ def test_tool_internal_error_is_contained(client, monkeypatch):
     assert m.tool_errors == 1 and m.outcome == "ANSWERED"
 
 
-# ---------- 单轮时长上限 ----------
+# ---------- Turn time budget ----------
 
 
 class ClockAdvancingModel(ScriptedChatModel):
-    """每次调用后把时钟拨快，模拟一次很慢的模型调用。"""
+    """Advance the clock after each call to simulate a very slow model call."""
 
     clock: FakeClock
     step: float = 0
@@ -225,7 +228,7 @@ def test_turn_deadline_stops_calling_model_but_keeps_results():
             AIMessage("不应被调用"),
         ],
         clock=clock,
-        step=120,  # 第一次调用后时间就已耗尽
+        step=120,  # the budget is used up after the first call
     )
     router = ScriptedChatModel(responses=[AIMessage("CALCULATION")])
     graph = build_graph(model, router, clock=clock)
@@ -240,14 +243,15 @@ def test_turn_deadline_stops_calling_model_but_keeps_results():
     )
     assert model.calls == 1
     assert result["reply"].startswith(TURN_TIMEOUT_REPLY)
-    assert "calculation_result" in [b["type"] for b in result["ui_blocks"]]  # 已算出的结果照常展示
+    # results already computed are still shown
+    assert "calculation_result" in [b["type"] for b in result["ui_blocks"]]
     assert any(d["decision"] == "TIMEOUT" for d in result["policy_decisions"])
 
 
-# ---------- 金额必须有来源 ----------
+# ---------- Amounts must have a source ----------
 
 
-def test_model_arithmetic_amount_is_flagged():  # 2b 英文场景评估 P04
+def test_model_arithmetic_amount_is_flagged():  # P8-2b English scenario P04
     facts = '{"subscription_fee": "0.00", "redemption_fee": "500.00", "net_proceeds": "99500.00"}'
     facts += "\n客户：我买了10万元知岸稳享每日开放，持有5天就赎回"
     wrong = "赎回费 500 元，到手约 95,500 元。"
@@ -265,7 +269,7 @@ def test_amount_rounding_and_units_are_tolerated():
 
 
 def test_knowledge_base_amounts_count_as_grounded():
-    # 存款保险 50 万元来自已核对原文的知识库
+    # The ¥500,000 deposit-insurance cap comes from the source-checked knowledge base
     assert ungrounded_amounts("存款保险最高偿付 50 万元。", "") == []
 
 
@@ -278,7 +282,8 @@ def test_customer_profile_amounts_are_grounded():
 
 
 def test_illustrative_amount_allowed_when_marked_as_assumption():
-    # 产品负责人决定（2026-10-19）：常识讲解可以用整数金额举例，但同一句要说明是假设
+    # Product-owner decision (2026-10-19): general explanations may use round example amounts, but
+    # the same sentence must say it's an assumption
     zh = "假设您在同一家银行存了 60 万元，存款保险最高偿付 50 万元。"
     assert ungrounded_amounts(zh, "") == []
     assert ungrounded_amounts("例如投入 10 万元、年化 3%，具体收益以测算结果为准。", "") == []
@@ -286,30 +291,33 @@ def test_illustrative_amount_allowed_when_marked_as_assumption():
     assert ungrounded_amounts(en, "") == []
     split = "Coverage is per bank (e.g. ¥1.5 million split across banks)."
     assert ungrounded_amounts(split, "") == []
-    # 同一金额在后文再次提到时沿用该假设
+    # The same amount mentioned again later keeps the assumption
     assert ungrounded_amounts(zh + "这 60 万元中超出限额的部分不受保障。", "") == []
 
 
 def test_illustrative_amount_without_assumption_marker_is_flagged():
     assert ungrounded_amounts("您在同一家银行存了 60 万元。", "") == ["60 万元"]
-    # 假设写在另一句里不算：标记必须和金额在同一句
+    # An assumption marker in another sentence doesn't count: it must be in the same sentence as the
+    # amount
     assert ungrounded_amounts("我们举个例子。您存了 60 万元。", "") == ["60 万元"]
 
 
 def test_calculated_result_in_assumption_sentence_is_still_flagged():
-    # 举例的输入可以是假设，计算结果仍须来自工具（模型不能自己算）
+    # Example inputs may be assumptions; calculated results must still come from a tool (the model
+    # can't compute them)
     zh = "假设投入 10 万元、年化 3%，一年后约 10.3 万元。"
     assert ungrounded_amounts(zh, "") == ["10.3 万元"]
     en = "Suppose you invest ¥1,000,000 at 6% for 10 years; it grows to ¥1,790,848."
     assert ungrounded_amounts(en, "") == ["¥1,790,848"]
 
 
-# ---------- 数据库连接池耗尽 ----------
+# ---------- Database pool exhausted ----------
 
 
 @db_required
 def test_pool_exhaustion_returns_busy_503(client):
-    """P8-4 压测发现：并发超过连接池容量时原先等 30 秒后返回笼统的 500。"""
+    """Found in P8-4 load testing: beyond pool capacity, requests used to wait 30 s and then get
+    a generic 500."""
     from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
     from app.db.session import get_session
@@ -324,12 +332,12 @@ def test_pool_exhaustion_returns_busy_503(client):
     assert resp.headers["Retry-After"] == "5"
 
 
-def test_amount_tolerance_catches_extra_zero():  # 英文评估 P04：99,500 写成 995,000
+def test_amount_tolerance_catches_extra_zero():  # English eval P04: 99,500 written as 995,000
     facts = '{"net_proceeds": "99500.00"} 客户资料：总资产 1,000,000'
     assert ungrounded_amounts("Your net proceeds would be ¥995,000.", facts) == ["¥995,000"]
 
 
-def test_english_product_name_ignores_punctuation():  # 英文评估 R02
+def test_english_product_name_ignores_punctuation():  # English eval R02
     from app.products.catalog import load_catalog
 
     assert load_catalog().find_by_name("Zhian Steady 1 Year Holding").code == "ZA-F03"

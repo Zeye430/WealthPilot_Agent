@@ -1,7 +1,9 @@
-"""本次需求：客户在对话中提供的投资需求（金额、期限、流动性储备、目标收益等）。
+"""Current needs: investment needs the customer gives in chat (amount, horizon, liquidity reserve,
+target return, etc.).
 
-与基础画像分开存放：基础画像来自银行系统、只读；本次需求可由客户随时补充或修改，
-每个字段记录来源与更新时间。
+Stored separately from the base profile: the base profile comes from the bank system and is
+read-only; current needs can be added or changed by the customer at any time,
+with the source and update time recorded for each field.
 """
 
 from datetime import datetime
@@ -14,8 +16,8 @@ from app.core.i18n import L
 from app.db.models import CustomerNeeds
 from app.products.presenter import format_money, format_rate
 
-CONVERSATION = "CONVERSATION"  # 对话中提供
-CUSTOMER_EDIT = "CUSTOMER_EDIT"  # 客户在页面修改
+CONVERSATION = "CONVERSATION"  # given in chat
+CUSTOMER_EDIT = "CUSTOMER_EDIT"  # edited by the customer on a page
 SOURCE_LABELS = {CONVERSATION: "对话中提供", CUSTOMER_EDIT: "客户修改"}
 SOURCE_LABELS_EN = {CONVERSATION: "From chat", CUSTOMER_EDIT: "Edited by you"}
 
@@ -58,7 +60,7 @@ class NeedsUpdate(BaseModel):
 
 
 class Needs(BaseModel):
-    """当前需求的类型化视图；未提供的字段为 None。"""
+    """Typed view of current needs; fields not provided are None."""
 
     investment_amount: Decimal | None = None
     horizon_months: int | None = None

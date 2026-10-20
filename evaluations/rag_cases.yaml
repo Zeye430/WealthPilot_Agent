@@ -1,7 +1,7 @@
-# RAG 检索评估集：口语化问题 → 应命中的资料块（任一命中即算对）。
-# product：客户点名了产品时，检索范围限定在该产品说明书 + 知识库（与 search_documents 工具一致）。
-# 运行：cd backend && uv run python ../evaluations/run_rag_eval.py
-# 状态：Claude 起草（2026-10-17），产品负责人可抽查；负例用于校准「资料中未找到」阈值
+# RAG retrieval evaluation set: casual questions → chunks that should be found (any hit counts).
+# product: when the customer names a product, search is limited to its prospectus + the knowledge base (same as the search_documents tool).
+# Run: cd backend && uv run python ../evaluations/run_rag_eval.py
+# Status: drafted by Claude (2026-10-17), spot-checkable by the product owner; negatives calibrate the "not found in sources" threshold
 
 - { query: 银行倒闭了我的存款能赔多少, expected: [K17] }
 - { query: 买理财有存款保险吗, expected: [K18] }
@@ -28,7 +28,7 @@
 - { query: 有哪些风险, product: HY-F04, expected: ["HY-F04#七"] }
 - { query: 能投股票吗, product: ZA-P01, expected: ["ZA-P01#二"] }
 
-# 负例：知识库未覆盖的金融问题，应判定为「资料中未找到」（expected 为空）
+# Negatives: financial questions the knowledge base doesn't cover, which should be judged "not found in sources" (expected is empty)
 - { query: 个人所得税怎么申报, expected: [] }
 - { query: 美股怎么开户, expected: [] }
 - { query: 黄金ETF怎么买, expected: [] }

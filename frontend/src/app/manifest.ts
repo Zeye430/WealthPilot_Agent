@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// 渐进式网页应用：手机上「添加到主屏幕」后全屏打开，像原生 App 一样使用
+// Progressive web app: after "Add to Home Screen" on a phone it opens full screen, like a native app
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "WealthPilot",

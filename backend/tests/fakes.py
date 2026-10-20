@@ -4,7 +4,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 
 
 class ScriptedChatModel(BaseChatModel):
-    """按顺序返回预设回复的假模型，用于不依赖真实 LLM 的流程测试。"""
+    """Fake model returning preset replies in order, for flow tests that don't need a real LLM."""
 
     responses: list[AIMessage]
     calls: int = 0

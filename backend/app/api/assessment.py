@@ -46,7 +46,8 @@ def me(
 
 @router.get("/assessment/questionnaire")
 def questionnaire(customer_id: str = Depends(get_customer_id)):
-    """问卷 + 预选项：银行系统已有客户年龄，第 1 题预选，客户确认或修改即可。"""
+    """Questionnaire with preselected answers: the bank already knows the customer's age, so
+    question 1 is preselected for the customer to confirm or change."""
     view = load_questionnaire().public_view()
     base = get_customer_info_system().get(customer_id)
     view["prefill"] = {"q1": age_option(base.age)} if base else {}
@@ -87,7 +88,8 @@ def confirm(
 
 @router.post("/demo/reset", status_code=204)
 def reset_demo(db: Session = Depends(get_session), customer_id: str = Depends(get_customer_id)):
-    """清空当前演示客户的测评、会话、本次需求与开售提醒（基础画像来自银行系统，不受影响）。"""
+    """Clear the current demo customer's assessments, conversations, current needs and sale
+    reminders (the base profile comes from the bank system and is untouched)."""
     if not get_settings().demo_mode:
         raise HTTPException(status_code=404)
     conversation_ids = select(Conversation.id).where(Conversation.customer_id == customer_id)

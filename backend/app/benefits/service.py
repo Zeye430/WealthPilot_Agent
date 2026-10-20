@@ -1,6 +1,8 @@
-"""客户等级与营销活动：从 data/benefits/benefits.yaml 加载，按金融资产总额计算等级与升级差距。
+"""Customer tiers and campaigns: loaded from data/benefits/benefits.yaml; tier and upgrade gap
+computed from total financial assets.
 
-等级只与资产总额挂钩（存款也计入），不与某款产品挂钩；计算由代码完成，AI 只转述结果。
+Tiers depend only on total assets (deposits included), never on a specific product; code does the
+math and the AI only relays the result.
 """
 
 from datetime import date
@@ -16,7 +18,7 @@ from app.customers.base import BaseProfile
 from app.products.presenter import format_money
 
 BENEFITS_PATH = Path(__file__).resolve().parents[3] / "data/benefits/benefits.yaml"
-# 距下一等级不足门槛的 20% 时视为「接近」，可主动提示一次
+# Within 20% of the next tier's threshold counts as "close", worth one proactive mention
 NEAR_RATIO = Decimal("0.2")
 
 
@@ -83,7 +85,7 @@ def load_benefits(path: Path = BENEFITS_PATH) -> BenefitsConfig:
 
 
 def tier_label(name: str) -> str:
-    """银行系统里的等级名称（如「财富客户」）按当前语言显示。"""
+    """Tier names from the bank system (e.g. "Wealth") shown in the current language."""
     tier = next((t for t in load_benefits().tiers if t.name == name), None)
     return tier.display_name if tier else name
 
@@ -92,9 +94,9 @@ class TierStatus(BaseModel):
     aum: Decimal
     tier: Tier
     next_tier: Tier | None
-    gap: Decimal | None  # 距下一等级还差多少
+    gap: Decimal | None  # how far from the next tier
     near_next: bool
-    projected_aum: Decimal | None = None  # 计划新增资金转入后
+    projected_aum: Decimal | None = None  # after the planned new money moves in
     projected_tier: Tier | None = None
 
     @property
@@ -130,7 +132,7 @@ def active_campaigns(tier: Tier, today: date) -> list[Campaign]:
 
 
 def benefits_block(status: TierStatus, today: date) -> dict:
-    """界面卡片：当前等级、升级进度、权益与可参与的活动。"""
+    """UI card: current tier, upgrade progress, benefits and current campaigns."""
     config = load_benefits()
     nxt = status.next_tier
     return {

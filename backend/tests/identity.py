@@ -1,7 +1,9 @@
-"""测试与离线评估用的身份替身：用 X-Demo-User 请求头指定身份，替换 get_current_user 依赖。
+"""Identity double for tests and offline evaluation: the X-Demo-User header sets the identity,
+replacing the get_current_user dependency.
 
-生产代码只有会话 Cookie 一条认证路径（见 app/api/deps.py）；这个替身只在测试和评估脚本中
-通过 app.dependency_overrides 注入，真实认证由 tests/test_auth.py 单独测试。
+Production code has a single authentication path, the session cookie (see app/api/deps.py); this
+double is injected only in tests and evaluation scripts
+via app.dependency_overrides; real authentication is tested separately in tests/test_auth.py.
 """
 
 from fastapi import Header, HTTPException

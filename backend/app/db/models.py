@@ -54,7 +54,8 @@ class Message(Base):
 
 
 class ToolCallLog(Base):
-    """工具调用审计：记录调用了什么、是否成功、耗时，不记录完整对话内容。"""
+    """Tool-call audit: what was called, whether it succeeded and how long it took; no full
+    conversation content."""
 
     __tablename__ = "tool_calls"
 
@@ -67,7 +68,8 @@ class ToolCallLog(Base):
 
 
 class RiskAssessment(Base):
-    """风险测评记录。每次测评新增一行，不覆盖历史；评级只能由计分代码写入。"""
+    """Risk assessment records. Each assessment adds a row and never overwrites history; ratings
+    are written only by the scoring code."""
 
     __tablename__ = "risk_assessments"
 
@@ -79,7 +81,8 @@ class RiskAssessment(Base):
     rating: Mapped[str] = mapped_column(String(4))
     vetoed: Mapped[bool] = mapped_column(Boolean)
     warnings: Mapped[list] = mapped_column(JSONB, default=list)
-    # PENDING_CONFIRMATION（待客户确认）| CONFIRMED（已生效）| SUPERSEDED（被重新作答取代）
+    # PENDING_CONFIRMATION (awaiting customer confirmation) | CONFIRMED (in effect) | SUPERSEDED
+    # (replaced by a new submission)
     status: Mapped[str] = mapped_column(String(24))
     is_simulated: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -88,7 +91,7 @@ class RiskAssessment(Base):
 
 
 class PolicyDecisionLog(Base):
-    """合规决策审计：哪个检查点、什么结论、依据哪个规则版本。"""
+    """Compliance decision audit: which checkpoint, what decision, under which rule version."""
 
     __tablename__ = "policy_decisions"
 
@@ -102,11 +105,12 @@ class PolicyDecisionLog(Base):
 
 
 class DocumentChunk(Base):
-    """检索语料的向量索引。语料本身来自知识库与说明书文件，本表只是可重建的派生索引。"""
+    """Vector index for the search corpus. The corpus itself comes from knowledge-base and
+    prospectus files; this table is a rebuildable derived index."""
 
     __tablename__ = "document_chunks"
 
-    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)  # K17 / ZA-F03#四
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)  # K17 / ZA-F03#<section>
     kind: Mapped[str] = mapped_column(String(16), index=True)
     product_code: Mapped[str | None] = mapped_column(String(16), index=True)
     content_hash: Mapped[str] = mapped_column(String(16))
@@ -116,18 +120,20 @@ class DocumentChunk(Base):
 
 
 class CustomerNeeds(Base):
-    """本次需求：客户在对话或页面中提供的投资需求，叠加在只读的基础画像之上。"""
+    """Current needs: investment needs the customer gives in chat or on a page, layered on top of
+    the read-only base profile."""
 
     __tablename__ = "customer_needs"
 
     customer_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    # {字段: {"value": ..., "source": "CONVERSATION" | "CUSTOMER_EDIT", "updated_at": ISO 时间}}
+    # {field: {"value": ..., "source": "CONVERSATION" | "CUSTOMER_EDIT", "updated_at": ISO time}}
     fields: Mapped[dict] = mapped_column(JSONB, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Handoff(Base):
-    """人工交接。状态只能由真实操作推进：客户点击同意、理财经理接单 / 回复 / 结束。"""
+    """Handoff to a human. Status only advances through real actions: the customer agrees; the
+    relationship manager accepts / replies / closes."""
 
     __tablename__ = "handoffs"
 
@@ -146,7 +152,7 @@ class Handoff(Base):
 
 
 class HandoffEvent(Base):
-    """交接状态变更留痕：谁、何时、从什么状态到什么状态。"""
+    """Handoff status history: who changed it, when, and from which status to which."""
 
     __tablename__ = "handoff_events"
 
@@ -154,25 +160,28 @@ class HandoffEvent(Base):
     handoff_id: Mapped[str] = mapped_column(ForeignKey("handoffs.id"), index=True)
     from_status: Mapped[str | None] = mapped_column(String(24))
     to_status: Mapped[str] = mapped_column(String(24))
-    actor: Mapped[str] = mapped_column(String(64))  # 客户 / 理财经理 ID / AI
+    actor: Mapped[str] = mapped_column(String(64))  # customer / relationship manager ID / AI
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class SaleReminder(Base):
-    """新品开售提醒：只能由客户本人发起（点击「开售提醒我」或在对话中明确同意）。"""
+    """New-product sale reminders: only the customer can create one (the "remind me" button or
+    explicit agreement in chat)."""
 
     __tablename__ = "sale_reminders"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     customer_id: Mapped[str] = mapped_column(String(64), index=True)
     product_code: Mapped[str] = mapped_column(String(16))
-    source: Mapped[str] = mapped_column(String(16))  # BUTTON 界面按钮 | CHAT 对话中客户同意
+    # BUTTON: UI button | CHAT: customer agreed in chat
+    source: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class User(Base):
-    """登录账号：客户（关联客户编号）或理财经理（关联员工编号）。真实系统中对接银行统一身份认证。"""
+    """Sign-in accounts: customers (linked to a customer ID) or relationship managers (linked to
+    an employee ID). A real system would use the bank's single sign-on."""
 
     __tablename__ = "users"
 
@@ -188,7 +197,8 @@ class User(Base):
 
 
 class AuthSession(Base):
-    """服务端会话：只保存令牌的 SHA-256，数据库泄露也无法直接冒用会话；可随时吊销。"""
+    """Server-side sessions: only the token's SHA-256 is stored, so a database leak can't be used
+    to hijack sessions; revocable at any time."""
 
     __tablename__ = "auth_sessions"
 
@@ -201,10 +211,12 @@ class AuthSession(Base):
 
 
 class TurnMetric(Base):
-    """每轮对话的运行指标（P8-3）：耗时、模型调用、token 与费用估算、工具、审查结论。
+    """Per-turn runtime metrics (P8-3): latency, model calls, token and cost estimates, tools,
+    review outcome.
 
-    刻意不存对话内容和客户编号：运维看板只看汇总，追查具体问题时凭 request_id / conversation_id
-    关联有权限控制的审计表（policy_decisions、tool_calls）。
+    Deliberately stores no conversation content or customer IDs: the ops dashboard shows aggregates
+    only; to trace a specific issue, use request_id / conversation_id
+    to join the access-controlled audit tables (policy_decisions, tool_calls).
     """
 
     __tablename__ = "turn_metrics"
@@ -217,7 +229,7 @@ class TurnMetric(Base):
     permission: Mapped[str | None] = mapped_column(String(32))
     intent: Mapped[str | None] = mapped_column(String(32))
     # ANSWERED | OUT_OF_SCOPE | ASSESSMENT_REQUIRED | FALLBACK | TOOL_LIMIT | TIMEOUT
-    # | ERROR（模型或系统异常）| BREAKER_OPEN（熔断中，未调用模型）
+    # | ERROR (model or system error) | BREAKER_OPEN (circuit open, model not called)
     outcome: Mapped[str] = mapped_column(String(24), index=True)
     guard_decision: Mapped[str | None] = mapped_column(
         String(16)
@@ -237,9 +249,11 @@ class TurnMetric(Base):
 
 
 class UsedAppTicket(Base):
-    """已使用的手机银行进入凭证（一次性）：同一凭证再次使用时主键冲突，视为重放。
+    """Used mobile banking entry tickets (one-time): reusing a ticket hits a primary-key conflict
+    and counts as a replay.
 
-    过期后的记录可定期清理（凭证本身已无法通过有效期校验）。
+    Expired records can be purged periodically (the tickets themselves already fail the expiry
+    check).
     """
 
     __tablename__ = "used_app_tickets"

@@ -1,6 +1,8 @@
-"""API 集成测试：真实数据库 + 假模型。数据库未启动时自动跳过（docker compose up -d db）。
+"""API integration tests: real database + fake model. Skipped automatically if the database isn't
+running (docker compose up -d db).
 
-使用专用的 pytest_customer，测试前后清空其数据，不影响演示账号。
+Uses a dedicated pytest_customer whose data is cleared before and after, so demo accounts are
+untouched.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -20,7 +22,8 @@ from tests.fakes import ScriptedChatModel, tool_call
 
 CUSTOMER = "pytest_customer"
 HEADERS = {"X-Demo-User": CUSTOMER}
-MAIN_SCENARIO = dict(zip([f"q{i}" for i in range(1, 11)], "CCCBBBBBCB", strict=True))  # 51 分 C2
+# 51 points, C2
+MAIN_SCENARIO = dict(zip([f"q{i}" for i in range(1, 11)], "CCCBBBBBCB", strict=True))
 
 
 def _db_available() -> bool:
@@ -42,7 +45,7 @@ def client(monkeypatch):
     yield c
     c.post("/api/v1/demo/reset")
     for dep in [d for d in app.dependency_overrides if d is not get_current_user]:
-        app.dependency_overrides.pop(dep)  # 保留身份替身，由 conftest 负责清理
+        app.dependency_overrides.pop(dep)  # keep the identity double; conftest cleans it up
 
 
 def use_models(*, main: list, router: list):
@@ -71,7 +74,7 @@ def policy_log(conversation_id: str):
         ).all()
 
 
-# ---------- 测评流程 ----------
+# ---------- Assessment flow ----------
 
 
 def test_questionnaire_hides_scores(client):
@@ -90,7 +93,7 @@ def test_new_customer_requires_assessment(client):
 def test_submit_then_confirm_activates_rating(client):
     sub = client.post("/api/v1/assessment", json={"answers": MAIN_SCENARIO}).json()
     assert sub["result"]["rating"] == "C2" and sub["result"]["score"] == 51
-    # 确认前评级不生效
+    # The rating doesn't take effect before confirmation
     assert client.get("/api/v1/me").json()["permission"] == "ASSESSMENT_REQUIRED"
 
     state = client.post(f"/api/v1/assessment/{sub['assessment_id']}/confirm").json()
@@ -137,10 +140,10 @@ def test_unknown_demo_user_forbidden(client):
     assert resp.status_code == 403
 
 
-# ---------- 对话 + 门禁 ----------
+# ---------- Chat + gate ----------
 
 
-def test_product_request_blocked_until_assessed(client):  # S01 端到端
+def test_product_request_blocked_until_assessed(client):  # S01 end to end
     use_models(main=[], router=["PRODUCT_OR_ADVICE"])
     body = client.post("/api/v1/chat", json={"message": "推荐一款理财"}).json()
     assert body["reply"]["ui_blocks"][0]["type"] == "assessment_prompt"
@@ -198,7 +201,8 @@ def test_other_customer_cannot_read_conversation(client):
 
 
 def test_empty_message_rejected(client):
-    use_models(main=[], router=[])  # 不依赖本地是否配置了 Kimi Key（CI 中没有）
+    # independent of whether a Kimi key is configured locally (CI has none)
+    use_models(main=[], router=[])
     assert client.post("/api/v1/chat", json={"message": ""}).status_code == 422
 
 
@@ -214,14 +218,15 @@ def test_health():
     assert ready["checks"]["database"]["ok"] is True
 
 
-# ---------- 产品 API（Phase 3） ----------
+# ---------- Product API (Phase 3) ----------
 
 
-def test_products_browsable_before_assessment(client):  # 产品负责人决定：全部可看
+# product-owner decision: everything is viewable
+def test_products_browsable_before_assessment(client):
     body = client.get("/api/v1/products").json()
     assert body["rating"] is None
     codes = {i["code"] for i in body["items"]}
-    assert len(codes) == 15 and "ZA-F05" not in codes  # 已到期产品不展示
+    assert len(codes) == 15 and "ZA-F05" not in codes  # matured products are hidden
     assert not any(i["purchasable"] for i in body["items"])
     detail = client.get("/api/v1/products/ZA-F01").json()
     assert detail["purchase"]["allowed"] is False
@@ -236,7 +241,7 @@ def test_products_api_marks_purchasable_by_rating(client):  # S11
     view_only = [i for i in body["items"] if not i["purchasable"]]
     assert {i["risk_level"] for i in buyable} <= {"PR1", "PR2"}
     assert {i["risk_level"] for i in view_only} == {"PR3", "PR4", "PR5"}
-    assert body["items"][: len(buyable)] == buyable  # 可买入的排在前面
+    assert body["items"][: len(buyable)] == buyable  # buyable products come first
     assert "超出您的风险承受能力" in view_only[0]["warnings"][0]
     assert "随时可取" in body["items"][0]["highlights"]
 
@@ -256,7 +261,7 @@ def test_product_detail_over_rating_has_warning(client):  # S04b
     assert client.get("/api/v1/products/NOPE").status_code == 404
 
 
-# ---------- 买入确认（演示，只做到确认页） ----------
+# ---------- Purchase confirmation (demo, stops at the confirmation page) ----------
 
 ALL_DOCS = ["prospectus", "risk_disclosure", "sales_agreement"]
 
@@ -272,16 +277,16 @@ def test_purchase_preview_within_rating(client):
     body = preview(client, "ZA-F01", 10000)
     assert body["allowed"] is True and body["errors"] == []
     assert body["amount"] == "1 万元" and body["subscription_fee"] == "0 元"
-    assert body["available_balance"] == "5 万元"  # 基础画像中的活期存款
+    assert body["available_balance"] == "5 万元"  # checking balance from the base profile
     assert [d["id"] for d in body["documents"]] == ALL_DOCS
     assert "理财非存款" in body["risk_disclosure"]
 
 
 def test_purchase_blocked_by_code_rules(client):
-    assert "测评" in preview(client, "ZA-F01", 10000)["errors"][0]  # 未测评
+    assert "测评" in preview(client, "ZA-F01", 10000)["errors"][0]  # not assessed
     complete_assessment(client)  # C2
     assert "超出您的风险承受能力" in preview(client, "ZA-M01", 10000)["errors"][0]
-    assert "起购金额" in preview(client, "HY-F03", 10000)["errors"][0]  # 起购 30 万
+    assert "起购金额" in preview(client, "HY-F03", 10000)["errors"][0]  # minimum is ¥300,000
     assert "可用活期余额" in preview(client, "ZA-F01", 60000)["errors"][0]
     assert "已到期" in preview(client, "ZA-F05", 10000)["errors"][0]
 
@@ -294,18 +299,19 @@ def test_purchase_confirm_requires_documents_and_never_places_order(client):
     done = client.post("/api/v1/purchases/confirm", json={**req, "acknowledged": ALL_DOCS}).json()
     assert done["status"] == "DEMO_NOT_PLACED"
     assert "未实际下单" in done["message"]
-    # 服务端重新校验：绕过前端直接确认超评级产品也会被拒绝
+    # Re-checked on the server: confirming an above-rating product directly, bypassing the frontend,
+    # is still rejected
     over = {"product_code": "ZA-M01", "amount": 10000, "acknowledged": ALL_DOCS}
     assert client.post("/api/v1/purchases/confirm", json=over).status_code == 409
 
 
-# ---------- 新品与开售提醒（2026-10-18） ----------
+# ---------- New products and sale reminders (2026-10-18) ----------
 
 
 def test_products_api_lists_upcoming_with_remind_state(client):
     before = {u["code"]: u["remind"] for u in client.get("/api/v1/products").json()["upcoming"]}
     assert set(before) == {"ZA-F06", "HY-P02"}
-    assert before["ZA-F06"]["allowed"] is False  # 未测评不能预约
+    assert before["ZA-F06"]["allowed"] is False  # no reminders without an assessment
     complete_assessment(client)  # C2
     after = {u["code"]: u for u in client.get("/api/v1/products").json()["upcoming"]}
     assert after["ZA-F06"]["remind"] == {
@@ -316,7 +322,7 @@ def test_products_api_lists_upcoming_with_remind_state(client):
     }
     assert after["ZA-F06"]["sale_window"] == "10 月 26 日–10 月 30 日"
     assert after["ZA-F06"]["raise_limit"] == "5 亿元"
-    assert "超出您的风险承受能力" in after["HY-P02"]["remind"]["reason"]  # PR3 新品
+    assert "超出您的风险承受能力" in after["HY-P02"]["remind"]["reason"]  # PR3 new product
 
 
 def test_upcoming_product_cannot_be_bought(client):
@@ -335,7 +341,7 @@ def test_reminder_create_list_cancel(client):
     complete_assessment(client)
     created = client.post("/api/v1/reminders", json={"product_code": "ZA-F06"}).json()
     again = client.post("/api/v1/reminders", json={"product_code": "ZA-F06"}).json()
-    assert again["id"] == created["id"]  # 不重复创建
+    assert again["id"] == created["id"]  # not created twice
     rows = client.get("/api/v1/reminders").json()
     assert [r["product"]["code"] for r in rows] == ["ZA-F06"]
     assert "演示环境不发送" in rows[0]["delivery_note"]
@@ -351,7 +357,7 @@ def test_reminder_rules_enforced_by_code(client):
     over = client.post("/api/v1/reminders", json={"product_code": "HY-P02"})
     assert over.status_code == 409 and "超出" in over.json()["detail"]
     on_sale = client.post("/api/v1/reminders", json={"product_code": "ZA-F01"})
-    assert on_sale.status_code == 409  # 在售产品无需预约
+    assert on_sale.status_code == 409  # products on sale need no reminder
 
 
 def test_search_tool_returns_matching_upcoming_and_chat_reminder(client):
@@ -365,7 +371,8 @@ def test_search_tool_returns_matching_upcoming_and_chat_reminder(client):
     )
     body = client.post("/api/v1/chat", json={"message": "一年内不用，有什么产品？"}).json()
     block = next(b for b in body["reply"]["ui_blocks"] if b["type"] == "upcoming_products")
-    assert [i["code"] for i in block["items"]] == ["ZA-F06"]  # PR3 新品不展示给 C2
+    # the PR3 new product isn't shown to C2
+    assert [i["code"] for i in block["items"]] == ["ZA-F06"]
     assert block["items"][0]["reminded"] is False
 
     use_models(
@@ -378,16 +385,18 @@ def test_search_tool_returns_matching_upcoming_and_chat_reminder(client):
     conv = body["conversation_id"]
     client.post("/api/v1/chat", json={"conversation_id": conv, "message": "好的，帮我设个提醒"})
     assert [r["product"]["code"] for r in client.get("/api/v1/reminders").json()] == ["ZA-F06"]
-    # 之后的轮次再说「已预约」：客户资料中有提醒记录，不算虚假宣称
+    # Saying "reminder set" in a later turn: the customer data has the reminder record, so it isn't
+    # a false claim
     use_models(main=[AIMessage("已为您预约了开售提醒，开售当天会通知您。")], router=["SERVICE"])
     later = client.post("/api/v1/chat", json={"conversation_id": conv, "message": "提醒设好了吗"})
     assert later.json()["reply"]["content"].startswith("已为您预约")
 
 
-def test_reminder_claim_without_tool_is_blocked(client):  # 场景评估 N02
+def test_reminder_claim_without_tool_is_blocked(client):  # scenario N02
     complete_assessment(client)
     claim = "好的，已为您预约知岸定享 365 天第 15 期的开售提醒。"
-    # 两次都是新消息对象：同一个对象 id 相同，LangGraph 会覆盖而不是追加
+    # Both are new message objects: the same object has the same id, and LangGraph would replace
+    # instead of append
     use_models(main=[AIMessage(claim), AIMessage(claim)], router=["PRODUCT_OR_ADVICE"])
     body = client.post("/api/v1/chat", json={"message": "帮我设个开售提醒"}).json()
     assert (
@@ -397,7 +406,7 @@ def test_reminder_claim_without_tool_is_blocked(client):  # 场景评估 N02
     assert client.get("/api/v1/reminders").json() == []
 
 
-# ---------- 客户等级与权益（2026-10-18） ----------
+# ---------- Customer tiers and benefits (2026-10-18) ----------
 
 
 def test_benefits_tool_available_before_assessment(client):
@@ -410,15 +419,16 @@ def test_benefits_tool_available_before_assessment(client):
     )
     body = client.post("/api/v1/chat", json={"message": "我转钱进来有什么奖励？"}).json()
     block = next(b for b in body["reply"]["ui_blocks"] if b["type"] == "tier_benefits")
-    assert block["tier"]["name"] == "金卡客户"  # 测试客户 5 万
+    assert block["tier"]["name"] == "金卡客户"  # test customer has ¥50,000
     assert (
         block["projection"]["reaches_next"] is True
         and block["projection"]["tier_name"] == "财富客户"
     )
-    # 活动是否在期内由 test_campaigns_filtered_by_period_and_tier 用固定日期覆盖，这里不依赖当天日期
+    # Whether campaigns are in period is covered with fixed dates by
+    # test_campaigns_filtered_by_period_and_tier; this test doesn't depend on today's date
 
 
-# ---------- 客户画像（Phase 5） ----------
+# ---------- Customer profile (Phase 5) ----------
 
 
 def test_me_returns_base_profile_and_empty_needs(client):
@@ -428,7 +438,7 @@ def test_me_returns_base_profile_and_empty_needs(client):
 
 
 def test_questionnaire_prefills_age_from_bank_system(client):
-    assert client.get("/api/v1/assessment/questionnaire").json()["prefill"] == {"q1": "B"}  # 40 岁
+    assert client.get("/api/v1/assessment/questionnaire").json()["prefill"] == {"q1": "B"}  # age 40
 
 
 def test_needs_edit_validation_and_clear(client):
@@ -444,7 +454,7 @@ def test_needs_edit_validation_and_clear(client):
 
 def test_needs_recorded_in_chat_narrow_product_search(client):
     complete_assessment(client)
-    # 第 1 轮：模型记录客户说的「10 万元、12 个月」
+    # Turn 1: the model records what the customer said (¥100,000, 12 months)
     use_models(
         main=[
             tool_call("update_needs", {"investment_amount": 100000, "horizon_months": 12}),
@@ -457,7 +467,8 @@ def test_needs_recorded_in_chat_narrow_product_search(client):
     needs = {r["field"]: r for r in first["state"]["profile"]["needs"]}
     assert needs["investment_amount"]["source"] == "对话中提供"
 
-    # 第 2 轮：模型搜索时没传金额和期限，工具自动使用已记录的需求
+    # Turn 2: the model searches without amount or horizon; the tool uses the recorded needs
+    # automatically
     use_models(
         main=[tool_call("search_products", {}), AIMessage("以下是符合条件的产品。")],
         router=["PRODUCT_OR_ADVICE"],
@@ -468,8 +479,8 @@ def test_needs_recorded_in_chat_narrow_product_search(client):
     ).json()
     block = next(b for b in second["reply"]["ui_blocks"] if b["type"] == "product_list")
     codes = {i["code"] for i in block["items"]}
-    assert "HY-F03" not in codes  # 30 万元起购 > 10 万元
-    assert "HY-F02" not in codes  # 两年持有 > 12 个月
+    assert "HY-F03" not in codes  # ¥300,000 minimum > ¥100,000
+    assert "HY-F02" not in codes  # two-year holding > 12 months
     reasons = {e["reason"] for e in block["excluded"]}
     assert {"起购金额高于计划投资金额", "持有或封闭期超过投资期限"} <= reasons
 
@@ -488,9 +499,9 @@ def test_reset_clears_needs(client):
     assert all(r["value"] is None for r in rows)
 
 
-# ---------- 人工交接（Phase 6，用例编号对应 EVALUATION_PLAN §5） ----------
+# ---------- Handoff to a human (Phase 6) ----------
 
-RM_HEADERS = {"X-Demo-User": "rm_li"}  # pytest_customer 的专属理财经理是 RM001（李经理）
+RM_HEADERS = {"X-Demo-User": "rm_li"}  # pytest_customer's relationship manager is RM001 (RM Li)
 
 
 def request_handoff_in_chat(client, reason="USER_REQUEST", questions=("确认可接受的最大亏损",)):
@@ -507,21 +518,23 @@ def request_handoff_in_chat(client, reason="USER_REQUEST", questions=("确认可
 
 
 def rm_list(client):
-    """只看测试客户的交接：同一理财经理名下可能还有演示客户的数据。"""
+    """Only the test customer's handoffs: the same RM may also have demo customers' data."""
     rows = client.get("/api/v1/rm/handoffs", headers=RM_HEADERS).json()
     return [r for r in rows if r["customer_name"] == "测试客户（虚构）"]
 
 
 def test_handoff_shows_rm_card_without_customer_data(client):  # H01
     body, card = request_handoff_in_chat(client)
-    assert card["rm_name"] == "李经理（虚构）"  # 来自基础画像的专属理财经理
+    assert card["rm_name"] == "李经理（虚构）"  # the assigned RM from the base profile
     assert card["rm_title"] == "高级理财经理"
     assert {"phone", "wecom_url"} <= card.keys()
     assert "同步" in card["notice"]
-    # 客户界面的名片不含客户资料（测评、需求、资产等）
+    # The contact card in the customer UI contains no customer data (assessment, needs, assets,
+    # etc.)
     assert not {"preview", "scope", "assessment", "needs"} & card.keys()
     assert body["handoff"]["status"] == "PENDING"
-    assert [h["id"] for h in rm_list(client)] == [card["handoff_id"]]  # 要点已同步到看板
+    # summary shared to the dashboard
+    assert [h["id"] for h in rm_list(client)] == [card["handoff_id"]]
 
 
 def test_rm_follow_up_lifecycle_and_ai_keeps_replying(client):  # H03 + H04
@@ -529,7 +542,7 @@ def test_rm_follow_up_lifecycle_and_ai_keeps_replying(client):  # H03 + H04
     conv, hid = body["conversation_id"], card["handoff_id"]
     accept = client.post(f"/api/v1/rm/handoffs/{hid}/accept", headers=RM_HEADERS)
     assert accept.json()["status"] == "ACCEPTED"
-    # 不再有应用内人工服务：理财经理跟进期间 AI 照常回复
+    # No in-app human service any more: the AI keeps replying while the RM follows up
     use_models(main=[AIMessage("七日年化是现金管理类产品的收益口径。")], router=["SERVICE"])
     reply = client.post("/api/v1/chat", json={"conversation_id": conv, "message": "什么是七日年化"})
     assert reply.json()["reply"]["content"].startswith("七日年化")
@@ -562,7 +575,7 @@ def test_summary_is_built_from_structured_data(client):  # H05
 def test_suitability_conflict_handoff_keeps_limits(client):  # H06
     complete_assessment(client)
     request_handoff_in_chat(client, reason="SUITABILITY_CONFLICT")
-    # 联系理财经理不会解除限制：超评级产品仍不能买入
+    # Contacting the RM doesn't lift restrictions: above-rating products still can't be bought
     body = client.get("/api/v1/products").json()
     assert {i["risk_level"] for i in body["items"] if i["purchasable"]} <= {"PR1", "PR2"}
 
@@ -594,18 +607,19 @@ def test_duplicate_request_returns_existing_handoff(client):
         "/api/v1/chat", json={"conversation_id": body["conversation_id"], "message": "再转一次"}
     ).json()
     shown = next(b for b in again["reply"]["ui_blocks"] if b["type"] == "rm_contact")
-    assert shown["handoff_id"] == card["handoff_id"]  # 再次展示名片，不重复创建
+    assert shown["handoff_id"] == card["handoff_id"]  # card shown again, not created twice
     assert len(rm_list(client)) == 1
 
 
 def test_rm_access_control(client):
     _, card = request_handoff_in_chat(client)
-    other = {"X-Demo-User": "rm_zhou"}  # 不是该客户的专属理财经理
+    other = {"X-Demo-User": "rm_zhou"}  # not this customer's RM
     assert client.get(f"/api/v1/rm/handoffs/{card['handoff_id']}", headers=other).status_code == 404
-    assert client.get("/api/v1/rm/handoffs").status_code == 403  # 客户身份不能访问看板
+    # a customer identity can't access the dashboard
+    assert client.get("/api/v1/rm/handoffs").status_code == 403
 
 
-# ---------- 历史会话 ----------
+# ---------- Past conversations ----------
 
 
 def test_conversation_history_lists_recent_first(client):
@@ -619,7 +633,7 @@ def test_conversation_history_lists_recent_first(client):
     assert first["conversation_id"] not in {r["id"] for r in other}
 
 
-# ---------- 英文界面（P8-2b） ----------
+# ---------- English UI (P8-2b) ----------
 
 
 def english(client):
@@ -639,7 +653,8 @@ def test_english_fixed_replies_and_assessment_card(client):
 
 
 def test_english_tool_output_and_code_notes(client):
-    """工具在 Agent 内部执行，语言上下文要一路传到工具与代码追加的说明。"""
+    """Tools run inside the agent, so the language context must reach the tools and code-appended
+    notes."""
     complete_assessment(client)
     english(client)
     use_models(

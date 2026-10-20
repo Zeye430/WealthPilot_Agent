@@ -1,7 +1,11 @@
-"""产品类 LLM 工具：只在客户完成测评后绑定（见 app/compliance/policy.py）。
+"""Product LLM tools: bound only after the customer completes a risk assessment (see
+app/compliance/policy.py).
 
-客户风险评级通过 InjectedState 从流程状态读取，对 LLM 不可见、不可修改。
-工具返回给 LLM 的是事实与适当性结论；给前端的 UI 块不经 LLM 改写。
+The customer's risk rating is read from the flow state via InjectedState, invisible to the LLM and
+unchangeable by it.
+Tools return facts and suitability conclusions to the LLM; UI blocks for the frontend aren't
+rewritten by the LLM. Tool docstrings are the tool descriptions sent to the model, so they stay in
+Chinese like the prompts.
 """
 
 import json
@@ -63,7 +67,8 @@ def upcoming_block(products, reminded: set[str]) -> dict:
 
 
 def _recorded_needs(customer_id: str | None):
-    """读取已记录的本次需求；无客户身份或数据库不可用时返回 None（不影响查询）。"""
+    """Read recorded current needs; None without a customer identity or if the database is down
+    (the query still works)."""
     if not customer_id:
         return None
     try:
@@ -97,10 +102,11 @@ def product_disclaimer() -> str:
 def _context(state: dict, amount: float | None = None, horizon_months: int | None = None):
     rating = state.get("risk_rating")
     if not rating:
-        # 理论上不会发生：未测评时这些工具不会绑定给 LLM。防御性检查。
+        # Shouldn't happen: these tools aren't bound to the LLM without an assessment. Defensive
+        # check.
         raise ToolException("客户尚未完成有效的风险测评，无法查询产品。")
     if amount is None or horizon_months is None:
-        # 客户已在对话中提供过的需求，不必让模型重复传参
+        # Needs the customer already gave in chat don't have to be passed again by the model
         needs = _recorded_needs(state.get("customer_id"))
         if needs:
             amount = amount or (float(needs.investment_amount) if needs.investment_amount else None)
@@ -113,7 +119,8 @@ def _context(state: dict, amount: float | None = None, horizon_months: int | Non
 
 
 def months_to_days(months: int) -> int:
-    """12 个月 = 365 天：按 30 天换算会把「一年持有」误判为超过一年期限。"""
+    """12 months = 365 days: converting at 30 days a month would treat a "one-year holding"
+    product as longer than a one-year horizon."""
     return round(months * 365 / 12)
 
 

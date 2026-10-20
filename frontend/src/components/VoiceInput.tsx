@@ -40,12 +40,12 @@ const COPY = defineCopy({
 
 type Phase = "idle" | "recording" | "transcribing";
 
-// 短按（不足此时长）进入「点击开始 / 再点结束」模式；长按则松开即结束
+// A short press (under this duration) switches to tap-to-start / tap-to-stop; a long press stops on release
 const HOLD_MS = 350;
 
 /**
- * 语音输入：按住说话、松开结束（或点一下开始、再点一下结束）。
- * 识别结果填入输入框，由客户确认或修改后再发送；买入、提醒等操作仍需在界面上点击确认。
+ * Voice input: hold to talk, release to stop (or tap to start, tap again to stop).
+ * The recognized text goes into the input box for the customer to confirm or edit before sending; purchases, reminders, etc. still need a tap in the UI.
  */
 export function VoiceInput({ onText, disabled }: { onText: (text: string) => void; disabled?: boolean }) {
   const c = useCopy(COPY);
@@ -57,11 +57,11 @@ export function VoiceInput({ onText, disabled }: { onText: (text: string) => voi
   const [error, setError] = useState<string | null>(null);
   const recorder = useRef<PcmRecorder | null>(null);
   const pressedAt = useRef(0);
-  // 按压状态用 ref 记录：开启麦克风是异步的（首次还要授权），开始录音时手指可能早已松开
+  // Track the press in a ref: opening the mic is async (and needs permission the first time), so the finger may have lifted before recording starts
   const pressing = useRef(false);
 
   useEffect(() => {
-    // 浏览器不支持录音、或后端未安装识别模型时，不显示麦克风按钮
+    // Hide the mic button if the browser can't record or the backend has no recognition model
     const status = recordingSupported()
       ? speechStatus()
       : Promise.resolve({ available: false, max_seconds: 60 });
@@ -82,7 +82,7 @@ export function VoiceInput({ onText, disabled }: { onText: (text: string) => voi
       if (seconds >= maxSeconds) finish();
     }, 250);
     return () => clearInterval(timer);
-    // finish 只依赖 ref，无需加入依赖
+    // finish only depends on the ref, so it needn't be a dependency
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, maxSeconds]);
 
@@ -94,7 +94,7 @@ export function VoiceInput({ onText, disabled }: { onText: (text: string) => voi
       await r.start();
       recorder.current = r;
       setPhase("recording");
-      // 录音真正开始时已经松开（短按，或授权弹窗期间松手）：改为「再点一下结束」
+      // Already released when recording actually starts (short press, or released during the permission prompt): switch to tap-to-stop
       if (!pressing.current) setToggleMode(true);
     } catch {
       setError(c.micDenied);
@@ -140,9 +140,9 @@ export function VoiceInput({ onText, disabled }: { onText: (text: string) => voi
     pressing.current = false;
     if (!wasPressing || !recorder.current || toggleMode) return;
     if (Date.now() - pressedAt.current < HOLD_MS) {
-      setToggleMode(true); // 短按：继续录音，等再点一下
+      setToggleMode(true); // short press: keep recording until the next tap
     } else {
-      await finish(); // 长按：松开即结束
+      await finish(); // long press: stop on release
     }
   }
 
@@ -192,7 +192,7 @@ export function VoiceInput({ onText, disabled }: { onText: (text: string) => voi
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerLeave={() => {
-          // 长按时手指滑出按钮也视为松开
+          // Sliding off the button during a long press counts as release
           if (pressing.current) onPointerUp();
         }}
         onContextMenu={(e) => e.preventDefault()}

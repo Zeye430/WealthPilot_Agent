@@ -1,4 +1,4 @@
-"""问卷计分测试：校准画像的计分结果保持稳定。"""
+"""Questionnaire scoring tests: scores for the calibration profiles stay stable."""
 
 import pytest
 
@@ -21,13 +21,13 @@ def answers(letters: str) -> dict[str, str]:
     [
         ("E C B A A A A A A A", 17, "C1", True),
         ("E C B B B A A B C B", 37, "C2", False),
-        ("C C C B B B B B C B", 51, "C2", False),  # 主场景
+        ("C C C B B B B B C B", 51, "C2", False),  # main scenario
         ("A C C B B B B B C B", 52, "C2", False),
         ("B C C C B B B B C C", 59, "C3", False),
         ("B C C C C C C C C C", 72, "C3", False),
         ("B D D D C C C C C D", 83, "C4", False),
         ("B D D E D D D D C E", 100, "C5", False),
-        ("B D D E D D D D C A", 90, "C1", True),  # 否决题
+        ("B D D E D D D D C A", 90, "C1", True),  # veto question
     ],
 )
 def test_calibration_personas(letters, score, rating, vetoed):
@@ -43,7 +43,8 @@ def test_result_carries_band_details():
 
 
 def test_band_boundaries():
-    # 25 → C1，26 → C2：用最低分答案逐步加分不便构造，直接检查分档配置
+    # 25 → C1, 26 → C2: hard to build by adding points to the lowest answers, so check the band
+    # config directly
     assert [(r.rating, r.max_score) for r in Q.ratings] == [
         ("C1", 25),
         ("C2", 55),

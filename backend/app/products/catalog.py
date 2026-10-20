@@ -1,7 +1,9 @@
-"""虚构产品目录：从 data/products/products.yaml 加载并校验。
+"""Fictional product catalog: loaded and validated from data/products/products.yaml.
 
-产品要素只在 YAML 中维护（单一数据源），本模块负责解析、校验与只读查询。
-校验在启动时执行：费率缺失却标为已核实、现金管理类没有七日年化等配置错误，会直接报错。
+Product terms are maintained only in the YAML (single source of truth); this module parses,
+validates and provides read-only queries.
+Validation runs at startup: errors such as a missing fee marked as verified, or a cash product
+without a 7-day yield, fail immediately.
 """
 
 import re
@@ -26,7 +28,8 @@ MAX_ANNUAL_FEE = Decimal("0.03")
 
 
 def parse_rate(value: object) -> Decimal | None:
-    """「0.10%」→ Decimal("0.0010")。YAML 中费率与收益率统一写成百分数，便于人工审核。"""
+    """'0.10%' → Decimal("0.0010"). Fees and yields are written as percentages in the YAML for
+    easier review."""
     if value is None:
         return None
     text = str(value).strip()
@@ -69,7 +72,8 @@ class OperationMode(StrEnum):
 class ProductStatus(StrEnum):
     ON_SALE = "ON_SALE"
     ENDED = "ENDED"
-    UPCOMING = "UPCOMING"  # 已公告、尚未开始募集的新发产品，可预约开售提醒，不能买入
+    # announced but not yet open for subscription: reminders allowed, purchases not
+    UPCOMING = "UPCOMING"
 
 
 class DataQuality(StrEnum):
@@ -107,7 +111,8 @@ def issuer_label(issuer: str) -> str:
 
 
 class RedemptionTier(BaseModel):
-    max_days: int | None  # 持有不足 max_days 天适用该费率；None 表示无上限
+    # this rate applies when held fewer than max_days days; None means no upper bound
+    max_days: int | None
     rate: Decimal
 
     _rate = field_validator("rate", mode="before")(parse_rate)
@@ -153,7 +158,8 @@ class Fees(BaseModel):
 
     @property
     def annual_total(self) -> Decimal | None:
-        """固定年化费用合计（管理 + 托管 + 销售服务）；有缺失时返回 None，不猜测。"""
+        """Total fixed annual fees (management + custody + sales service); None if any is
+        missing, never guessed."""
         if self.missing:
             return None
         return self.management + self.custody + self.sales_service
@@ -175,14 +181,15 @@ class PerformancePeriod(BaseModel):
 
 class Metric(BaseModel):
     type: MetricType
-    value: Decimal | None = None  # 七日年化
-    value_yuan: Decimal | None = None  # 每万份收益（元）
+    value: Decimal | None = None  # 7-day annualized yield
+    value_yuan: Decimal | None = None  # income per 10,000 units (CNY)
     as_of: date | None = None
-    low: Decimal | None = None  # 业绩比较基准区间
+    low: Decimal | None = None  # performance benchmark range
     high: Decimal | None = None
-    formula: str | None = None  # 指数组合型业绩比较基准
+    formula: str | None = None  # index-based performance benchmark
     formula_en: str | None = None
-    basis: str | None = None  # 业绩比较基准的测算依据（信披办法第十三条要求说明）
+    # how the benchmark was set (required by Article 13 of the disclosure rules)
+    basis: str | None = None
     basis_en: str | None = None
     periods: list[PerformancePeriod] | None = None
 
@@ -216,7 +223,7 @@ class Metric(BaseModel):
 class Product(BaseModel):
     code: str
     name: str
-    name_en: str  # 英文界面使用的直译名称（虚构）
+    name_en: str  # literal English name used in the English UI (fictional)
     issuer: str
     product_type: ProductType
     operation_mode: OperationMode
@@ -229,7 +236,8 @@ class Product(BaseModel):
     data_quality: DataQuality
     inception_date: date
     maturity_date: date | None = None
-    # 新发产品的募集期与募集规模上限（说明书披露的事实，额满提前结束募集）
+    # Subscription period and size cap for new products (facts disclosed in the prospectus;
+    # subscription ends early when full)
     sale_start: date | None = None
     sale_end: date | None = None
     raise_limit: Decimal | None = None
@@ -273,7 +281,8 @@ class Product(BaseModel):
 
     @property
     def effective_risk_level(self) -> str:
-        """发行评级与销售评级不一致时取较高者（PR3 与 R3 视为同级）。"""
+        """When the issuer's and distributor's risk ratings differ, take the higher one (PR3 and
+        R3 count as the same level)."""
         levels = [int(self.issuer_risk_level[2:])]
         if self.distributor_risk_level:
             levels.append(int(self.distributor_risk_level[1:]))
@@ -320,12 +329,15 @@ class Catalog(BaseModel):
         return next((p for p in self.products if p.code == code), None)
 
     def find_by_name(self, text: str) -> Product | None:
-        """按名称或代码模糊匹配（客户常说「活钱宝」而不是完整名称）。"""
+        """Fuzzy match by name or code (customers often use a short name instead of the full
+        one)."""
         if product := self.get(text):
             return product
         compact = text.replace(" ", "")
-        # 英文名忽略大小写、空格与标点：模型常写成「Zhian Steady 1 Year Holding」（评估 R02）
-        # 只在输入含英文字母时按英文名匹配：中文名去掉汉字后只剩数字（如「30」），会误配其他产品
+        # English names ignore case, spaces and punctuation: the model often writes "Zhian Steady 1
+        # Year Holding" (eval R02)
+        # Match English names only when the input contains Latin letters: a Chinese name stripped of
+        # characters leaves only digits (e.g. "30") and would match other products
         alnum = _alnum(text) if re.search(r"[A-Za-z]", text) else ""
         return next(
             (

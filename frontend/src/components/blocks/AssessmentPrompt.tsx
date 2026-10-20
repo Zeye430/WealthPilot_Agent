@@ -9,7 +9,7 @@ const COPY = defineCopy({
   en: { reminder: "Complete your risk profile and I'll match products to your needs.", start: "Start now" },
 });
 
-/** 测评入口。invite：客户要产品时的完整卡片；reminder：常识回答后的一行提醒。 */
+/** Assessment entry. invite: the full card when the customer asks for products; reminder: a one-line reminder after a general answer. */
 export function AssessmentPrompt({ block, onStart }: { block: AssessmentPromptBlock; onStart: () => void }) {
   const c = useCopy(COPY);
   if (block.variant === "reminder") {

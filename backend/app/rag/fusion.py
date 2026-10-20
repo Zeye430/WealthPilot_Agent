@@ -1,9 +1,10 @@
-"""混合检索的结果融合：RRF（倒数排名融合）。
+"""Fusing hybrid search results: RRF (reciprocal rank fusion).
 
-只看各路结果的排名、不看原始分数，因此不必把向量相似度与 BM25 分数换算到同一尺度，也不需要调权重。
+Uses only each list's ranks, not raw scores, so vector similarity and BM25 scores don't need a
+common scale or weights.
 """
 
-RRF_K = 60  # 常用取值，抑制排名靠后结果的影响
+RRF_K = 60  # common value; dampens the influence of low-ranked results
 
 
 def rrf(rankings: list[list[str]], k: int = RRF_K) -> list[tuple[str, float]]:

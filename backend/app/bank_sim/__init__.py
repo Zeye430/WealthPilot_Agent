@@ -1,6 +1,8 @@
-"""模拟的「知岸银行手机银行」后台（演示用，不属于 WealthPilot）。
+"""Simulated back end of the "Zhian Bank mobile app" (demo only; not part of WealthPilot).
 
-真实环境中这部分是银行自己的系统：客户用银行账号登录手机银行，点击「AI 理财助手」时由银行后台签发
-一次性进入凭证。WealthPilot 与它之间只通过签名凭证交互，不共享账号、密码或会话。
-生产部署时关闭（BANK_SIM_ENABLED=false），由真实的手机银行替代。
+In reality this is the bank's own system: customers sign in with their bank account, and tapping "AI
+wealth assistant" makes the bank's back end issue
+a one-time entry ticket. WealthPilot interacts with it only through signed tickets, sharing no
+accounts, passwords or sessions.
+Turned off in production (BANK_SIM_ENABLED=false) and replaced by the real mobile banking app.
 """

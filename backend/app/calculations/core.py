@@ -1,9 +1,10 @@
-"""确定性金融计算。
+"""Deterministic financial calculations.
 
-约定：
-- 输入输出均为 Decimal；中间过程保持全精度，只在对外输出时四舍五入到分（ROUND_HALF_UP）。
-- 利率一律为小数形式（5% 写作 0.05），按年化给出。
-- 本模块不依赖 LLM，也不做任何适当性判断。
+Conventions:
+- Inputs and outputs are Decimal; intermediate steps keep full precision and only outputs are
+rounded to the cent (ROUND_HALF_UP).
+- Rates are always decimals (5% is 0.05) and annualized.
+- This module doesn't depend on the LLM and makes no suitability decisions.
 """
 
 from decimal import ROUND_HALF_UP, Decimal
@@ -14,24 +15,25 @@ ZERO = Decimal("0")
 ONE = Decimal("1")
 
 MAX_YEARS = 100
-MAX_ANNUAL_RATE = Decimal("1")  # 100%，超过视为输入错误（常见原因：把 5% 写成 5）
+MAX_ANNUAL_RATE = Decimal("1")  # 100%; anything higher is an input error (usually 5% written as 5)
 ALLOWED_PERIODS_PER_YEAR = {1, 2, 4, 12, 365}
 
 
 class CalculationError(ValueError):
-    """输入不合法。错误信息会原样返回给 LLM，用于修正参数，因此用中文写清原因。"""
+    """Invalid input. The message is returned to the LLM verbatim so it can fix the arguments, so
+    it states the reason in Chinese."""
 
 
 class FeeMethod(StrEnum):
-    EXTERNAL = "external"  # 外扣法：净申购金额 = 申购金额 / (1 + 费率)
-    INTERNAL = "internal"  # 内扣法：申购费 = 申购金额 × 费率
+    EXTERNAL = "external"  # fee on top: net subscription = amount / (1 + rate)
+    INTERNAL = "internal"  # fee included: subscription fee = amount × rate
 
 
 def to_cents(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
-# ---------- 参数校验 ----------
+# ---------- Argument checks ----------
 
 
 def _check_amount(value: Decimal, name: str) -> None:
@@ -64,13 +66,13 @@ def _check_periods(periods_per_year: int) -> None:
         raise CalculationError(f"每年计息次数只支持 {allowed}，收到 {periods_per_year}")
 
 
-# ---------- 增长类 ----------
+# ---------- Growth ----------
 
 
 def compound_future_value(
     principal: Decimal, annual_rate: Decimal, years: int, periods_per_year: int = 1
 ) -> Decimal:
-    """复利终值：FV = PV × (1 + r/m)^(m·n)。"""
+    """Compound future value: FV = PV × (1 + r/m)^(m·n)."""
     _check_amount(principal, "本金")
     _check_rate(annual_rate)
     _check_years(years)
@@ -82,7 +84,7 @@ def compound_future_value(
 def present_value(
     future_value: Decimal, annual_rate: Decimal, years: int, periods_per_year: int = 1
 ) -> Decimal:
-    """复利现值：PV = FV / (1 + r/m)^(m·n)。"""
+    """Compound present value: PV = FV / (1 + r/m)^(m·n)."""
     _check_amount(future_value, "终值")
     _check_rate(annual_rate)
     _check_years(years)
@@ -92,7 +94,7 @@ def present_value(
 
 
 def simple_interest(principal: Decimal, annual_rate: Decimal, years: int) -> Decimal:
-    """单利利息：I = PV × r × n。"""
+    """Simple interest: I = PV × r × n."""
     _check_amount(principal, "本金")
     _check_rate(annual_rate)
     _check_years(years)
@@ -106,9 +108,10 @@ def periodic_investment_future_value(
     periods_per_year: int = 12,
     at_period_start: bool = False,
 ) -> Decimal:
-    """定期定额投资终值（年金终值）。
+    """Future value of regular contributions (annuity).
 
-    期末投入：FV = P × [(1+i)^N − 1] / i；期初投入再乘 (1+i)。i = r/m，N = m·n。
+    Contributions at period end: FV = P × [(1+i)^N − 1] / i; at period start, multiply by (1+i). i =
+    r/m, N = m·n.
     """
     _check_amount(payment, "每期投入")
     _check_rate(annual_rate)
@@ -126,7 +129,7 @@ def periodic_investment_future_value(
 
 
 def inflation_adjusted_value(nominal: Decimal, inflation_rate: Decimal, years: int) -> Decimal:
-    """以今天的购买力衡量未来金额：Real = Nominal / (1 + π)^n。"""
+    """A future amount in today's purchasing power: Real = Nominal / (1 + π)^n."""
     _check_amount(nominal, "名义金额")
     _check_rate(inflation_rate, "通胀率")
     _check_years(years)
@@ -140,7 +143,7 @@ def growth_path(
     periods_per_year: int = 1,
     periodic_payment: Decimal = ZERO,
 ) -> list[Decimal]:
-    """逐年期末余额（含第 0 年），用于画图。定投按期末投入。"""
+    """Year-end balances (including year 0) for charts. Contributions are made at period end."""
     _check_amount(principal, "本金")
     _check_amount(periodic_payment, "每期投入")
     _check_rate(annual_rate)
@@ -156,13 +159,13 @@ def growth_path(
     return path
 
 
-# ---------- 费用类 ----------
+# ---------- Fees ----------
 
 
 def subscription_fee(
     amount: Decimal, fee_rate: Decimal, method: FeeMethod = FeeMethod.EXTERNAL
 ) -> tuple[Decimal, Decimal]:
-    """申购费。返回 (费用, 净申购金额)，均已四舍五入到分。"""
+    """Subscription fee. Returns (fee, net subscription amount), both rounded to the cent."""
     _check_amount(amount, "申购金额")
     _check_fee_rate(fee_rate, "申购费率")
     if method is FeeMethod.EXTERNAL:
@@ -173,10 +176,10 @@ def subscription_fee(
 
 
 def redemption_fee_rate(holding_days: int, tiers: list[tuple[int | None, Decimal]]) -> Decimal:
-    """按持有天数选取赎回费率。
+    """Pick the redemption fee rate by holding days.
 
-    tiers 形如 [(7, 0.015), (30, 0.005), (None, 0)]，含义：持有 <7 天 1.5%，
-    7–29 天 0.5%，≥30 天 0。需按天数上限升序排列，最后一档上限为 None。
+    tiers look like [(7, 0.015), (30, 0.005), (None, 0)]: under 7 days 1.5%,
+    7-29 days 0.5%, 30 days or more 0. Sorted by day limit ascending; the last tier's limit is None.
     """
     if holding_days < 0:
         raise CalculationError(f"持有天数不能为负数，收到 {holding_days}")
@@ -202,10 +205,12 @@ def net_investment_proceeds(
     redemption_fee_rate: Decimal = ZERO,
     method: FeeMethod = FeeMethod.EXTERNAL,
 ) -> dict[str, Decimal]:
-    """一次完整申购—持有—赎回的到手金额。
+    """Net proceeds of one full subscribe-hold-redeem cycle.
 
-    holding_period_return 是**持有期间**（非年化）的净值涨幅。净值型产品的净值通常已扣除
-    管理费、托管费等，因此这里只扣申购费和赎回费，避免重复扣费。
+    holding_period_return is the NAV gain over the **holding period** (not annualized). NAV products
+    usually already deduct
+    management and custody fees, so only subscription and redemption fees are deducted here, to
+    avoid double counting.
     """
     _check_rate(holding_period_return, "持有期收益率")
     sub_fee, net_sub = subscription_fee(amount, subscription_fee_rate, method)

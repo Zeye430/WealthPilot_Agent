@@ -1,8 +1,9 @@
-"""暴露给 LLM 的计算工具。
+"""Calculation tools exposed to the LLM.
 
-工具只做三件事：校验参数 → 调用 app.calculations → 组装结果。
-返回值为 (content, artifact)：content 给 LLM 看（JSON 文本），artifact 是前端渲染用的 UI 块，
-不经过 LLM 改写，保证图表数字与计算结果一致。
+Tools do three things only: validate arguments → call app.calculations → assemble the result.
+They return (content, artifact): content is for the LLM (JSON text); artifact is the UI block the
+frontend renders,
+never rewritten by the LLM, so chart numbers always match the calculation.
 """
 
 import json
@@ -23,7 +24,8 @@ HYPOTHETICAL_NOTE = register(
 
 
 def _d(value: float) -> Decimal:
-    # LLM 传来的是 JSON 数字；经 str 转换，避免二进制浮点误差（0.05 → Decimal("0.05")）
+    # The LLM sends JSON numbers; going through str avoids binary floating-point error (0.05 →
+    # Decimal("0.05"))
     return Decimal(str(value))
 
 
@@ -36,7 +38,8 @@ def _pct(rate: Decimal) -> str:
 
 
 def _slip_assumptions(assumptions: list[str]) -> list[str]:
-    # 凭证上的免责声明由印章（disclaimer 字段）承担，列表中不再重复
+    # The disclaimer on the slip is carried by the stamp (disclaimer field), so it isn't repeated in
+    # the list
     return [a for a in assumptions if a not in all_versions(HYPOTHETICAL_NOTE)]
 
 
@@ -272,7 +275,8 @@ class FeeInput(BaseModel):
 
 
 def _product_rates(product: str, holding_days: int | None) -> tuple[float, float, str]:
-    """从产品要素读取费率：产品相关的费率不能由模型提供（可能编造）。"""
+    """Read fee rates from product terms: product-specific rates can't come from the model (it
+    might invent them)."""
     from app.products.catalog import load_catalog
     from app.products.presenter import format_rate
 

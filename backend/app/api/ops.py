@@ -1,4 +1,5 @@
-"""运维看板 API：只对运维角色开放；只返回汇总指标与审计编号，不返回对话内容和客户资料。"""
+"""Ops dashboard API: ops role only; returns aggregate metrics and audit IDs, never conversation
+content or customer data."""
 
 from datetime import datetime
 

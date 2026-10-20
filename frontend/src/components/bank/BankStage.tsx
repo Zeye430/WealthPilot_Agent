@@ -53,8 +53,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 电脑端演示页：手机外框中运行模拟手机银行（iframe，同源），右侧逐步说明进入流程。
- * 手机屏幕上直接打开手机银行（本身就是手机，不需要外框）。
+ * Desktop demo page: the simulated banking app runs in a phone frame (same-origin iframe), with the entry steps explained on the right.
+ * On a phone screen the banking app opens directly (it's already a phone, so no frame).
  */
 export function BankStage() {
   const c = useCopy(COPY);

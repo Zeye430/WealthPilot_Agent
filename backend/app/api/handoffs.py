@@ -1,7 +1,9 @@
-"""理财经理看板 API：查看同步过来的咨询要点，标记跟进、结束。
+"""Relationship-manager dashboard API: view the shared summary, mark follow-up, close.
 
-客户通过名片上的企业微信 / 电话联系理财经理，应用内不再有客户确认或文字沟通的接口。
-所有状态变更都经过状态机校验「谁、从什么状态、到什么状态」，并留痕（handoff_events）。
+Customers reach the RM via WeCom or phone on the contact card; there are no in-app endpoints for
+customer confirmation or messaging.
+Every status change is validated by the state machine (who, from which status, to which) and
+recorded (handoff_events).
 """
 
 from datetime import datetime
@@ -38,11 +40,11 @@ def _act(db: Session, handoff: Handoff, to: str, role: str, actor: str, now: dat
     return handoff_view(handoff)
 
 
-# ---------- 理财经理 ----------
+# ---------- Relationship manager ----------
 
 
 def _rm_handoff(db: Session, handoff_id: str, rm_id: str) -> Handoff:
-    """理财经理只能访问分配给自己的交接。"""
+    """An RM can only access handoffs assigned to them."""
     handoff = db.get(Handoff, handoff_id)
     if handoff is None or handoff.assigned_rm_id != rm_id or handoff.status not in RM_VISIBLE:
         raise HTTPException(
@@ -92,7 +94,7 @@ def rm_detail(handoff_id: str, db: Session = Depends(get_session), rm_id: str = 
 
 
 @router.post("/rm/handoffs/{handoff_id}/accept")
-def rm_accept(  # 标记「跟进中」
+def rm_accept(  # mark as "following up"
     handoff_id: str,
     db: Session = Depends(get_session),
     rm_id: str = Depends(get_rm_id),
@@ -108,5 +110,5 @@ def rm_resolve(
     rm_id: str = Depends(get_rm_id),
     now: datetime = Depends(get_now),
 ):
-    """结束本次跟进。"""
+    """Close this follow-up."""
     return _act(db, _rm_handoff(db, handoff_id, rm_id), RESOLVED, "rm", rm_id, now)

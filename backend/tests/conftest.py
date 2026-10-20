@@ -1,7 +1,8 @@
-"""测试使用独立数据库（库名加 _test 后缀），不与开发 / 演示数据共用。
+"""Tests use a separate database (name suffixed _test), never shared with development / demo data.
 
-必须在任何 app 模块被导入之前设置 DATABASE_URL：pytest 会先加载本文件，再导入测试模块。
-数据库不可用时不报错，依赖数据库的测试会自行跳过。
+DATABASE_URL must be set before any app module is imported: pytest loads this file first, then the
+test modules.
+If the database is down, nothing fails here; database-dependent tests skip themselves.
 """
 
 import os
@@ -10,7 +11,8 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import Settings
 
-# 测试默认关闭限流（同一测试账号会在几秒内发出大量请求）；限流本身由 test_auth.py 单独测试
+# Rate limiting is off by default in tests (one test account sends many requests within seconds);
+# test_auth.py tests it separately
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 _base = make_url(os.environ.get("DATABASE_URL") or Settings().database_url)
@@ -24,7 +26,7 @@ def _prepare_test_database() -> None:
     from alembic.config import Config
     from sqlalchemy import create_engine, text
 
-    if not TEST_DB.endswith("_test"):  # 防止误清空非测试库
+    if not TEST_DB.endswith("_test"):  # never wipe a non-test database
         raise RuntimeError(f"拒绝在非测试库 {TEST_DB} 上运行测试")
     admin = _base.set(drivername="postgresql").render_as_string(hide_password=False)
     try:
@@ -35,7 +37,7 @@ def _prepare_test_database() -> None:
             if not exists:
                 conn.execute(f'CREATE DATABASE "{TEST_DB}"')
     except psycopg.OperationalError:
-        return  # 数据库未启动：依赖数据库的测试会跳过
+        return  # database not running: database-dependent tests will skip
 
     cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
     command.upgrade(cfg, "head")
@@ -64,7 +66,8 @@ import pytest  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def test_identity():
-    """默认用请求头身份替身；需要测试真实登录的用例会自行移除这个替换。"""
+    """Use the request-header identity double by default; tests of real sign-in remove this
+    override themselves."""
     from app.api.deps import get_current_user
     from app.main import app
     from tests.identity import header_identity

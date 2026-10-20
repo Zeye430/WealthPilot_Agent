@@ -1,9 +1,12 @@
-"""混合检索：向量 + 关键词，RRF 融合，按来源配额组合结果。
+"""Hybrid search: vector + keyword, fused with RRF, combined by per-source quotas.
 
-检索范围（与适当性规则一致）：
-- 未点名产品：只检索知识库（产品发现由 search_products 负责，RAG 不做推荐）。
-- 点名产品：该产品说明书前 2 个章节 + 知识库 1 条。产品条款是主要依据，知识库补充一般解释。
-  评估显示，不分配额时通用知识条目常排在产品自身条款之前（6/24 条未排第一）。
+Search scope (consistent with the suitability rules):
+- No product named: knowledge base only (product discovery is search_products' job; RAG doesn't
+recommend).
+- Product named: the top 2 sections of its prospectus + 1 knowledge-base entry. Product terms are
+the main basis; the knowledge base adds general explanation.
+  Evaluation showed that without quotas, general entries often ranked above the product's own terms
+  (6 of 24 not first).
 """
 
 from typing import Protocol
@@ -19,22 +22,26 @@ from app.rag.keyword import KeywordIndex
 CANDIDATES_PER_ROUTE = 10
 PRODUCT_QUOTA, KNOWLEDGE_QUOTA = 2, 1
 KNOWLEDGE_ONLY_QUOTA = 3
-# 限定在某款产品说明书内检索时，这些词只是指代该产品，不参与关键词计分
+# When searching within one product's prospectus, these words just refer to that product and don't
+# score
 PRODUCT_REFERENCE_WORDS = frozenset({"产品", "理财", "说明书"})
-# 置信度阈值（未点名产品时）：向量相似度与关键词分数都低于阈值，视为「资料中未找到」。
-# 依据评估集校准（2026-10-17）：正例相似度 0.53–0.82、BM25 5.2–33.2；
-# 负例（个税、美股、保险等未覆盖话题）相似度 0.41–0.51、BM25 0–5.9。样本小，需随评估集扩充复核。
+# Confidence thresholds (no product named): if both vector similarity and keyword score are below
+# them, treat it as "not found in the sources".
+# Calibrated on the evaluation set (2026-10-17): positives have similarity 0.53-0.82 and BM25
+# 5.2-33.2;
+# negatives (uncovered topics such as income tax, US stocks, insurance) 0.41-0.51 and BM25 0-5.9.
+# Small sample; revisit as the set grows.
 MIN_SIMILARITY = 0.55
 MIN_KEYWORD_SCORE = 8.0
 
 
 class VectorStore(Protocol):
     def search(self, query_vec: np.ndarray, allowed: set[str], k: int) -> list[tuple[str, float]]:
-        """返回 (chunk_id, 余弦相似度)，按相似度降序。"""
+        """Return (chunk_id, cosine similarity), sorted by similarity descending."""
 
 
 class InMemoryVectorStore:
-    """评估与单元测试用；线上使用 PgVectorStore（app/rag/store.py）。"""
+    """For evaluation and unit tests; production uses PgVectorStore (app/rag/store.py)."""
 
     def __init__(self, chunks: list[Chunk], embedder: Embedder):
         self.ids = [c.chunk_id for c in chunks]
@@ -48,7 +55,7 @@ class InMemoryVectorStore:
 
 class Hit(BaseModel):
     chunk: Chunk
-    similarity: float | None  # 向量相似度（仅关键词命中时为 None）
+    similarity: float | None  # vector similarity (None for keyword-only hits)
 
 
 class RetrievalResult(BaseModel):
@@ -80,7 +87,8 @@ class Retriever:
             product = {cid for cid, c in self.by_id.items() if c.product_code == product_code}
             doc_ranked, _, _ = self._rank(query, query_vec, product, PRODUCT_REFERENCE_WORDS)
             picked = doc_ranked[:PRODUCT_QUOTA] + kb_ranked[:KNOWLEDGE_QUOTA]
-            # 点名产品时，产品说明书一定相关，视为有依据
+            # When a product is named, its prospectus is always relevant, so the answer counts as
+            # grounded
             confident = bool(doc_ranked)
         else:
             picked = kb_ranked[:KNOWLEDGE_ONLY_QUOTA]

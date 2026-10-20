@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 /*
- * 设计令牌（2026-10-18 改版）：白底 + 浅灰分区、深海军蓝文字、亮蓝主操作、胶囊按钮、20px 卡片圆角。
- * 设计语言参考 PayPal App 的简洁感，配色与字体为本项目自有（不使用 PayPal 品牌元素）。
+ * Design tokens (2026-10-18 redesign): white base with light-gray sections, deep navy text, bright blue primary actions, pill buttons, 20px card radius.
+ * The design language takes its simplicity from the PayPal app; colors and fonts are this project's own (no PayPal brand elements).
  */
 :root {
   color-scheme: light;
-  --canvas: #ffffff; /* 页面底色 */
-  --fill: #f4f6f9; /* 卡片、分区、输入框底色 */
-  --surface: #ffffff; /* 弹窗、底部面板等浮层 */
+  --canvas: #ffffff; /* page background */
+  --fill: #f4f6f9; /* cards, sections, input backgrounds */
+  --surface: #ffffff; /* overlays such as dialogs and bottom sheets */
   --line: #e3e8ef;
   --ink: #0a1f3d;
   --ink-2: #4b5b70;
@@ -17,7 +17,7 @@
   --brand-strong: #0f3a8c;
   --brand-soft: #e8f0fe;
   --on-brand: #ffffff;
-  --navy: #0a1f3d; /* 资产卡片 */
+  --navy: #0a1f3d; /* asset card */
   --on-navy-2: #b8c4d6;
   --ok: #0e7c4a;
   --ok-soft: #ddf3e8;
@@ -26,7 +26,7 @@
   --danger: #c0262d;
   --danger-soft: #fde8e8;
 
-  /* 图表系列色：按固定顺序分配，已用 dataviz 校验脚本验证色盲可分辨 */
+  /* Chart series colors: assigned in fixed order, checked for color-blind separation with the dataviz validator */
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
@@ -128,7 +128,7 @@ body {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* 金额行的点线引导 */
+/* Dotted leader on amount rows */
 .leader {
   flex: 1;
   border-bottom: 1px dotted var(--ink-3);
@@ -136,13 +136,13 @@ body {
   min-width: 1rem;
 }
 
-/* 自带聚焦样式的元素用 data-focus-ring="off" 排除（如输入框由外层容器显示聚焦边框） */
+/* Elements with their own focus style opt out with data-focus-ring="off" (e.g. inputs whose container shows the focus border) */
 :focus-visible:not([data-focus-ring="off"]) {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-/* 横向滑动的卡片列表：隐藏滚动条但保留滚动 */
+/* Horizontally scrolling card lists: hide the scrollbar but keep scrolling */
 .scroll-row {
   scrollbar-width: none;
 }

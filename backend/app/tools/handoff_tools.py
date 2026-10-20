@@ -1,6 +1,9 @@
-"""人工交接工具：把咨询要点同步到理财经理看板，并在客户界面展示理财经理名片（企业微信 / 电话）。
+"""Handoff tool: shares a summary to the RM dashboard and shows the RM contact card (WeCom / phone)
+in the customer UI.
 
-工具不能宣称理财经理已接入或已联系客户：理财经理是否跟进由看板上的真实操作决定。
+The tool can't claim the RM has joined or contacted the customer: whether the RM follows up depends
+on real actions on the dashboard. Tool docstrings are the tool descriptions sent to the model, so
+they stay in Chinese like the prompts.
 """
 
 import json

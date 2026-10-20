@@ -1,6 +1,7 @@
-"""Policy Engine：确定性的合规规则。
+"""Policy engine: deterministic compliance rules.
 
-本模块不依赖 LLM。LLM 能用哪些工具、能看到哪些数据，由这里的结论决定。
+This module doesn't depend on the LLM. These decisions control which tools the LLM may use and which
+data it can see.
 """
 
 from datetime import datetime
@@ -12,10 +13,13 @@ from app.db.models import RiskAssessment
 
 RULE_VERSION = "2026-10-19.1"
 
-# 测评前允许 LLM 使用的工具。只放与具体产品无关的工具；收紧或放开只改这里。
-# search_documents 测评前只检索知识库（工具内部按权限限定范围）；
-# update_needs 只记录需求；request_handoff 未测评也可转人工（人工可协助测评）；
-# get_customer_benefits 查询客户等级与活动，与具体产品无关
+# Tools the LLM may use before a risk assessment. Only tools unrelated to specific products; tighten
+# or loosen here only.
+# search_documents only searches the knowledge base before an assessment (the tool limits its scope
+# by permission);
+# update_needs only records needs; request_handoff works without an assessment (a person can help
+# with it);
+# get_customer_benefits looks up the customer's tier and campaigns, unrelated to specific products
 PRE_ASSESSMENT_ALLOWED_TOOLS = frozenset(
     {
         "start_risk_assessment",
@@ -41,7 +45,8 @@ class GateDecision(BaseModel):
 
 
 def evaluate_gate(assessment: RiskAssessment | None, now: datetime) -> GateDecision:
-    """会话门禁：每条消息都重新计算，客户中途完成测评后立即生效。"""
+    """Conversation gate: recomputed for every message, so an assessment completed
+    mid-conversation takes effect immediately."""
     if assessment is None:
         return GateDecision(
             permission=Permission.ASSESSMENT_REQUIRED,

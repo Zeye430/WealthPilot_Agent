@@ -1,11 +1,11 @@
-# 后端镜像以仓库根目录为构建上下文：只放入 backend/ 与 data/，其余一律排除
+# The backend image uses the repo root as build context: include only backend/ and data/, exclude everything else
 *
 !backend/
 !data/
 
-# 真实机构的公开文件仅作本地参考，绝不能进入镜像
+# Real institutions' public documents are for local reference only and must never enter the image
 data/reference/
-# 本地环境与缓存
+# Local environment and caches
 backend/.venv/
 backend/.models/
 backend/.env

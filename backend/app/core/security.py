@@ -1,4 +1,4 @@
-"""HTTP 层安全：跨站写请求检查、安全响应头、日志脱敏。"""
+"""HTTP-layer security: cross-site write checks, security response headers, log redaction."""
 
 import logging
 import re
@@ -15,14 +15,15 @@ SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    # 只允许本站使用麦克风（语音输入），禁用摄像头、定位等
+    # Only this site may use the microphone (voice input); camera, location, etc. are disabled
     "Permissions-Policy": "microphone=(self), camera=(), geolocation=()",
-    "Cache-Control": "no-store",  # 接口返回客户数据，不允许缓存
+    "Cache-Control": "no-store",  # responses contain customer data and must not be cached
 }
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    """写请求若带有 Origin，必须来自允许的前端来源（配合 SameSite Cookie 防 CSRF）。"""
+    """A write request with an Origin header must come from an allowed frontend origin (with
+    SameSite cookies, this blocks CSRF)."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         origin = request.headers.get("origin")
@@ -38,7 +39,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# 日志脱敏：手机号、身份证号、银行卡号（演示系统不采集这些信息，这里是防御性措施）
+# Log redaction: phone numbers, national ID numbers, bank card numbers (the demo doesn't collect
+# them; this is defensive)
 PII_PATTERNS = [
     (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "[手机号]"),
     (re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)"), "[身份证号]"),
@@ -54,7 +56,8 @@ def redact(text: str) -> str:
 
 class RedactingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        # 先按原格式拼好完整消息再脱敏，避免破坏第三方库的 %d 等格式化参数
+        # Format the full message first, then redact, so third-party %d-style arguments aren't
+        # broken
         record.msg = redact(record.getMessage())
         record.args = None
         return True

@@ -1,7 +1,10 @@
-"""话题路由（scope_router）：主 Agent 之前的轻量分类，负责控制成本和服务范围。
+"""Topic router (scope_router): a light classifier before the main agent that controls cost and
+service scope.
 
-它可能分错，所以**不承担合规职责**：即使把「推荐产品」误判为金融常识，未测评客户的
-LLM 依然没有产品工具（见 app/compliance/policy.py）。分类失败时默认放行到主 Agent。
+It can misclassify, so it **carries no compliance responsibility**: even if "recommend a product" is
+misread as general knowledge,
+the LLM still has no product tools for an unprofiled customer (see app/compliance/policy.py). On
+failure it defaults to the main agent.
 """
 
 import logging

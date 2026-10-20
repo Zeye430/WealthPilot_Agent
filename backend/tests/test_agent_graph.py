@@ -1,4 +1,4 @@
-"""Agent 流程测试（脚本化假模型，不调用真实 LLM）。"""
+"""Agent flow tests (scripted fake model, no real LLM calls)."""
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -47,7 +47,7 @@ def decisions(result, checkpoint):
     return [d for d in result["policy_decisions"] if d["checkpoint"] == checkpoint]
 
 
-# ---------- 计算链路（Phase 1 回归） ----------
+# ---------- Calculation path (Phase 1 regression) ----------
 
 
 def test_compound_question_uses_tool_and_returns_blocks():
@@ -98,11 +98,12 @@ def test_tool_call_limit_stops_loop():
     assert sum(isinstance(m, ToolMessage) for m in result["messages"]) == 2
 
 
-def test_tool_limit_summarizes_existing_results():  # 场景评估 V02
+def test_tool_limit_summarizes_existing_results():  # scenario V02
     calls = [tool_call("calculate_growth", GROWTH_ARGS, call_id=f"c{i}") for i in range(3)]
     model = ScriptedChatModel(responses=[*calls, AIMessage("按 5% 测算，10 年后约 162.89 万元。")])
     result = run(model, max_tool_calls=2)
-    # 第 3 次调用不执行，模型根据已有两次结果作答；已产生的图表照常展示
+    # The 3rd call isn't executed; the model answers from the first two results; charts already
+    # produced are still shown
     assert result["reply"].startswith("按 5% 测算")
     assert sum(isinstance(m, ToolMessage) for m in result["messages"]) == 2
     assert "calculation_result" in block_types(result)
@@ -153,7 +154,7 @@ def test_fee_tool():
     assert items["到手金额"] == "101694.92"
 
 
-# ---------- 话题路由 ----------
+# ---------- Topic routing ----------
 
 
 def test_out_of_scope_never_calls_main_model():  # S02c / S02d
@@ -172,14 +173,14 @@ def test_router_output_with_extra_text_is_parsed():
 
 
 def test_router_failure_falls_back_to_agent():
-    broken_router = ScriptedChatModel(responses=[])  # 调用即抛 IndexError
+    broken_router = ScriptedChatModel(responses=[])  # raises IndexError when called
     model = ScriptedChatModel(responses=[AIMessage("七日年化是一种收益口径。")])
     result = run(model, router=broken_router, text="什么是七日年化？")
     assert model.calls == 1
     assert decisions(result, "ROUTER")[0]["decision"] == "FINANCE_KNOWLEDGE"
 
 
-# ---------- 测评门禁 ----------
+# ---------- Assessment gate ----------
 
 
 def test_product_request_before_assessment_is_blocked_without_llm():  # S01 / S02e
@@ -216,7 +217,8 @@ def test_knowledge_before_assessment_gets_reminder():  # S02
         text="什么是业绩比较基准？",
         permission=Permission.ASSESSMENT_REQUIRED,
     )
-    # 未检索资料的常识回答：标注「一般性说明」，并附测评提醒
+    # A general answer without retrieved sources: labeled "general information", with an assessment
+    # reminder
     assert block_types(result) == ["source_note", "assessment_prompt"]
     assert result["ui_blocks"][1]["variant"] == "reminder"
 
@@ -230,7 +232,8 @@ def test_general_calculation_allowed_before_assessment():  # S02b
 
 
 def test_unbound_tool_is_blocked_at_execution():
-    # 模型「幻觉」调用了测评前未绑定的工具：执行层再拦一次
+    # The model "hallucinates" a call to a tool that isn't bound before an assessment: the execution
+    # layer blocks it again
     model = ScriptedChatModel(
         responses=[
             tool_call("calculate_fees", {"amount": 100000, "subscription_fee_rate": 0.003}),
@@ -244,7 +247,7 @@ def test_unbound_tool_is_blocked_at_execution():
     assert "calculation_result" not in block_types(result)
 
 
-# ---------- 输出审查 ----------
+# ---------- Output review ----------
 
 
 def test_prohibited_claim_is_rewritten():
@@ -265,7 +268,8 @@ def test_repeated_violation_falls_back():
 
 
 def test_rejected_draft_cannot_ground_the_rewrite():
-    # R01 场景评估发现：被拒绝的初稿曾被当作「此前的消息」，改写时重复同一个编造的金额就能通过
+    # Found in scenario R01: a rejected draft used to count as an earlier message, so repeating the
+    # same made-up amount in the rewrite passed
     draft = "超出限额部分为 11.2 万元。"
     model = ScriptedChatModel(responses=[AIMessage(draft), AIMessage(draft)])
     result = run(model, label="FINANCE_KNOWLEDGE", text="能举个例子说明超过限额的部分怎么算吗？")
@@ -274,7 +278,8 @@ def test_rejected_draft_cannot_ground_the_rewrite():
 
 
 def test_rejected_draft_cannot_ground_a_product():
-    # 同一漏洞也影响产品来源核对：初稿中编造的产品不能为改写后的回答「作证」
+    # The same bug affected product grounding: a product invented in the draft can't vouch for the
+    # rewrite
     draft = "推荐知岸稳享每日开放。"
     model = ScriptedChatModel(responses=[AIMessage(draft), AIMessage(draft)])
     result = run(model, label="PRODUCT", text="有什么稳健的产品？")
@@ -282,7 +287,7 @@ def test_rejected_draft_cannot_ground_a_product():
 
 
 def test_tool_result_in_rewrite_still_grounds_amount():
-    # 改写时调用工具得到的金额是正当来源
+    # An amount from a tool called during the rewrite is a legitimate source
     model = ScriptedChatModel(
         responses=[
             AIMessage("约 170 万元。"),
@@ -326,7 +331,7 @@ def test_guarantee_question_gets_explicit_denial():
     assert result["reply"] == explicit
 
 
-def test_own_holding_mentioned_before_assessment_is_not_a_leak():  # 场景评估 R01
+def test_own_holding_mentioned_before_assessment_is_not_a_leak():  # scenario R01
     reply = "存款保险最高偿付 50 万元；您持有的知岸活钱宝属于理财产品，不在存款保险范围内。"
     graph = build_graph(
         ScriptedChatModel(responses=[AIMessage(reply)]),
@@ -360,11 +365,12 @@ def test_recommendation_before_assessment_is_rewritten():
         permission=Permission.ASSESSMENT_REQUIRED,
     )
     codes = decisions(result, "OUTPUT")[0]["reason_codes"]
-    assert codes == ["O-PERMISSION_LEAK", "片段:建议您购买"]  # 审计记录包含违规片段
+    # the audit record includes the offending snippet
+    assert codes == ["O-PERMISSION_LEAK", "片段:建议您购买"]
     assert "建议您购买" not in result["reply"]
 
 
-# ---------- 产品工具（Phase 3） ----------
+# ---------- Product tools (Phase 3) ----------
 
 
 def test_search_products_uses_injected_rating():
@@ -382,7 +388,8 @@ def test_search_products_uses_injected_rating():
 
 
 def test_llm_cannot_pass_rating_to_widen_results():
-    # 即使模型试图塞入 risk_rating 参数，工具也只认流程状态里的评级
+    # Even if the model tries to pass a risk_rating argument, the tool only trusts the rating in the
+    # flow state
     model = ScriptedChatModel(
         responses=[
             tool_call("search_products", {"risk_rating": "C5", "product_types": ["EQUITY"]}),
@@ -415,12 +422,13 @@ def test_made_up_product_is_rewritten():
     )
     result = run(model, label="PRODUCT_OR_ADVICE", text="有什么好产品？")
     codes = decisions(result, "OUTPUT")[0]["reason_codes"]
-    # 既是编造（本轮未查询过），又是向 C2 客户推荐 PR5 产品
+    # Both made up (not queried this turn) and a PR5 product recommended to a C2 customer
     assert codes[:2] == ["O-UNGROUNDED_PRODUCT", "O-UNSUITABLE_RECOMMENDATION"]
 
 
 def test_product_fee_rates_come_from_catalog_not_llm():
-    # 模型即使传了错误费率，填写 product 后仍以说明书为准：知岸稳享每日开放持有不足 7 天赎回费 0.5%
+    # Even if the model passes a wrong fee rate, the prospectus wins once product is set: redemption
+    # within 7 days costs 0.5% for Zhian Steady Daily Open
     model = ScriptedChatModel(
         responses=[
             tool_call(
@@ -453,7 +461,8 @@ def test_product_fee_requires_holding_days():
     assert tool_msg.status == "error" and "持有天数" in tool_msg.content
 
 
-def test_only_last_allocation_shown():  # 场景评估 V02：调整前的草稿与最终方案并列会互相矛盾
+# scenario V02: drafts shown next to the final plan would contradict each other
+def test_only_last_allocation_shown():
     blocks = [
         {"type": "product_list", "items": []},
         {"type": "allocation", "title": "草稿"},

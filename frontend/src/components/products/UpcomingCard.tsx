@@ -37,8 +37,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 即将发售的新品卡片：如实展示募集期、募集规模上限和业绩比较基准，客户自己决定是否预约提醒。
- * 不用「抢购」「限量」等字眼，额度只作为事实说明。
+ * Upcoming product card: shows the subscription period, size cap and performance benchmark as facts; the customer decides whether to set a reminder.
+ * No words like "rush" or "limited"; the size cap is stated only as a fact.
  */
 export function UpcomingCard({
   product,
@@ -75,7 +75,7 @@ export function UpcomingCard({
   );
 }
 
-/** 「开售提醒我」：客户本人点击才预约；已预约时可取消。规则由后端校验（评级、是否新品）。 */
+/** "Remind me": set only when the customer taps it; can be cancelled once set. The backend checks the rules (rating, new product). */
 export function RemindButton({
   code,
   initial,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 更新代码：上传当前提交，在服务器上重新构建并滚动重启（数据保留）。
-# 用法：./deploy/update.sh      演练：DRY_RUN=1 ./deploy/update.sh
-# GitHub Actions 中通过 DEPLOY_HOST / DEPLOY_DOMAIN / KEY_FILE 环境变量调用（见 .github/workflows/deploy.yml）
+# Update the code: upload the current commit, rebuild on the server and restart (data is kept).
+# Usage: ./deploy/update.sh      Dry run: DRY_RUN=1 ./deploy/update.sh
+# In GitHub Actions it's called with the DEPLOY_HOST / DEPLOY_DOMAIN / KEY_FILE environment variables (see .github/workflows/deploy.yml)
 source "$(dirname "$0")/lib.sh"
 load_state
 check_env_file

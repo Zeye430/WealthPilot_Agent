@@ -9,8 +9,8 @@ type ProductActions = { open: (code: string) => void };
 const Ctx = createContext<ProductActions>({ open: () => {} });
 
 /**
- * 全局只挂载一个产品详情弹窗：对话中的产品卡片、产品页、配置图都通过 open(code) 打开它，
- * 详情、买入流程和「去测评」入口因此在所有地方保持一致。
+ * Only one product detail dialog is mounted app-wide: product cards in chat, the products page and allocation charts all open it via open(code),
+ * so details, the purchase flow and the "take the assessment" entry stay consistent everywhere.
  */
 export function ProductActionsProvider({
   children,

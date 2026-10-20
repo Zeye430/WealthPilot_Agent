@@ -5,7 +5,7 @@ import { I18nProvider } from "@/lib/i18n";
 
 import "./globals.css";
 
-// 英文与数字：Plus Jakarta Sans（开源，圆润现代）；中文：Noto Sans SC
+// Latin text and digits: Plus Jakarta Sans (open source, rounded and modern); Chinese: Noto Sans SC
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
   weight: ["400", "500", "600", "700", "800"],

@@ -1,10 +1,10 @@
-"""LLM 相关的越权与注入防护。
+"""LLM-related privilege-escalation and injection defenses.
 
-其余已覆盖的威胁见：
-- 测评前调用产品工具被拦截：test_agent_graph.py（BLOCK_TOOL）
-- 文档中的提示注入：test_rag.py::test_prompt_injection_in_document_is_caught
-- 跨客户读取会话 / 理财经理越权：test_api_chat.py
-- 伪造身份、会话、限流、跨站写请求：test_auth.py
+Other threats are covered in:
+- Product tools called before an assessment are blocked: test_agent_graph.py (BLOCK_TOOL)
+- Prompt injection in documents: test_rag.py::test_prompt_injection_in_document_is_caught
+- Reading another customer's conversations / RM overreach: test_api_chat.py
+- Forged identity, sessions, rate limits, cross-site writes: test_auth.py
 """
 
 import pytest
@@ -34,13 +34,14 @@ db_required = pytest.mark.skipif(not _db_available(), reason="数据库未启动
 
 @pytest.mark.parametrize("tool", ALL_TOOLS, ids=lambda t: t.name)
 def test_llm_cannot_supply_identity_or_rating(tool):
-    """客户评级、身份由系统注入（InjectedState），不出现在模型可见的参数里，模型无法伪造。"""
+    """Customer rating and identity are injected by the system (InjectedState), never among the
+    model-visible arguments, so the model can't forge them."""
     visible = set(tool.tool_call_schema.model_json_schema().get("properties", {}))
     assert not visible & HIDDEN_FIELDS, f"{tool.name} 暴露了 {visible & HIDDEN_FIELDS}"
 
 
 def test_message_length_is_bounded():
-    # 注入假模型：不依赖本地是否配置了 Kimi Key（CI 中没有）
+    # Inject a fake model: independent of whether a Kimi key is configured locally (CI has none)
     app.dependency_overrides[get_agent] = lambda: build_graph(
         ScriptedChatModel(responses=[]), ScriptedChatModel(responses=[])
     )

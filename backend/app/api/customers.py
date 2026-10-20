@@ -1,4 +1,5 @@
-"""本次需求的查看与修改。基础画像来自银行系统、只读，这里没有修改它的接口。"""
+"""View and edit current needs. The base profile comes from the bank system and is read-only;
+there is no endpoint to change it."""
 
 from datetime import datetime
 
@@ -35,7 +36,7 @@ def clear_needs(
     customer_id: str = Depends(get_customer_id),
     now: datetime = Depends(get_now),
 ):
-    """开始一个新的理财目标时清空本次需求。"""
+    """Clear current needs when starting a new wealth goal."""
     db.execute(delete(CustomerNeeds).where(CustomerNeeds.customer_id == customer_id))
     db.commit()
     return customer_state(db, customer_id, now)

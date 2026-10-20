@@ -1,7 +1,7 @@
-# 生产部署：数据库 + 后端 + 前端 + Caddy（HTTPS）+ 每日数据库备份。
-# 由 deploy/deploy.sh 在服务器上执行；部署步骤见 README「部署」。
-# 只有 Caddy 对外开放端口；数据库、后端、前端只在容器网络内可达。
-name: wealthpilot-prod  # 与开发环境的 compose 项目（wealthpilot）区分，避免误用开发数据卷
+# Production deployment: database + backend + frontend + Caddy (HTTPS) + daily database backups.
+# Run on the server by deploy/deploy.sh; see Deployment in the README.
+# Only Caddy exposes ports; the database, backend and frontend are reachable only inside the container network.
+name: wealthpilot-prod  # separate from the development compose project (wealthpilot), so dev volumes are never used by mistake
 
 services:
   db:
@@ -20,20 +20,20 @@ services:
 
   backend:
     build:
-      context: ..                        # 仓库根目录：镜像中包含 backend/ 与 data/（见 backend/Dockerfile、.dockerignore）
+      context: ..                        # repo root: the image includes backend/ and data/ (see backend/Dockerfile, .dockerignore)
       dockerfile: backend/Dockerfile
     env_file: .env.production
     environment:
       DATABASE_URL: postgresql+psycopg://wealthpilot:${POSTGRES_PASSWORD}@db:5432/wealthpilot
-      CORS_ORIGINS: '["${PUBLIC_ORIGIN:-https://${DOMAIN}}"]'   # PUBLIC_ORIGIN 只在本机验证（非 443 端口）时设置
+      CORS_ORIGINS: '["${PUBLIC_ORIGIN:-https://${DOMAIN}}"]'   # PUBLIC_ORIGIN is set only for local verification (non-443 port)
       COOKIE_SECURE: "true"
       LOG_FORMAT: json
       WARMUP_ON_START: "true"
       EMBEDDING_CACHE_DIR: /app/.cache/fastembed
       GIT_SHA: ${GIT_SHA:-unknown}
     volumes:
-      - asr-models:/app/.models          # 语音模型（部署脚本下载一次，重建容器不丢）
-      - model-cache:/app/.cache          # 向量模型缓存
+      - asr-models:/app/.models          # speech model (downloaded once by the deploy script, survives container rebuilds)
+      - model-cache:/app/.cache          # embedding model cache
     depends_on:
       db:
         condition: service_healthy
@@ -64,13 +64,13 @@ services:
       DOMAIN: ${DOMAIN:?在 .env.production 中设置 DOMAIN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data                 # 证书（重启不必重新申请，避免触发签发频率限制）
+      - caddy-data:/data                 # certificates (no re-issuing after restarts, avoiding issuance rate limits)
       - caddy-config:/config
     depends_on:
       - frontend
     restart: unless-stopped
 
-  # 每天导出一次数据库，保留最近 7 天
+  # Export the database once a day, keeping the last 7 days
   backup:
     image: pgvector/pgvector:pg16
     environment:
@@ -91,7 +91,7 @@ services:
         done
     depends_on:
       backend:
-        condition: service_healthy     # 后端健康 = 迁移已完成，避免首份备份是空库
+        condition: service_healthy     # backend healthy = migrations done, so the first backup isn't an empty database
     restart: unless-stopped
 
 volumes:

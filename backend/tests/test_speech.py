@@ -1,4 +1,5 @@
-"""语音转文字：WAV 校验、标签清理、领域词纠错、接口（假识别器，不依赖模型文件）。"""
+"""Speech to text: WAV validation, tag cleanup, domain-term correction, endpoint (fake
+recognizer, no model files needed)."""
 
 import io
 import wave
@@ -49,11 +50,12 @@ def test_clean_strips_sensevoice_tags():
 
 
 def test_domain_terms_corrected_by_pinyin():
-    # 实测：macOS 合成语音经 SenseVoice 识别为「挚爱文享」「活钱保」
+    # Observed: macOS synthesized speech recognized by SenseVoice as homophones of the brand and
+    # product names
     assert correct("挚爱文享30天持有和活钱保有什么区别？") == "知岸稳享30天持有和活钱宝有什么区别？"
     assert correct("鸿雨臻享一年封闭怎么样") == "鸿屿臻享一年封闭怎么样"
     assert correct("我能办真想卡吗") == "我能办臻享卡吗"
-    # 常用词不应被改成相近的产品名
+    # Common words must not be changed into similar product names
     assert correct("定向增发和治安问题") == "定向增发和治安问题"
 
 

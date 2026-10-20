@@ -1,4 +1,5 @@
-"""LLM 适配层。业务代码只依赖 LangChain 的 BaseChatModel 接口，不直接引用某家厂商的 SDK。"""
+"""LLM adapter. Business code depends only on LangChain's BaseChatModel interface, never on a
+vendor SDK directly."""
 
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
@@ -16,10 +17,12 @@ def get_chat_model(
     thinking: bool | None = None,
     max_tokens: int | None = None,
 ) -> BaseChatModel:
-    """thinking=None 时使用配置中的主 Agent 设置。
+    """thinking=None uses the main-agent setting from config.
 
-    Kimi 思考模式会先生成推理过程（更慢、更多 token），只接受 temperature=1；
-    关闭思考时只接受 temperature=0.6。话题路由这类简单分类任务应关闭思考。
+    Kimi's thinking mode first generates reasoning (slower, more tokens) and only accepts
+    temperature=1;
+    with thinking off it only accepts temperature=0.6. Simple classification such as topic routing
+    should run without thinking.
     """
     settings = settings or get_settings()
     if not settings.llm_api_key.get_secret_value():

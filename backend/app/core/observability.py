@@ -1,12 +1,14 @@
-"""可观测性基础：请求编号、结构化日志、进程内指标（Prometheus 文本格式）。
+"""Observability basics: request IDs, structured logs, in-process metrics (Prometheus text format).
 
-- 每个请求一个编号（X-Request-ID）：日志、对话指标、响应头都带上它，
-  客户反馈问题时凭编号即可定位整条链路。
-  上游（负载均衡）传入合法编号时沿用，否则新生成。
-- 日志：本地开发为可读文本；部署时 LOG_FORMAT=json，每行一个 JSON，便于云平台检索与告警。
-- 指标：不引入第三方依赖，按 Prometheus 文本格式输出计数器、直方图、仪表；单进程内存保存，
-  重启清零（长期趋势看数据库中的 turn_metrics，见 app/ops/）。
-  多实例部署时由 Prometheus 分别抓取各实例。
+- One ID per request (X-Request-ID): logs, turn metrics and response headers all carry it,
+  so a customer's report can be traced end to end by ID.
+  A valid ID from upstream (the load balancer) is reused; otherwise a new one is generated.
+- Logs: readable text locally; LOG_FORMAT=json when deployed, one JSON object per line, easy to
+search and alert on.
+- Metrics: no third-party dependency; counters, histograms and gauges in Prometheus text format,
+kept in memory per process,
+  reset on restart (long-term trends come from turn_metrics in the database; see app/ops/).
+  With multiple instances, Prometheus scrapes each one.
 """
 
 import json
@@ -30,7 +32,7 @@ def current_request_id() -> str:
     return _request_id.get()
 
 
-# ---------- 指标 ----------
+# ---------- Metrics ----------
 
 LATENCY_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120)
 
@@ -55,7 +57,8 @@ def _key(labels: dict[str, str]) -> tuple[tuple[str, str], ...]:
 
 
 class Metrics:
-    """线程安全的进程内指标。接口与 prometheus_client 相近，需要时可直接替换。"""
+    """Thread-safe in-process metrics. The interface is close to prometheus_client, so it can be
+    swapped in when needed."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -74,7 +77,7 @@ class Metrics:
     def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         key = _key(labels or {})
         with self._lock:
-            # 每个桶的累计计数 + 总和 + 总数
+            # cumulative count per bucket + sum + count
             hist = self._hist[name].setdefault(key, [0.0] * (len(LATENCY_BUCKETS) + 2))
             for i, bound in enumerate(LATENCY_BUCKETS):
                 if value <= bound:
@@ -113,15 +116,16 @@ def _fmt(key: tuple, **extra: str) -> str:
 METRICS = Metrics()
 
 
-# ---------- 请求编号中间件 ----------
+# ---------- Request ID middleware ----------
 
 access_logger = logging.getLogger("wealthpilot.access")
 
 
 class RequestContextMiddleware:
-    """纯 ASGI 中间件：分配请求编号、记录访问日志与 HTTP 指标。
+    """Pure ASGI middleware: assigns request IDs, writes access logs and HTTP metrics.
 
-    指标按路由模板（/api/v1/products/{code}）而不是实际路径归类，避免产品代码等把标签数量撑爆。
+    Metrics are grouped by route template (/api/v1/products/{code}) rather than actual path, so
+    product codes don't blow up label cardinality.
     """
 
     def __init__(self, app):
@@ -168,7 +172,7 @@ class RequestContextMiddleware:
             _request_id.reset(token)
 
 
-# ---------- 日志 ----------
+# ---------- Logging ----------
 
 _STANDARD = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
 
@@ -180,7 +184,8 @@ class RequestIdFilter(logging.Filter):
 
 
 class JsonFormatter(logging.Formatter):
-    """每行一个 JSON：时间、级别、来源、消息、请求编号，以及 extra 中的业务字段。"""
+    """One JSON object per line: time, level, source, message, request ID, plus business fields
+    from extra."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {

@@ -9,7 +9,7 @@ class StartAssessmentInput(BaseModel):
 
 
 def assessment_prompt_block(variant: str = "invite") -> dict:
-    """测评入口卡片（按当前语言）。"""
+    """Assessment entry card (in the current language)."""
     return {
         "type": "assessment_prompt",
         "variant": variant,
@@ -23,7 +23,8 @@ def assessment_prompt_block(variant: str = "invite") -> dict:
 
 
 def _start_assessment():
-    # 问卷由界面以固定表单呈现，LLM 不参与提问和计分，避免诱导作答
+    # The questionnaire is a fixed form in the UI; the LLM neither asks the questions nor scores
+    # them, so it can't steer answers
     content = "界面已向客户展示风险测评入口。请用一两句话说明为什么需要先测评，不要替客户作答。"
     return content, [assessment_prompt_block()]
 

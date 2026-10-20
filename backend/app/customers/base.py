@@ -1,7 +1,9 @@
-"""客户基础画像：来自银行客户信息系统，WealthPilot 只读。
+"""Customer base profile: from the bank's customer information system; read-only for WealthPilot.
 
-演示环境用 YAML 模拟该系统；生产环境替换 CustomerInfoSystem 的实现（如调用 CRM 接口）即可，
-上层代码不受影响。基础画像的修改应走银行自身的 KYC 流程，不能通过对话改写。
+The demo simulates that system with YAML; in production, swap the CustomerInfoSystem implementation
+(e.g. call the CRM API)
+and code above it is unaffected. Base-profile changes go through the bank's own KYC process and
+can't be made in chat.
 """
 
 from datetime import date
@@ -39,7 +41,7 @@ class AssetsAtBank(BaseModel):
         )
 
     def liquid_total(self) -> Decimal:
-        """可随时支取的资产：活期存款 + 每日开放的理财持仓。"""
+        """Assets available any time: checking balance + wealth holdings that open daily."""
         catalog = load_catalog()
         liquid_products = sum(
             (
@@ -58,7 +60,8 @@ class RelationshipManager(BaseModel):
     name_en: str | None = None
     title: str = "理财经理"
     title_en: str = "Relationship Manager"
-    # 联系方式来自银行员工系统；演示数据为空，界面点击时提示「演示环境」，不拨打真实号码
+    # Contact details come from the bank's staff system; demo data has none, so the UI shows a demo
+    # note instead of dialing a real number
     phone: str | None = None
     wecom_url: str | None = None
 
@@ -103,7 +106,7 @@ class BaseProfile(BaseModel):
         return tier_label(self.customer_tier)
 
     def summary(self) -> dict:
-        """提供给前端与 LLM 的摘要：只含理财服务需要的信息。"""
+        """Summary for the frontend and the LLM: only what wealth services need."""
         catalog = load_catalog()
         holdings = [
             {
@@ -135,7 +138,7 @@ class CustomerInfoSystem(Protocol):
 
 
 class YamlCustomerInfoSystem:
-    """演示用：从 YAML 读取虚构客户的基础画像。"""
+    """Demo: read fictional customers' base profiles from YAML."""
 
     def __init__(self, path: Path = BASE_PROFILES_PATH):
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -156,5 +159,6 @@ AGE_OPTION_BOUNDS = [(30, "A"), (45, "B"), (55, "C"), (65, "D")]
 
 
 def age_option(age: int) -> str:
-    """问卷第 1 题（年龄）的选项：基础画像已有年龄，测评时预选，客户确认即可。"""
+    """Options for question 1 (age): the base profile already has the age, so it's preselected
+    for the customer to confirm."""
     return next((opt for bound, opt in AGE_OPTION_BOUNDS if age <= bound), "E")

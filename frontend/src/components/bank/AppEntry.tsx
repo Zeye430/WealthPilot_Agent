@@ -14,8 +14,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 手机银行进入页：读取 App 传来的一次性凭证，向 WealthPilot 后端换取会话，然后进入理财助手。
- * 凭证随即从地址栏移除（不留在浏览记录中）；凭证本身 60 秒过期、只能用一次。
+ * Banking-app entry page: reads the one-time ticket from the app, exchanges it with the WealthPilot backend for a session, then opens the assistant.
+ * The ticket is removed from the address bar right away (kept out of history); it expires in 60 s and works only once.
  */
 export function AppEntry() {
   const c = useCopy(COPY);
@@ -25,7 +25,7 @@ export function AppEntry() {
   const started = useRef(false);
 
   useEffect(() => {
-    if (started.current) return; // 开发模式下 effect 会执行两次，凭证只能用一次
+    if (started.current) return; // effects run twice in development, and the ticket works only once
     started.current = true;
     const ticket = new URLSearchParams(window.location.search).get("ticket");
     window.history.replaceState(null, "", "/app-entry");

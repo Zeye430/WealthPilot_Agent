@@ -1,4 +1,4 @@
-"""客户上下文：只读的基础画像 + 本次需求。每条消息都重新组装，保证 LLM 看到的是最新状态。"""
+"""Customer context: read-only base profile + current needs. Rebuilt for every message so the LLM sees the latest state."""
 
 import re
 
@@ -14,7 +14,7 @@ from app.products.presenter import format_money
 
 
 def assessed_loss_tolerance(db: Session, customer_id: str) -> str | None:
-    """风险测评第 10 题（可接受的最大本金亏损）的回答：客户已经说过，不必再问。"""
+    """Answer to assessment question 10 (largest acceptable loss of principal): the customer already said it, so don't ask again."""
     record = latest_confirmed(db, customer_id)
     if record is None:
         return None
@@ -26,12 +26,12 @@ def assessed_loss_tolerance(db: Session, customer_id: str) -> str | None:
 
 
 def customer_profile(db: Session, customer_id: str) -> dict:
-    """提供给前端的画像：两层分开展示，并标明来源。"""
+    """Profile for the frontend: the two layers shown separately, each with its source."""
     base = get_customer_info_system().get(customer_id)
     needs = get_needs(db, customer_id).display()
     loss = assessed_loss_tolerance(db, customer_id)
     for row in needs:
-        # 本次需求未单独提供时，展示测评中已回答的结果（标注来源，不写入本次需求）
+        # Without separately provided needs, show answers already given in the assessment (labeled with the source, not written to current needs)
         if row["field"] == "max_acceptable_loss" and row["value"] is None and loss:
             row["value"], row["source"] = loss, L("来自风险测评", "From risk profile")
     return {
@@ -42,7 +42,7 @@ def customer_profile(db: Session, customer_id: str) -> dict:
 
 
 def overview(base: BaseProfile) -> dict:
-    """「我的」页资产卡片：原始数值由前端按语言格式化；等级与升级差距由代码计算。"""
+    """Asset card on the "Me" page: raw numbers are formatted by the frontend per language; tier and upgrade gap are computed in code."""
     assets = base.assets_at_bank
     status = tier_status(base)
     nxt = status.next_tier
@@ -64,7 +64,7 @@ def overview(base: BaseProfile) -> dict:
 
 
 def tier_lines(base: BaseProfile, needs: Needs) -> list[str]:
-    """客户等级与「可提示升级」的时机：由代码判断，AI 只在合适时提示一次。"""
+    """Customer tier and when an upgrade may be mentioned: decided in code; the AI mentions it once at the right time."""
     status = tier_status(base, needs.investment_amount)
     line = (
         f"- 客户等级：{status.tier.name}（{status.tier.card_name}），"
@@ -75,7 +75,7 @@ def tier_lines(base: BaseProfile, needs: Needs) -> list[str]:
         line += f"；距{nxt.name}（{format_money(nxt.min_aum)}）还差 {format_money(status.gap)}"
     lines = [line]
     if status.reaches_next_with_plan or status.near_next:
-        # 主动提示的措辞必须包含前提与「以银行评定为准」，由代码统一追加（场景评估 V02）
+        # The proactive note must state the premise and "subject to the bank's assessment"; code appends it uniformly (scenario V02)
         lines.append(
             "- 等级升级提示由系统在回答末尾自动补充，你不要主动提等级升级或权益；"
             "客户主动问奖励、权益时再调用 get_customer_benefits。"
@@ -113,7 +113,7 @@ def prompt_section(
             value = f"{loss_tolerance}（风险测评中已回答，无需再问）"
         lines.append(f"- {row['label']}：{value or '未提供'}")
     if reminders:
-        # 「已预约开售提醒」同时是输出审查的依据：回答说「已预约」必须有系统记录（场景评估 N02）
+        # "Sale reminder set" is also evidence for output review: a reply claiming a reminder must have a system record (scenario N02)
         lines += [
             "",
             "## 已预约开售提醒（系统记录）",
@@ -138,9 +138,9 @@ SELF_REPORTED_AGE_EN = re.compile(
 
 
 def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str | None:
-    """客户自称的年龄与银行登记不一致、而回答没有说明时，由代码补充（P7 场景评估 M02 发现）。
+    """When the customer's stated age differs from bank records and the reply doesn't say so, code adds a note (found in P7 scenario M02).
 
-    年龄影响适当性判断，以银行登记（KYC）为准；对话不能改写基础画像。
+    Age affects suitability, and bank records (KYC) take precedence; a conversation can't rewrite the base profile.
     """
     match = SELF_REPORTED_AGE.search(message)
     age = int(match.group(2)) if match else None
@@ -148,7 +148,7 @@ def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str
         age = int(en.group(1))
     if base is None or age is None or age == base.age:
         return None
-    if f"{base.age}" in reply:  # 回答已经提到登记年龄
+    if f"{base.age}" in reply:  # the reply already mentions the recorded age
         return None
     return L(
         f"根据银行登记信息，您的年龄为 {base.age} 岁，产品匹配以登记信息和风险测评结果为准；"
@@ -162,9 +162,9 @@ def age_conflict_note(message: str, reply: str, base: BaseProfile | None) -> str
 def tier_upgrade_note(
     base: BaseProfile | None, needs: Needs, reply: str, history: str
 ) -> str | None:
-    """计划资金转入后可达下一等级、而回答和此前对话都没有提到时，由代码补充一次（场景评估 V02 发现）。
+    """When planned new money would reach the next tier and neither the reply nor earlier messages say so, code adds it once (found in scenario V02).
 
-    只陈述事实与前提（新转入资金、以银行评定为准），不与任何产品挂钩。
+    States only the facts and premises (new money moved in, subject to the bank's assessment), never tied to any product.
     """
     if base is None or needs.investment_amount is None:
         return None

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 一键启动本地开发环境：数据库 + 后端 + 前端。按 Ctrl+C 同时停止前后端（数据库保持运行）。
-# 用法（在仓库根目录）：./scripts/dev.sh
+# One command to start local development: database + backend + frontend. Ctrl+C stops backend and frontend (the database keeps running).
+# Usage (from the repo root): ./scripts/dev.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,7 +29,7 @@ echo "▶ 检查语音识别模型（首次约下载 240MB；失败不影响启�
 (cd backend && uv run python -W ignore ../scripts/download_asr_model.py) || echo "  ⚠ 语音模型下载失败，可稍后运行 scripts/download_asr_model.py"
 [ -d frontend/node_modules ] || (cd frontend && npm install)
 
-# 退出时结束本脚本启动的所有子进程
+# On exit, stop every child process this script started
 trap 'trap - EXIT; kill 0' INT TERM EXIT
 
 echo "▶ 后端 http://localhost:8000（接口文档 /docs）"

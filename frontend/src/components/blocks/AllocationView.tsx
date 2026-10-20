@@ -26,7 +26,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 对话中记录需求后的一个标签，让客户知道系统记住了什么。 */
+/** A chip after needs are recorded in chat, so the customer knows what the system remembered. */
 export function NeedsUpdateNote({ block }: { block: NeedsUpdateBlock }) {
   const c = useCopy(COPY);
   const sep = useSeparators();
@@ -38,7 +38,7 @@ export function NeedsUpdateNote({ block }: { block: NeedsUpdateBlock }) {
   );
 }
 
-/** 配置情景：比例条 + 明细 + 约束检查。不展示任何收益测算。 */
+/** Allocation scenario: proportion bar + details + constraint checks. No return projections of any kind. */
 export function AllocationView({ block }: { block: AllocationBlock }) {
   const c = useCopy(COPY);
   const sep = useSeparators();
@@ -69,7 +69,7 @@ export function AllocationView({ block }: { block: AllocationBlock }) {
             <tr key={s.code} className="border-b border-line last:border-0">
               <td className="py-2.5 pr-2">
                 <span className="mr-2.5 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: color(i) }} aria-hidden />
-                {/* 理财产品可点开查看详情与买入；活期存款没有风险等级，不可点 */}
+                {/* Wealth products open details and purchase; a checking deposit has no risk level and isn't clickable */}
                 {s.risk_level ? (
                   <button type="button" onClick={() => open(s.code)} className="text-left font-bold text-brand hover:underline">
                     {s.name}

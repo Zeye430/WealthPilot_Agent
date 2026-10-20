@@ -1,8 +1,10 @@
-"""界面语言：中文 / English。
+"""UI language: Chinese / English.
 
-每个请求的语言由中间件从 Cookie `wp_locale`（前端切换语言时写入）或 Accept-Language 读出，
-放进上下文变量；展示层函数用 `L(中文, English)` 取当前语言的文字，不必层层传参。
-Agent 在同一请求上下文中运行，工具输出也随之切换语言。
+Middleware reads each request's language from the `wp_locale` cookie (set when the frontend switches
+language) or Accept-Language
+and puts it in a context variable; presentation code picks text with `L(Chinese, English)` instead
+of passing the language around.
+The agent runs in the same request context, so tool output switches language too.
 """
 
 from collections.abc import Iterator
@@ -24,7 +26,7 @@ def is_en() -> bool:
     return _current.get() == "en"
 
 
-def L(zh: str, en: str) -> str:  # noqa: N802  与界面文案对照阅读时更直观
+def L(zh: str, en: str) -> str:  # noqa: N802  short name reads naturally next to the UI copy
     return en if _current.get() == "en" else zh
 
 
@@ -46,7 +48,8 @@ def parse_locale(cookie: str | None, accept_language: str | None) -> Locale:
 
 
 class LocaleMiddleware:
-    """纯 ASGI 中间件：在调用下游之前设置上下文变量，同步接口在线程池中运行时也能读到。"""
+    """Pure ASGI middleware: sets the context variable before calling downstream, so sync
+    endpoints running in the thread pool can read it."""
 
     def __init__(self, app):
         self.app = app
@@ -65,12 +68,13 @@ class LocaleMiddleware:
             await self.app(scope, receive, send)
 
 
-# 模块级常量的英文对照：常量本身保持中文（测试、比较都基于它），使用处用 localized() 取当前语言
+# English counterparts of module-level constants: the constants stay Chinese (tests and comparisons
+# rely on them); use localized() at the point of use
 _EN: dict[str, str] = {}
 
 
 def register(zh: str, en: str) -> str:
-    """登记一对中英文，返回中文原文（作为常量值）。"""
+    """Register a Chinese/English pair and return the Chinese text (used as the constant value)."""
     _EN[zh] = en
     return zh
 
@@ -80,5 +84,5 @@ def localized(text: str) -> str:
 
 
 def all_versions(text: str) -> set[str]:
-    """某个常量的所有语言版本（用于判断回答是否为固定话术）。"""
+    """All language versions of a constant (used to tell whether a reply is a fixed reply)."""
     return {text, _EN.get(text, text)}

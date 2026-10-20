@@ -1,8 +1,11 @@
-"""账号与服务端会话。
+"""Accounts and server-side sessions.
 
-- 会话令牌是 32 字节随机数，只在 Cookie 中出现；数据库只存 SHA-256，泄露也无法冒用。
-- 会话有绝对有效期和闲置超时；退出登录、账号停用都会立即失效（JWT 做不到即时吊销）。
-- 演示账号在启动时按配置创建；真实系统应对接银行统一身份认证（SSO），并增加多因素认证。
+- Session tokens are 32 random bytes and appear only in the cookie; the database stores only the
+SHA-256, so a leak can't be used to hijack sessions.
+- Sessions have an absolute lifetime and an idle timeout; sign-out and account deactivation take
+effect immediately (JWTs can't be revoked instantly).
+- Demo accounts are created from config at startup; a real system would use the bank's single
+sign-on with multi-factor authentication.
 """
 
 import hashlib
@@ -19,7 +22,9 @@ from app.db.models import AuthSession, User
 
 CUSTOMER = "customer"
 RM = "rm"
-OPS = "ops"  # 运维 / 合规值班：只看汇总指标与审计编号，不看对话内容与客户资料
+# ops / compliance on call: aggregate metrics and audit IDs only, no conversation content or
+# customer data
+OPS = "ops"
 
 
 @dataclass(frozen=True)
@@ -48,7 +53,7 @@ def _current(user: User) -> CurrentUser:
 
 
 def ensure_demo_accounts(db: Session) -> None:
-    """按配置创建缺失的演示账号（已存在的不改动）。"""
+    """Create missing demo accounts from config (existing ones are left unchanged)."""
     settings = get_settings()
     existing = set(db.scalars(select(User.username)))
     for account in settings.demo_accounts:
@@ -70,19 +75,21 @@ def ensure_demo_accounts(db: Session) -> None:
 def authenticate(db: Session, username: str, password: str) -> CurrentUser | None:
     user = db.scalars(select(User).where(User.username == username.strip().lower())).first()
     if user is None or user.disabled:
-        verify_password(password, DUMMY_HASH)  # 与真实校验同等耗时
+        verify_password(password, DUMMY_HASH)  # same cost as a real check
         return None
     return _current(user) if verify_password(password, user.password_hash) else None
 
 
 APP_USER_PREFIX = "app:"
-APP_ONLY_PASSWORD = "!app-entry-only"  # 不是合法哈希，任何密码都无法通过校验
+APP_ONLY_PASSWORD = "!app-entry-only"  # not a valid hash, so no password can match
 
 
 def app_customer(db: Session, customer_id: str) -> CurrentUser:
-    """经手机银行进入的客户：首次进入时自动开户（JIT provisioning），账号没有密码，只能经 App 进入。
+    """Customers entering from the banking app: an account is created on first entry (JIT
+    provisioning) with no password, so it can only be used via the app.
 
-    客户身份由银行核验（凭证签名），WealthPilot 不接触客户的银行登录密码。
+    The bank verifies the customer's identity (ticket signature); WealthPilot never handles the
+    customer's banking password.
     """
     from app.customers.base import get_customer_info_system
 
@@ -123,7 +130,8 @@ def create_session(db: Session, user: CurrentUser, now: datetime) -> str:
 
 
 def resolve_session(db: Session, token: str, now: datetime) -> CurrentUser | None:
-    """校验会话并刷新最近活动时间；过期、闲置超时、已吊销或账号停用都返回 None。"""
+    """Validate the session and refresh its last-activity time; returns None if expired, idle too
+    long, revoked, or the account is deactivated."""
     session = db.get(AuthSession, _digest(token))
     if session is None or session.revoked_at is not None or session.expires_at <= now:
         return None

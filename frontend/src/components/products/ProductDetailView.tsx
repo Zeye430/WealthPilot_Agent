@@ -44,7 +44,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 产品详情。超出客户风险等级的产品也可查看条款，但顶部显著提示「不作推荐、无权限购买」。 */
+/** Product details. Products above the customer's risk level can still be viewed, with a prominent "not recommended, not eligible to buy" notice at the top. */
 export function ProductDetailView({ product }: { product: ProductDetail }) {
   const c = useCopy(COPY);
   const sep = useSeparators();

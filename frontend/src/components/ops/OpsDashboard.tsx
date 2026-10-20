@@ -187,8 +187,8 @@ function uptime(seconds: number, locale: "zh" | "en") {
 }
 
 /**
- * 运维看板（演示）：只读的汇总指标。数据来自 turn_metrics（每轮一行）与就绪检查，
- * 不含对话内容与客户资料；需要追查时，凭请求编号查日志和有权限控制的审计表。
+ * Ops dashboard (demo): read-only aggregate metrics from turn_metrics (one row per turn) and the readiness check,
+ * with no conversation content or customer data; to investigate, use the request ID to search logs and the access-controlled audit tables.
  */
 export function OpsDashboard() {
   const c = useCopy(COPY);
@@ -476,7 +476,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-/** 单一数量维度的条形列表：同一种颜色，按数值从大到小，数值以文字标出。 */
+/** Bar list for a single quantity: one color, sorted by value descending, with values written out. */
 function Bars({ rows, empty }: { rows: { key: string; label: string; sub?: string; value: number }[]; empty: string }) {
   if (rows.length === 0) return <p className="text-sm text-ink-3">{empty}</p>;
   const max = Math.max(...rows.map((r) => r.value));

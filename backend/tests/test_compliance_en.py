@@ -1,6 +1,7 @@
-"""英文界面的输出审查（P8-2b）：每条规则的英文版，既要拦住违规句式，也不能误伤合规的否定陈述。
+"""Output review in the English UI (P8-2b): the English version of each rule must block violations
+without flagging compliant negations.
 
-中文界面只用中文规则；英文界面中英文规则同时生效。
+The Chinese UI uses only Chinese rules; the English UI applies both.
 """
 
 import pytest
@@ -55,7 +56,7 @@ def test_prohibited_claims(text):
         "There's no guaranteed return; a benchmark is not an expected return.",
         "Be wary if a salesperson says it's “risk-free”: that's a misleading claim.",
         "We can't promise you any guaranteed returns.",
-        # 以下来自英文场景评估 G02 / S02 中被误拦的合规回答
+        # Compliant replies wrongly blocked in English scenarios G02 / S02
         "Banks and other institutions are not allowed to promise principal protection or "
         "guaranteed returns.",
         "Regulations do not allow me to sell you a wealth management product with a "
@@ -108,7 +109,7 @@ def test_gift_for_purchase(text):
 
 def test_tier_benefits_tied_to_assets_pass():
     text = "Adding ¥100,000 or more in total financial assets earns 2,000 points."
-    benefits = "reward: 2,000 points for adding ¥100,000 or more"  # 权益工具结果
+    benefits = "reward: 2,000 points for adding ¥100,000 or more"  # benefits tool result
     assert violations(text, facts=benefits) == []
 
 
@@ -179,7 +180,7 @@ def test_permission_leak_before_assessment():
     assert violations(text, permission=Permission.ASSESSMENT_REQUIRED) == ["O-PERMISSION_LEAK"]
 
 
-def test_profile_invitation_is_not_a_recommendation():  # 英文评估 R03
+def test_profile_invitation_is_not_a_recommendation():  # English eval R03
     text = "Once you complete your risk profile, I can find suitable products for you."
     assert violations(text, permission=Permission.ASSESSMENT_REQUIRED) == []
     leak = "The best option for you is a fixed income product."

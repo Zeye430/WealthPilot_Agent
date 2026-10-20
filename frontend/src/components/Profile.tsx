@@ -6,7 +6,7 @@ import type { CustomerState } from "@/lib/types";
 
 import { Avatar, Button, ChevronRight } from "./ui";
 
-/** 评级的英文名（后端返回中文名，英文界面按代码映射） */
+/** English names of ratings (the backend returns Chinese names; the English UI maps them by code) */
 export const RATING_EN: Record<string, string> = {
   C1: "Conservative",
   C2: "Steady",
@@ -68,7 +68,7 @@ export function ratingName(state: CustomerState | null, locale: "zh" | "en") {
   return locale === "en" ? RATING_EN[a.rating] ?? a.rating_name : a.rating_name;
 }
 
-/** 深海军蓝资产卡片：总资产、可随时支取、理财持仓、客户等级与升级进度。 */
+/** Deep navy asset card: total assets, available any time, wealth holdings, customer tier and upgrade progress. */
 export function AssetCard({ state, compact = false }: { state: CustomerState | null; compact?: boolean }) {
   const c = useCopy(COPY);
   const { locale } = useLocale();

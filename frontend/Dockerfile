@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-# rewrites 在构建时求值，后端地址需在此传入
+# rewrites are evaluated at build time, so the backend URL is passed in here
 ARG BACKEND_URL=http://backend:8000
 ENV BACKEND_URL=$BACKEND_URL
 RUN npm run build

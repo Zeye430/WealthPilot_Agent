@@ -1,10 +1,13 @@
-"""健康检查与指标。
+"""Health checks and metrics.
 
-- /health：存活检查（进程在、能响应），给负载均衡用，不依赖外部服务，
-  避免数据库抖动导致容器被反复重启。
-- /health/ready：就绪检查，逐项检查依赖（数据库、模型配置、熔断状态、知识库索引、语音模型），
-  任一必需项不可用返回 503，部署平台据此暂停向该实例转发流量。
-- /metrics：Prometheus 文本格式指标，需配置 METRICS_TOKEN 并以 Bearer 令牌访问；未配置时关闭。
+- /health: liveness (the process is up and responding), for the load balancer; independent of
+external services,
+  so database hiccups don't cause containers to be restarted repeatedly.
+- /health/ready: readiness, checking each dependency (database, model config, breaker, knowledge
+index, speech model);
+  returns 503 if any required one is unavailable, so the platform stops routing traffic to this
+  instance.
+- /metrics: Prometheus text format; requires METRICS_TOKEN and a Bearer token; disabled when unset.
 """
 
 import hmac
@@ -32,7 +35,8 @@ def health():
 
 
 def readiness() -> dict:
-    """各依赖的状态。required=True 的项不可用时，实例不应接收流量。"""
+    """Status of each dependency. When an item with required=True is down, the instance shouldn't
+    receive traffic."""
     settings = get_settings()
     checks: dict[str, dict] = {}
     try:
@@ -52,7 +56,8 @@ def readiness() -> dict:
         "model": "fake" if fake else settings.llm_model,
     }
     breaker = get_breaker().state
-    # 熔断打开不代表实例不健康（上游故障），仍可浏览产品、联系理财经理，因此不是必需项
+    # An open breaker doesn't make the instance unhealthy (it's an upstream fault); browsing
+    # products and contacting the RM still work, so it isn't required
     checks["llm_circuit"] = {"ok": breaker == "CLOSED", "required": False, "state": breaker}
     checks["speech_model"] = {"ok": model_installed(), "required": False}
     ready = all(c["ok"] for c in checks.values() if c["required"])

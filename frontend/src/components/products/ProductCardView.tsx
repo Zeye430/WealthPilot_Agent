@@ -10,14 +10,14 @@ const COPY = defineCopy({
   en: { open: "View / Buy", viewOnly: "View only", fictional: (code: string) => `Fictional demo product ${code}`, asOf: (d: string) => ` (${d})` },
 });
 
-/** 产品卡片：对话中的产品列表与「理财产品」页共用，点击打开详情与买入。收益数字始终带口径标签。 */
+/** Product card shared by chat product lists and the Products page; tap to open details and buy. Return figures always carry their measure label. */
 export function ProductCardView({ product }: { product: ProductCard }) {
   const c = useCopy(COPY);
   const sep = useSeparators();
   const { open } = useProductActions();
   const viewOnly = product.purchasable === false;
   const showWarnings = viewOnly || product.data_quality === "UNVERIFIED";
-  // 「1.42%（截至 10-16）」/「1.42% (as of Oct 16)」：大字只放数值，截止日期并入口径标签
+  // "1.42% (as of Oct 16)": the large text holds only the number; the as-of date joins the measure label
   const [, value = product.metric.text, asOf] = product.metric.text.match(/^(.+?)\s*[（(](.+)[）)]$/) ?? [];
 
   return (

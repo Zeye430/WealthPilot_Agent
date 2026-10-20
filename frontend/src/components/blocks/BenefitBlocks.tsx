@@ -27,7 +27,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 对话中的新品卡片：只展示符合客户条件的新品，附「开售提醒我」。 */
+/** New-product cards in chat: only products matching the customer's criteria, with "remind me". */
 export function UpcomingProductsView({ block }: { block: UpcomingProductsBlock }) {
   const c = useCopy(COPY);
   return (
@@ -49,8 +49,8 @@ export function UpcomingProductsView({ block }: { block: UpcomingProductsBlock }
 }
 
 /**
- * 客户等级与权益：深海军蓝卡片展示等级与进度，下方列出权益与在期活动。
- * 等级按金融资产总额评定（存款也计入），不与某款产品挂钩。
+ * Customer tier and benefits: a deep navy card shows the tier and progress, with benefits and current campaigns listed below.
+ * Tiers are based on total financial assets (deposits included), never tied to a specific product.
  */
 export function TierBenefitsView({ block }: { block: TierBenefitsBlock }) {
   const c = useCopy(COPY);

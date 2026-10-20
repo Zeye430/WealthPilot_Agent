@@ -77,8 +77,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 理财经理看板（演示）：查看客户联系前同步过来的咨询要点。
- * 客户通过名片上的企业微信 / 电话联系理财经理，看板只用于了解情况和标记跟进状态。
+ * Relationship manager dashboard (demo): view the summary shared before the customer gets in touch.
+ * Customers contact the RM via WeCom or phone on the contact card; the dashboard is only for context and marking follow-up status.
  */
 export function RmDashboard() {
   const c = useCopy(COPY);
@@ -92,7 +92,7 @@ export function RmDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 只有理财经理账号可以进入；客户账号回到客户首页，未登录跳转登录页
+    // Only RM accounts may enter; customer accounts go back to the customer home, signed-out users to the sign-in page
     getSessionUser()
       .then((u) => (u.role === "rm" ? setMe(u) : router.replace("/")))
       .catch(() => router.replace("/login?next=/rm"));
@@ -167,7 +167,7 @@ export function RmDashboard() {
                     selected === r.id ? "bg-canvas ring-2 ring-brand" : "hover:bg-canvas"
                   }`}
                 >
-                  {/* 状态标签单独一行：英文标签较长，与客户名并排时会超出侧栏 */}
+                  {/* Status chip on its own line: English labels are long and would overflow the sidebar next to the customer name */}
                   <span className="flex flex-col items-start gap-1.5">
                     <span className="font-bold">{r.customer_name}</span>
                     <Chip tone={r.status === "PENDING" ? "notice" : r.status === "ACCEPTED" ? "brand" : "neutral"}>{r.status_label}</Chip>

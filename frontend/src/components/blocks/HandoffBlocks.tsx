@@ -24,9 +24,9 @@ const COPY = defineCopy({
 });
 
 /**
- * 理财经理名片：客户通过企业微信或电话直接联系，只展示理财经理信息，不展示客户资料。
- * 咨询要点已由系统同步到理财经理看板，名片上用一句话告知客户。
- * 演示数据没有真实联系方式：点击时说明真实环境中会发生什么，而不是拨打一个虚构号码。
+ * Relationship manager card: customers contact the RM directly via WeCom or phone; only the RM's details are shown, no customer data.
+ * The summary has already been shared to the RM dashboard; the card tells the customer in one sentence.
+ * Demo data has no real contact details: tapping explains what would happen in production instead of dialing a fictional number.
  */
 export function RmContactCard({ block }: { block: RmContactBlock }) {
   const c = useCopy(COPY);

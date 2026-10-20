@@ -7,10 +7,10 @@ import { notifyDemoStep, setEmbedded } from "@/lib/embed";
 import { defineCopy, intlLocale, LocaleToggle, useCopy, useLocale } from "@/lib/i18n";
 
 /**
- * 模拟的「知岸银行」手机银行（演示用）：代表银行自己的 App，不属于 WealthPilot。
- * 客户在这里用银行账号登录；「AI 理财助手」是首页上的一个功能模块，点击后由银行后台签发一次性凭证，
- * 打开 WealthPilot 并免密进入。两边不共享账号、密码与会话。
- * 配色刻意与 WealthPilot 不同（深青绿），提醒这是另一个系统。
+ * Simulated "Zhian Bank" mobile banking app (demo): stands in for the bank's own app, not part of WealthPilot.
+ * Customers sign in here with their bank account; "AI wealth assistant" is one module on the home screen, and tapping it makes the bank's back end issue a one-time ticket
+ * that opens WealthPilot without a password. The two share no accounts, passwords or sessions.
+ * The colors deliberately differ from WealthPilot (deep teal), as a reminder that this is another system.
  */
 
 const BANK = "#0b5f5a";
@@ -114,7 +114,7 @@ export function BankApp() {
   }, []);
 
   useEffect(() => {
-    // 回到手机银行：理财助手的嵌入标记随之清除
+    // Back in the banking app: the assistant's embedded flag is cleared
     setEmbedded(false);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
@@ -130,7 +130,7 @@ function BankLogin({ onDone }: { onDone: () => void }) {
   const [username, setUsername] = useState("wang");
   const [password, setPassword] = useState("");
   const [accessCode, setAccessCode] = useState("");
-  // 与 WealthPilot 登录页同一份配置：是否需要访问码、演示密码提示（公开部署时由服务器配置决定）
+  // Same config as the WealthPilot sign-in page: whether an access code is needed and the demo password hint (set by the server for public deployments)
   const [config, setConfig] = useState<LoginConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -231,8 +231,8 @@ function BankHomeView({ home, onLogout }: { home: BankHome; onLogout: () => void
     try {
       const { ticket } = await bankApi.ticket();
       notifyDemoStep(3);
-      // 生产中：App 用 WebView 打开理财助手的 H5，凭证经 JS 桥或 POST 传递，不放在地址里
-      // 整页跳转：模拟 App 新开一个页面，理财助手不沿用手机银行的页面状态
+      // In production the app opens the assistant's H5 page in a WebView and passes the ticket via a JS bridge or POST, not in the URL
+      // Full-page navigation: simulates the app opening a new page, so the assistant doesn't inherit the banking app's page state
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign(`/app-entry?ticket=${encodeURIComponent(ticket)}`);
     } catch (e) {

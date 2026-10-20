@@ -38,8 +38,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 产品详情：手机上是从底部弹出的面板，电脑上居中。先看条款，再买入。
- * 能否买入由后端判断（评级、在售状态、费率是否核实），不能买入时说明原因；未测评时提供「去测评」入口。
+ * Product details: a bottom sheet on phones, centered on desktop. Terms first, then purchase.
+ * The backend decides whether it can be bought (rating, sale status, verified fees) and explains why not; without an assessment, it offers "take the assessment".
  */
 export function ProductDetailDialog({
   code,

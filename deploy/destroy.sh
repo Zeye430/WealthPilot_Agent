@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 删除服务器与固定 IP，停止计费。删除前先导出数据库并下载到 deploy/backups/。
-# 用法：./deploy/destroy.sh      演练：DRY_RUN=1 ./deploy/destroy.sh
+# Delete the server and static IP to stop billing. Exports the database and downloads it to deploy/backups/ first.
+# Usage: ./deploy/destroy.sh      Dry run: DRY_RUN=1 ./deploy/destroy.sh
 source "$(dirname "$0")/lib.sh"
 load_state
 
@@ -19,7 +19,7 @@ elif remote "set -o pipefail; sudo docker exec wealthpilot-prod-db-1 pg_dump -U 
   note "已保存到 ${out}"
 else
   rm -f "$out"
-  # 当场导出失败（例如数据库已停止）时，退而下载服务器上最近一份每日备份
+  # If the live export fails (e.g. the database is stopped), fall back to the latest daily backup on the server
   latest="$(remote "ls -t /opt/wealthpilot/backups/*.sql.gz 2>/dev/null | head -1" || true)"
   if [ -n "$latest" ]; then
     scp -q -i "$KEY_FILE" "ubuntu@$IP:$latest" "$DEPLOY_DIR/backups/" && note "已保存最近一份每日备份：deploy/backups/$(basename "$latest")"

@@ -6,77 +6,99 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """所有配置来自环境变量或仓库根目录的 .env（不入库，参考 .env.example）。"""
+    """All settings come from environment variables or .env at the repo root (not committed; see
+    .env.example)."""
 
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
     database_url: str = "postgresql+psycopg://wealthpilot:wealthpilot@localhost:5433/wealthpilot"
-    # 连接池（P8-4 压测校准）：每进程最多 10 + 20 个连接；PostgreSQL 默认上限 100，
-    # 多进程部署时保证「进程数 × 30」小于上限。等不到连接时 10 秒后返回 503，而不是让客户干等。
+    # Connection pool (tuned by P8-4 load tests): up to 10 + 20 connections per process;
+    # PostgreSQL's default limit is 100,
+    # so with several processes keep processes × 30 below it. If no connection is free within 10
+    # seconds, return 503 instead of making customers wait.
     db_pool_size: int = 10
     db_max_overflow: int = 20
     db_pool_timeout_seconds: float = 10
 
-    # Kimi（Moonshot）提供 OpenAI 兼容接口；换模型只改这三项
+    # Kimi (Moonshot) offers an OpenAI-compatible API; switching models only changes these three
     llm_base_url: str = "https://api.moonshot.ai/v1"
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = "kimi-k2.6"
-    # Kimi 思考模式只接受 temperature=1，关闭思考只接受 0.6；确定性由工具与规则保证，而非温度
+    # Kimi thinking mode only accepts temperature=1, and non-thinking only 0.6; determinism comes
+    # from tools and rules, not temperature
     llm_temperature: float = 1.0
     llm_temperature_no_thinking: float = 0.6
-    llm_agent_thinking: bool = False  # 主 Agent 是否开启思考（关闭约快一倍）；话题路由始终关闭
-    # 单次调用超时 25 秒、失败重试 1 次（场景评估中偶发连接重置，重试一次即可恢复）。
-    # 与单轮时长上限、前端代理超时（120 秒）配合：最坏情况 ≈ 60 秒上限 + 一次调用 2×25 秒 < 120 秒
+    # thinking for the main agent (off is about twice as fast); always off for the topic router
+    llm_agent_thinking: bool = False
+    # 25-second timeout per call with 1 retry (connection resets happened occasionally in scenario
+    # evals; one retry recovers).
+    # Fits with the turn budget and the frontend proxy timeout (120 s): worst case ≈ 60 s budget +
+    # one call 2×25 s < 120 s
     llm_timeout_seconds: float = 25
     llm_max_retries: int = 1
-    # 单轮对话时长上限：超过后不再调用模型，展示已查到的结果并说明（P8-4）
+    # Turn time budget: after it, stop calling the model and show what was already found, with an
+    # explanation (P8-4)
     chat_turn_budget_seconds: float = 60
-    # 模型熔断：连续失败 5 次后暂停调用 30 秒，期间直接提示客户，之后放行一个探测请求
+    # Model circuit breaker: after 5 consecutive failures, pause calls for 30 s and tell customers
+    # directly, then let one probe through
     llm_breaker_failures: int = 5
     llm_breaker_cooldown_seconds: float = 30
-    # 费用估算单价（美元 / 百万 token）：kimi-k2.6 官网价格（2026-10 核对：输入未命中缓存 0.95、
-    # 命中缓存 0.16、输出 4.00）。按未命中缓存计算，是费用上限；换模型时同步修改
+    # Prices for cost estimates (USD per million tokens): kimi-k2.6 list prices (checked 2026-10:
+    # input cache miss 0.95,
+    # cache hit 0.16, output 4.00). Computed at cache-miss prices, so it's an upper bound; update
+    # when switching models
     llm_price_input_per_mtok: float = 0.95
     llm_price_output_per_mtok: float = 4.00
-    # 压测专用：fake 时用固定回复的假模型（模拟延迟），只测系统本身的吞吐，不调用、不计费
+    # Load testing only: fake uses a canned-reply model (with simulated latency) to measure the
+    # system's own throughput, with no calls or cost
     llm_provider: str = "openai"
     fake_llm_latency_seconds: float = 1.5
 
     agent_max_tool_calls: int = 6
 
-    # 本地向量模型（fastembed）；更换模型若改变维度，需同步修改向量表迁移
+    # Local embedding model (fastembed); a model with a different dimension needs a matching
+    # vector-table migration
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     embedding_dim: int = 512
     embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
-    # 向量模型缓存目录；不设置时用 fastembed 默认的临时目录（容器重建后需重新下载）。生产挂载持久卷
+    # Embedding model cache directory; if unset, fastembed's default temp directory is used
+    # (re-downloaded after a container rebuild). Mount a persistent volume in production
     embedding_cache_dir: Path | None = None
-    # 启动时在后台预热：加载向量模型并同步检索索引，避免第一位客户等待
-    # （生产开启；测试与开发默认关闭）
+    # Warm up in the background at startup: load the embedding model and sync the search index so
+    # the first customer doesn't wait
+    # (on in production; off by default in tests and development)
     warmup_on_start: bool = False
 
-    # 本地语音识别（SenseVoice，经 sherpa-onnx 运行）：录音在本机转成文字，不发送给第三方，也不保存
+    # Local speech recognition (SenseVoice via sherpa-onnx): audio is transcribed on this server,
+    # never sent to third parties or stored
     asr_model_dir: Path = Path(__file__).resolve().parents[2] / ".models/sensevoice-zh"
     asr_max_seconds: int = 60
     asr_threads: int = 2
 
-    # 允许的前端来源：CORS 与「跨站写请求」检查共用；部署时加入正式域名
+    # Allowed frontend origins: shared by CORS and the cross-site write check; add the real domain
+    # when deploying
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # 登录与会话（服务端会话 + httpOnly Cookie）
-    session_ttl_hours: int = 12  # 绝对有效期
-    session_idle_minutes: int = 120  # 闲置超时
-    cookie_secure: bool = False  # 部署到 HTTPS 时设为 true
-    # 手机银行进入凭证（app ticket）：银行 App 签发、WealthPilot 核验的共享密钥与有效期。
-    # 默认值只用于本地开发；部署时必须设置（生产中更推荐银行私钥签名、WealthPilot 公钥核验）
+    # Sign-in and sessions (server-side sessions + httpOnly cookie)
+    session_ttl_hours: int = 12  # absolute lifetime
+    session_idle_minutes: int = 120  # idle timeout
+    cookie_secure: bool = False  # set to true behind HTTPS
+    # Mobile banking entry ticket (app ticket): shared secret and lifetime, issued by the bank app
+    # and verified by WealthPilot.
+    # The default is for local development only and must be set when deploying (in production,
+    # prefer bank private-key signing with WealthPilot verifying by public key)
     app_ticket_secret: SecretStr = SecretStr("dev-only-app-ticket-secret-change-me")
     app_ticket_ttl_seconds: int = 60
-    # 是否启用「模拟手机银行」（演示用，代表银行自己的系统，生产中不存在于本项目）
+    # Whether the simulated mobile banking app is enabled (demo only; stands in for the bank's own
+    # system, which isn't part of this project in production)
     bank_sim_enabled: bool = True
 
-    # 公开演示访问码：设置后登录需要输入，防止陌生人刷模型额度；本地开发留空
+    # Public demo access code: when set, sign-in requires it so strangers can't burn model credits;
+    # leave empty for local development
     demo_access_code: SecretStr | None = None
 
-    # 演示账号（启动时自动创建，密码统一为 demo_password；真实系统对接银行统一身份认证）
+    # Demo accounts (created at startup, all with demo_password; a real system would use the bank's
+    # single sign-on)
     demo_password: SecretStr = SecretStr("wealthpilot-demo")
     demo_accounts: list[dict] = [
         {
@@ -114,19 +136,21 @@ class Settings(BaseSettings):
             "rm_id": "RM002",
         },
     ]
-    demo_mode: bool = True  # 允许客户一键清空自己的演示数据
-    # 登录页显示的演示提示（如演示密码）；公开部署时配合访问码使用，或设为空不显示
+    demo_mode: bool = True  # lets customers clear their own demo data
+    # Demo hint on the sign-in page (e.g. the demo password); for public deployments use with an
+    # access code, or leave empty to hide it
     demo_login_hint: str | None = "演示账号的密码均为 wealthpilot-demo"
     demo_login_hint_en: str | None = "All demo accounts use the password wealthpilot-demo"
 
-    # 可观测性：部署时设为 json（每行一个 JSON，便于云平台检索）；本地开发为可读文本
+    # Observability: set to json when deploying (one JSON object per line, easy to search in cloud
+    # logging); readable text locally
     log_format: str = "text"
-    # Prometheus 指标接口 /metrics 的访问令牌；不设置时接口关闭（返回 404）
+    # Access token for the Prometheus /metrics endpoint; if unset, the endpoint is off (returns 404)
     metrics_token: SecretStr | None = None
     app_version: str = "0.8.0"
-    git_sha: str = "dev"  # 部署时由 CI 注入，看板显示当前运行的版本
+    git_sha: str = "dev"  # injected by CI when deploying; the dashboard shows the running version
 
-    # 限流（单实例内存滑动窗口；多实例部署时应换成 Redis）
+    # Rate limits (in-memory sliding window per instance; use Redis for multiple instances)
     rate_limit_enabled: bool = True
     rate_limit_chat_per_minute: int = 20
     rate_limit_chat_per_day: int = 300

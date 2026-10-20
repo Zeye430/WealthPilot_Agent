@@ -1,4 +1,5 @@
-"""检索服务入口：按日期构建语料（知识库过期判断依赖日期），同步索引并返回检索器。"""
+"""Search service entry point: build the corpus for a date (knowledge-base expiry depends on it),
+sync the index and return a retriever."""
 
 import logging
 from datetime import date
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=2)
 def get_retriever(today: date) -> Retriever:
-    """每天最多构建一次：跨过某条知识的复核到期日后，它会自动退出语料。"""
+    """Built at most once a day: once an entry passes its review date, it drops out of the corpus
+    automatically."""
     chunks = build_corpus(load_knowledge_base(), load_catalog(), today)
     embedder = get_embedder()
     try:
@@ -30,7 +32,8 @@ def get_retriever(today: date) -> Retriever:
             sync_index(session, chunks, embedder)
         store = PgVectorStore(factory, embedder.model_name)
     except Exception:
-        # 数据库不可用时退化为内存检索，保证问答可用；日志中记录以便排查
+        # If the database is down, fall back to in-memory search so Q&A keeps working; log it for
+        # investigation
         logger.warning("pgvector unavailable, falling back to in-memory vectors", exc_info=True)
         store = InMemoryVectorStore(chunks, embedder)
     return Retriever(chunks, embedder, store)

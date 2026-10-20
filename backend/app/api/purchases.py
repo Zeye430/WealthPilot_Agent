@@ -1,6 +1,8 @@
-"""买入确认 API（演示）：预览校验 → 客户阅读并确认文件 → 返回演示结果，不下单。
+"""Purchase confirmation API (demo): preview checks → customer reads and confirms documents → demo
+result; no order is placed.
 
-每一步都在服务端重新校验评级、在售状态、起购金额和可用余额，前端按钮状态只是提示。
+Every step re-checks the rating, sale status, minimum amount and available balance on the server;
+frontend button states are only hints.
 """
 
 from datetime import datetime
@@ -25,7 +27,7 @@ class PurchaseRequest(BaseModel):
 
 
 class ConfirmRequest(PurchaseRequest):
-    acknowledged: list[str] = []  # 客户勾选「已阅读」的文件
+    acknowledged: list[str] = []  # documents the customer ticked as read
 
 
 def _product(code: str) -> Product:

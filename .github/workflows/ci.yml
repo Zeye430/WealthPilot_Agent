@@ -1,5 +1,5 @@
-# 每次推送和 PR 自动运行：后端测试（含 pgvector 数据库）、lint、依赖漏洞扫描、前端构建。
-# 测试使用假模型，不需要 LLM API Key。
+# Runs on every push and PR: backend tests (with a pgvector database), lint, dependency audits, frontend build.
+# Tests use a fake model, so no LLM API key is needed.
 name: CI
 
 on:
@@ -53,8 +53,8 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
-  # 生产配置冒烟测试：用假模型在 CI 中启动完整的生产编排（数据库 + 后端 + 前端 + Caddy HTTPS + 备份），
-  # 检查镜像内容、就绪检查、对外屏蔽的路径与访问码。部署脚本改动也在这里做静态检查。
+  # Production config smoke test: boot the full production stack in CI with a fake model (database + backend + frontend + Caddy HTTPS + backup)
+  # and check image contents, readiness, blocked public paths and the access code. Deploy scripts are linted here too.
   deploy-config:
     runs-on: ubuntu-latest
     defaults:
@@ -86,10 +86,10 @@ jobs:
           curl -fsSk https://localhost/login -o /dev/null
           test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/metrics)" = 404
           curl -sk -D - -o /dev/null https://localhost/ | grep -i '^strict-transport-security'
-          # 不带访问码登录被拒绝
+          # Sign-in without the access code is rejected
           test "$(curl -sk -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/login \
             -H 'content-type: application/json' -d '{"username":"wang","password":"x"}')" = 401
-          # 镜像包含演示数据，但不含 data/reference（真实文件仅本地参考）与 .env
+          # The image includes demo data, but not data/reference (real files for local reference only) or .env
           docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend \
             sh -c 'test -f /data/products/products.yaml && test ! -e /data/reference && test ! -e /app/.env'
       - name: 失败时输出日志

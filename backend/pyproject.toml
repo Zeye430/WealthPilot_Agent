@@ -49,8 +49,8 @@ extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["B008"]  # FastAPI 的 Depends() 默认参数写法
+ignore = ["B008"]  # FastAPI's Depends() default-argument style
 
 [tool.ruff.lint.per-file-ignores]
-"app/agent/prompts.py" = ["E501"]  # Prompt 是中文长句，按语义换行
-"app/customers/context.py" = ["E501"]  # 同上：拼接进系统提示的中文规则
+"app/agent/prompts.py" = ["E501"]  # prompts are long Chinese sentences, wrapped by meaning
+"app/customers/context.py" = ["E501"]  # same: Chinese rules spliced into the system prompt

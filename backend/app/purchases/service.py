@@ -1,7 +1,9 @@
-"""买入确认（演示）：校验能否买入，生成确认页内容。不下单、不扣款、不记录持仓。
+"""Purchase confirmation (demo): check whether a purchase is allowed and build the confirmation
+page. No order, no charge, no holdings recorded.
 
-能否买入完全由代码判断，与对话中的 AI 无关：AI 只能引导客户打开产品，最终由客户本人确认。
-产品负责人决定（2026-10-18）：买入流程只做到确认页。
+Whether a purchase is allowed is decided entirely in code, independent of the AI: the AI can only
+lead the customer to the product, and the customer confirms.
+Product-owner decision (2026-10-18): the purchase flow stops at the confirmation page.
 """
 
 from decimal import Decimal
@@ -53,7 +55,8 @@ class PurchaseCheck(BaseModel):
 
 
 def blocking_reasons(product: Product, rating: str | None) -> list[str]:
-    """与金额无关的买入限制：产品详情页据此决定「买入」按钮是否可用。"""
+    """Purchase restrictions unrelated to the amount: the product page uses them to enable or
+    disable the "Buy" button."""
     reasons = []
     risk = product.effective_risk_level
     if rating is None:
@@ -127,7 +130,8 @@ def check_purchase(
 
 
 def confirmation_view(check: PurchaseCheck, product: Product) -> dict:
-    """确认页内容：金额、费用、需要阅读确认的文件与风险揭示。"""
+    """Confirmation page content: amount, fees, documents to read and confirm, and risk
+    disclosures."""
     return {
         "allowed": check.allowed,
         "errors": check.errors,

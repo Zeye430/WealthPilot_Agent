@@ -1,10 +1,13 @@
-"""本地中文语音识别：浏览器录音（16 kHz 单声道 WAV）→ SenseVoice → 文字。
+"""Local Chinese speech recognition: browser recording (16 kHz mono WAV) → SenseVoice → text.
 
-- 模型在本机运行（sherpa-onnx），录音不发送给第三方；
-  音频只在内存中处理，识别完即丢弃，不写日志、不落盘。
-- 开启逆文本标准化（ITN）：「四十五万」输出为「45万」，金额更容易核对。
-- 识别后按领域词表纠正虚构品牌与产品名（见 lexicon.py）。
-- 模型文件由 scripts/download_asr_model.py 下载；未安装时接口返回 503，前端隐藏麦克风按钮。
+- The model runs on this server (sherpa-onnx); audio is never sent to third parties;
+  it is processed in memory and discarded after recognition, never logged or written to disk.
+- Inverse text normalization (ITN) is on: spoken numbers come out as digits (e.g. 45万), so
+amounts are easier to check.
+- After recognition, fictional brand and product names are corrected from the domain term list (see
+lexicon.py).
+- Model files are downloaded by scripts/download_asr_model.py; without them the endpoint returns 503
+and the frontend hides the mic button.
 """
 
 import io
@@ -22,7 +25,7 @@ from app.speech.lexicon import correct
 
 SAMPLE_RATE = 16000
 MODEL_FILES = ("model.int8.onnx", "tokens.txt")
-TAG = re.compile(r"<\|[^|]*\|>")  # SenseVoice 可能输出的语种 / 情感标签
+TAG = re.compile(r"<\|[^|]*\|>")  # language / emotion tags SenseVoice may emit
 
 
 class AudioError(ValueError):
@@ -39,7 +42,7 @@ def model_installed(model_dir: Path | None = None) -> bool:
 
 
 def decode_wav(data: bytes, max_seconds: int) -> np.ndarray:
-    """校验并解码 16 kHz、16 位、单声道 WAV，返回 [-1, 1] 的 float32 采样。"""
+    """Validate and decode 16 kHz, 16-bit, mono WAV; return float32 samples in [-1, 1]."""
     try:
         with wave.open(io.BytesIO(data)) as w:
             if w.getnchannels() != 1 or w.getsampwidth() != 2 or w.getframerate() != SAMPLE_RATE:
@@ -77,7 +80,7 @@ def clean(text: str) -> str:
 
 class SenseVoiceRecognizer:
     def __init__(self, model_dir: Path, threads: int, language: str = "zh"):
-        import sherpa_onnx  # 延迟导入：未使用语音时不加载
+        import sherpa_onnx  # lazy import: not loaded unless speech is used
 
         self._language = language
         self._recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
@@ -93,12 +96,14 @@ class SenseVoiceRecognizer:
         stream.accept_waveform(SAMPLE_RATE, samples)
         self._recognizer.decode_stream(stream)
         text = clean(stream.result.text)
-        # 领域词表是中文品牌与产品名的同音纠错，只用于中文识别
+        # The domain term list corrects homophones of Chinese brand and product names, so it applies
+        # only to Chinese recognition
         return correct(text) if self._language == "zh" else text
 
 
 def get_recognizer() -> Recognizer:
-    """按当前界面语言取识别器。英文识别器在第一次用英文语音时才加载（同一模型再占一份内存）。"""
+    """Recognizer for the current UI language. The English one loads on first English use (the
+    same model takes memory again)."""
     return _recognizer_for(current())
 
 

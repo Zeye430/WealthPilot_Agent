@@ -22,7 +22,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 回答依据：已引用的资料显示为「依据」，检索到但未引用的显示为「参考资料」。可展开查看法规原文与链接。 */
+/** What the reply is based on: cited sources show as "Based on", retrieved but uncited ones as "References". Expandable to the regulation text and links. */
 export function SourcesView({ block }: { block: SourcesBlock }) {
   const c = useCopy(COPY);
   return (

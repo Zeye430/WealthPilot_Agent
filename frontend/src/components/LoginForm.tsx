@@ -54,7 +54,7 @@ const COPY = defineCopy({
   },
 });
 
-/** 登录页：账号密码登录；公开演示时需要访问码。会话保存在 httpOnly Cookie 中。 */
+/** Sign-in page: username and password; the public demo also needs an access code. The session lives in an httpOnly cookie. */
 export function LoginForm({ next }: { next: string | null }) {
   const c = useCopy(COPY);
   const router = useRouter();
@@ -66,7 +66,7 @@ export function LoginForm({ next }: { next: string | null }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 直接登录是独立网页，不是手机银行里的模块
+    // Direct sign-in is a standalone web page, not a module inside the banking app
     setEmbedded(false);
     getLoginConfig()
       .then(setConfig)
@@ -79,7 +79,7 @@ export function LoginForm({ next }: { next: string | null }) {
     setError(null);
     try {
       const user = await login(username, password, accessCode);
-      // 只允许站内跳转，防止登录后被重定向到外部网站
+      // Only allow same-site redirects, so sign-in can't send users to an external site
       const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
       const home = { rm: "/rm", ops: "/ops" } as Record<string, string>;
       router.replace(home[user.role] ?? safeNext ?? "/");

@@ -20,7 +20,7 @@ def get_engine() -> Engine:
 
 
 def get_session() -> Iterator[Session]:
-    """FastAPI 依赖：每个请求一个会话，请求结束自动关闭。"""
+    """FastAPI dependency: one session per request, closed automatically when the request ends."""
     session = sessionmaker(bind=get_engine(), expire_on_commit=False)()
     try:
         yield session

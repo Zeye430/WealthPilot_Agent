@@ -1,12 +1,16 @@
-"""真实 LLM 场景评估：通过真实 API 运行 evaluations/scenarios.yaml，生成评估报告。
+"""Real-LLM scenario evaluation: runs evaluations/scenarios.yaml through the real API and writes a
+report.
 
-用法（在 backend/ 下，需配置 LLM_API_KEY 并启动数据库）：
-    uv run python ../evaluations/run_scenarios.py                 # 全部场景
-    uv run python ../evaluations/run_scenarios.py --only M01 H03  # 指定场景
-    uv run python ../evaluations/run_scenarios.py --repeat 3      # 每个场景重复 3 次，统计通过率
-    uv run python ../evaluations/run_scenarios.py --suite en      # 英文界面套件（scenarios_en.yaml）
-报告写入 evaluations/reports/scenarios-<日期>.md 与同名 .json（英文套件为 scenarios-en-<日期>）；
-只跑部分场景时文件名带场景编号，不覆盖全量报告。
+Usage (from backend/, with LLM_API_KEY set and the database running):
+    uv run python ../evaluations/run_scenarios.py                 # all scenarios
+    uv run python ../evaluations/run_scenarios.py --only M01 H03  # selected scenarios
+    uv run python ../evaluations/run_scenarios.py --repeat 3      # repeat each scenario 3 times for
+    a pass rate
+    uv run python ../evaluations/run_scenarios.py --suite en      # English UI suite
+    (scenarios_en.yaml)
+Reports go to evaluations/reports/scenarios-<date>.md and a matching .json (scenarios-en-<date> for
+the English suite);
+partial runs include the scenario IDs in the file name, so full reports aren't overwritten.
 """
 
 import argparse
@@ -46,8 +50,8 @@ CJK = re.compile(r"[\u4e00-\u9fff]")
 def cjk_ratio(text: str) -> float:
     letters = [c for c in text if c.isalpha()]
     return len(CJK.findall(text)) / len(letters) if letters else 0.0
-CUSTOMERS = {"A": "eval_customer", "B": "eval_customer_b"}  # setup.customer 可选，默认 A
-RATING_ANSWERS = {  # 校准画像的答案
+CUSTOMERS = {"A": "eval_customer", "B": "eval_customer_b"}  # setup.customer is optional, default A
+RATING_ANSWERS = {  # answers for the calibration profiles
     "C1": "ECBAAAAAAA",
     "C2": "CCCBBBBBCB",
     "C3": "BCCCCCCCCC",
@@ -73,7 +77,8 @@ def product_codes(blocks: list[dict]) -> list[str]:
 
 
 def shown_text(blocks: list[dict]) -> str:
-    """界面块中客户能看到的说明文字（检查结果、提示、免责声明等），供评审参考。"""
+    """Text the customer can see in UI blocks (check results, notes, disclaimers, etc.), for the
+    judge."""
     lines = []
     for b in blocks:
         parts = [b.get("title", ""), b.get("notice", "")]
@@ -98,7 +103,8 @@ def judge(question: str, reply: str, blocks: list[dict], rubric: str, locale: st
         verdict = json.loads(match.group()) if match else {}
         return bool(verdict.get("pass")), str(verdict.get("reason", ""))
     except json.JSONDecodeError:
-        # 评审理由中常出现未转义的引号，JSON 解析失败时直接提取 pass 字段
+        # Judge reasons often contain unescaped quotes; if JSON parsing fails, extract the pass
+        # field directly
         flag = re.search(r'"pass"\s*:\s*(true|false)', str(output))
         if flag:
             return flag.group(1) == "true", str(output)
@@ -109,7 +115,8 @@ client_ref: dict = {}
 
 
 def run_checks(turn: dict, question: str, body: dict, permission: Permission, locale: str = "zh") -> list[dict]:
-    # 输出审查与否定判断按客户的界面语言运行（英文界面中英文规则同时生效）
+    # Output review and negation checks run in the customer's UI language (the English UI applies
+    # both rule sets)
     with use_locale(locale):
         return _run_checks(turn, question, body, permission, locale)
 
@@ -126,12 +133,14 @@ def _run_checks(turn: dict, question: str, body: dict, permission: Permission, l
 
     retrieved = [i["id"] for b in blocks if b["type"] == "sources" for i in b["items"]]
     rating = (body["state"].get("assessment") or {}).get("rating")
-    # 复查时与生产一致：客户已有的开售提醒（系统记录）算作「已预约」的依据（生产中写在客户资料里）
+    # Re-checks match production: the customer's existing sale reminders (system records) count as
+    # evidence for "reminder set" (in production they're in the customer data)
     reminders = client_ref["client"].get("/api/v1/reminders").json() if rating else []
     evidence = "\n已预约开售提醒" if reminders else ""
     violations = check_output(reply, permission, reply + evidence, retrieved, rating)
     add("通过输出审查", not violations, "、".join(violations))
-    # 兜底回答后面可能还有代码追加的说明（如「理财不保本」），按开头判断（英文评估中发现的漏检）
+    # A fallback reply may be followed by code-appended notes (e.g. "wealth products aren't
+    # principal-protected"), so check the prefix (a miss found in the English eval)
     add("未退化为兜底回答", not any(reply.startswith(v) for v in all_versions(SAFE_FALLBACK_REPLY)))
     if locale == "en":
         ratio = cjk_ratio(reply)
@@ -148,7 +157,8 @@ def _run_checks(turn: dict, question: str, body: dict, permission: Permission, l
         shown = reply + json.dumps(blocks, ensure_ascii=False)
         add(f"界面展示其一 {any_of}", any(re.search(p, shown) for p in any_of))
     for pattern in checks.get("reply_excludes", []):
-        # 否定句不算（「没有显示理财经理已联系您」是如实陈述），与输出审查的否定判断一致
+        # Negated sentences don't count ("there's no record that your RM has contacted you" is a
+        # true statement), consistent with output review's negation handling
         hits = [m for m in re.finditer(pattern, reply) if not _negated(reply, m.start())]
         add(f"回答不含「{pattern}」", not hits, hits[0].group() if hits else "")
     if limit := checks.get("max_product_risk"):
@@ -159,7 +169,8 @@ def _run_checks(turn: dict, question: str, body: dict, permission: Permission, l
         ids = [i["id"] for b in blocks if b["type"] == "sources" and b.get("cited") for i in b["items"]]
         add(f"引用 {cited}", any(c in ids for c in cited), f"实际引用：{ids}")
     if grounded := checks.get("grounded_any"):
-        # 有依据：引用了指定资料，或展示了指定的工具数据块（如产品详情，与说明书同源）
+        # Grounded: cites one of the given sources, or shows one of the given tool data blocks (e.g.
+        # product details, from the same source as the prospectus)
         cited_ids = [i["id"] for b in blocks if b["type"] == "sources" and b.get("cited") for i in b["items"]]
         ok = any(g in cited_ids or g in types for g in grounded)
         add(f"有依据 {grounded}", ok, f"引用 {cited_ids}，界面块 {types}")
@@ -180,7 +191,8 @@ def _run_checks(turn: dict, question: str, body: dict, permission: Permission, l
 
 
 def rewrites(conversation_id: str) -> list[str]:
-    """输出审查的改写记录（决策 + 违规代码），用于定位模型反复触发的规则。"""
+    """Output-review rewrite records (decision + violation codes), to find rules the model keeps
+    triggering."""
     with get_engine().connect() as conn:
         rows = conn.execute(
             select(PolicyDecisionLog.decision, PolicyDecisionLog.reason_codes).where(
@@ -288,7 +300,8 @@ def main():
     if args.only:
         scenarios = [s for s in scenarios if s["id"] in args.only]
 
-    # 评估在进程内运行，用与测试相同的身份替身（生产只认会话 Cookie）；评估不受限流影响
+    # The evaluation runs in-process with the same identity double as the tests (production trusts
+    # only the session cookie); rate limits don't apply
     app.dependency_overrides[get_current_user] = header_identity
     get_settings().rate_limit_enabled = False
     client = TestClient(app, headers={"X-Demo-User": CUSTOMER})

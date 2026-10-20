@@ -19,7 +19,7 @@ import { ApiError, getConversation, sendChat } from "@/lib/api";
 import { defineCopy, useCopy } from "@/lib/i18n";
 import type { ChatMessage, CustomerState, UIBlock } from "@/lib/types";
 
-/** 出现这些界面块，说明已经为客户匹配过产品（办理进度第 3 步） */
+/** These UI blocks mean products have already been matched for the customer (step 3 of the progress bar) */
 const MATCH_BLOCKS = new Set(["product_list", "product_detail", "comparison_table", "allocation", "upcoming_products"]);
 
 const COPY = defineCopy({
@@ -63,7 +63,7 @@ export type ChatHandle = { addNotice: (text: string) => void; send: (text: strin
 
 type Props = {
   ref?: Ref<ChatHandle>;
-  /** 打开历史会话时传入；新对话为空 */
+  /** Passed when opening a past conversation; empty for a new one */
   initialConversationId?: string | null;
   onStartAssessment: () => void;
   onStateChange: (state: CustomerState) => void;
@@ -86,7 +86,7 @@ export function Chat({ ref, initialConversationId, onStartAssessment, onStateCha
     send: (text) => submit(text),
   }));
 
-  // 打开历史会话：从服务端恢复消息（含界面块）
+  // Opening a past conversation: restore messages (including UI blocks) from the server
   useEffect(() => {
     if (!initialConversationId) return;
     getConversation(initialConversationId)
@@ -97,7 +97,7 @@ export function Chat({ ref, initialConversationId, onStartAssessment, onStateCha
         if (restored.some((m) => m.ui_blocks.some((b) => MATCH_BLOCKS.has(b.type)))) onMatched?.();
       })
       .catch(() => setError(c.loadFailed));
-    // 只在打开时加载一次
+    // load only once, on open
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId]);
 
@@ -129,7 +129,7 @@ export function Chat({ ref, initialConversationId, onStartAssessment, onStateCha
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    // 中文输入法选词时按回车不应发送
+    // Enter shouldn't send while a Chinese IME is composing
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit(input);
@@ -207,7 +207,7 @@ export function Chat({ ref, initialConversationId, onStartAssessment, onStateCha
         <VoiceInput
           disabled={pending}
           onText={(text) => {
-            // 识别结果填入输入框，客户确认或修改后再发送
+            // The recognized text goes into the input box; the customer confirms or edits it before sending
             setInput((prev) => (prev.trim() ? `${prev.trim()}${text}` : text));
             inputRef.current?.focus();
           }}
@@ -273,7 +273,7 @@ function AssistantMessage({ message, onStartAssessment }: { message: ChatMessage
               strong: (props) => <strong className="font-bold" {...props} />,
               h2: (props) => <h3 className="mt-4 mb-1 text-[17px] font-extrabold" {...props} />,
               h3: (props) => <h3 className="mt-3 mb-1 text-base font-extrabold" {...props} />,
-              // 模型常用表格做对比；外层可横向滚动，避免手机上撑破页面
+              // The model often compares with tables; the wrapper scrolls horizontally so they don't break the page on phones
               table: (props) => (
                 <div className="my-3 overflow-x-auto rounded-2xl bg-fill">
                   <table className="w-full border-collapse text-sm" {...props} />

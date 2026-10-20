@@ -10,7 +10,7 @@ const COPY = defineCopy({
   en: { formula: "Formula", hypothetical: "Hypothetical, not a forecast or promise", assumptions: "Assumptions" },
 });
 
-/** 测算结果：大号结果数字 + 明细 + 假设。顶部标签标明这是假设情景。 */
+/** Calculation result: large result figure + details + assumptions. The top label marks it as a hypothetical scenario. */
 export function CalculationSlip({ block }: { block: CalculationResultBlock }) {
   const c = useCopy(COPY);
   const [headline, ...rows] = block.items;

@@ -111,7 +111,8 @@ def _build_agent():
         )
     return build_graph(
         get_chat_model(settings),
-        # 话题路由是简单分类：关闭思考、限制输出长度，约 0.7 秒、几个 token
+        # Topic routing is a simple classification: thinking off and a short output limit, about 0.7
+        # s and a few tokens
         get_chat_model(settings, thinking=False, max_tokens=ROUTER_MAX_TOKENS),
         max_tool_calls=settings.agent_max_tool_calls,
     )
@@ -133,11 +134,12 @@ def chat(
     now: datetime = Depends(get_now),
     agent=Depends(get_agent),
 ):
-    chat_limit(user)  # 每次调用都消耗模型额度：按用户限流
+    chat_limit(user)  # every call costs model credits: rate-limit per user
     started = time.perf_counter()
     breaker = get_breaker()
     if not breaker.allow():
-        # 熔断中：不调用模型，立即告知客户（不必等到超时），其他功能照常可用
+        # Circuit open: don't call the model; tell the customer right away (no waiting for a
+        # timeout); everything else still works
         record_turn(TurnRecord("BREAKER_OPEN", time.perf_counter() - started, current()))
         raise HTTPException(
             status_code=503,
@@ -145,7 +147,8 @@ def chat(
             headers={"Retry-After": str(breaker.retry_after())},
         )
     conversation = _get_or_create_conversation(db, customer_id, req.conversation_id, req.message)
-    # 先提交会话：工具（如生成交接请求）在独立事务中写入，需要会话已存在
+    # Commit the conversation first: tools (e.g. creating a handoff) write in their own transactions
+    # and need it to exist
     db.commit()
 
     handoff = active_handoff(db, conversation.id)
@@ -167,14 +170,17 @@ def chat(
             f"\n\n## 当前人工服务状态\n- {STATUS_LABELS[handoff.status]}"
             f"（{handoff.assigned_rm_name}）。如实描述该状态，不要重复生成请求。"
         )
-    # 门禁：每条消息都从数据库重新判断，LLM 无法修改
+    # Gate: recomputed from the database for every message; the LLM can't change it
     gate = evaluate_gate(latest_confirmed(db, customer_id), now)
 
     telemetry = TurnTelemetry()
     settings = get_settings()
-    # 调用模型前结束只读事务，把数据库连接还回连接池：等模型回复的几秒内不占连接。
-    # P8-4 压测发现：原先每个进行中的对话都占着一个连接，并发超过连接池（5+10）后
-    # 请求排队等连接，吞吐卡在约 7 次/秒。工具在各自的会话中读写，不依赖这个事务。
+    # End the read-only transaction before calling the model, returning the connection to the pool
+    # while waiting for the reply.
+    # Found in P8-4 load testing: every in-flight conversation used to hold a connection, so beyond
+    # the pool size (5+10)
+    # requests queued for connections and throughput stalled at about 7 req/s. Tools read and write
+    # in their own sessions, not this transaction.
     db.commit()
     try:
         result = agent.invoke(
@@ -182,7 +188,8 @@ def chat(
                 "messages": [*history, HumanMessage(req.message)],
                 "customer_id": customer_id,
                 "conversation_id": conversation.id,
-                # 基础画像（银行系统，只读）+ 本次需求 + 人工服务状态：每条消息重新组装
+                # Base profile (bank system, read-only) + current needs + human-service status:
+                # rebuilt for every message
                 "customer_context": customer_context,
                 "permission": gate.permission,
                 "risk_rating": gate.risk_rating,
@@ -197,12 +204,15 @@ def chat(
                     }
                 ],
             },
-            # 遥测回调：图中每次模型调用的耗时与 token 自动汇总到 telemetry
+            # Telemetry callback: latency and tokens of every model call in the graph are aggregated
+            # into telemetry
             config={"callbacks": [telemetry]},
         )
     except Exception as exc:
         logger.exception("agent failed", extra={"conversation_id": conversation.id})
-        if telemetry.errors:  # 只有模型服务本身的失败计入熔断，工具或业务代码的异常不算
+        # only failures of the model service count toward the breaker, not tool or business-code
+        # exceptions
+        if telemetry.errors:
             breaker.record_failure()
         record_turn(
             TurnRecord(
@@ -223,13 +233,15 @@ def chat(
         ) from exc
     if telemetry.successes:
         breaker.record_success()
-    # 固定话术（兜底、工具上限、超时）后面不追加提示
+    # No notes are appended after fixed replies (fallback, tool limit, timeout)
     fixed = (SAFE_FALLBACK_REPLY, TOOL_LIMIT_REPLY, OUT_OF_SCOPE_REPLY, TURN_TIMEOUT_REPLY)
     fixed_reply = result["reply"] in {v for f in fixed for v in all_versions(f)}
     if not fixed_reply and (note := age_conflict_note(req.message, result["reply"], base)):
-        # 放在回答开头：年龄影响适当性判断，客户应先看到以登记为准
+        # Put it at the start: age affects suitability, so the customer should first see that bank
+        # records take precedence
         result["reply"] = f"> {note}\n\n{result['reply']}"
-    # 本轮可能刚记录了投资金额，重新读取需求后判断是否提示等级升级（每个对话最多一次）
+    # This turn may have just recorded an investment amount; re-read needs to decide on a
+    # tier-upgrade note (at most once per conversation)
     history_text = "\n".join(str(m.content) for m in history)
     upgrade = tier_upgrade_note(base, get_needs(db, customer_id), result["reply"], history_text)
     if not fixed_reply and (note := upgrade):
@@ -263,7 +275,7 @@ def chat(
 def list_conversations(
     db: Session = Depends(get_session), customer_id: str = Depends(get_customer_id)
 ):
-    """历史会话（最近 30 个），按最近活动时间倒序。"""
+    """Past conversations (latest 30), most recently active first."""
     rows = db.scalars(
         select(Conversation)
         .where(Conversation.customer_id == customer_id)
@@ -319,7 +331,8 @@ def _get_or_create_conversation(
 
 
 def _load_history(db: Session, conversation_id: str) -> list[BaseMessage]:
-    """只把用户与助手的文字回放给 LLM；工具中间过程不回放，控制 token 消耗。"""
+    """Replay only user and assistant text to the LLM; intermediate tool steps are not replayed,
+    to limit tokens."""
     rows = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation_id)
@@ -344,7 +357,8 @@ REPLY_OUTCOMES = [
 
 
 def _turn_record(result: dict, latency_s: float, conversation_id: str) -> TurnRecord:
-    """从本轮结果归纳运行指标：结果类型、审查结论与命中规则、工具成败（不含对话内容）。"""
+    """Summarize this turn's metrics: outcome, review decision and rules hit, tool success (no
+    conversation content)."""
     reply = result["reply"]
     outcome = next(
         (o for text, o in REPLY_OUTCOMES if any(reply.startswith(v) for v in all_versions(text))),

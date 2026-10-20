@@ -1,4 +1,4 @@
-"""向量模型适配层（fastembed，本地 ONNX 推理，无需 GPU 与外部 API）。"""
+"""Embedding model adapter (fastembed: local ONNX inference, no GPU or external API)."""
 
 from functools import lru_cache
 
@@ -23,7 +23,8 @@ class Embedder:
         return np.array(list(self._model.embed(texts)), dtype=np.float32)
 
     def embed_query(self, text: str) -> np.ndarray:
-        # BGE 中文模型建议查询一侧加检索指令；文档一侧不加
+        # BGE Chinese models recommend a retrieval instruction on the query side only, not on
+        # documents
         return np.array(
             next(iter(self._model.embed([self.query_instruction + text]))), dtype=np.float32
         )

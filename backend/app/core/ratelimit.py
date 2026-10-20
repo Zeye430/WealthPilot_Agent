@@ -1,7 +1,8 @@
-"""限流：内存滑动窗口，按「桶 + 键」计数（键为用户编号或 IP）。
+"""Rate limiting: in-memory sliding window counting per "bucket + key" (the key is a user ID or IP).
 
-单实例部署足够；多实例时计数不共享，应换成 Redis（接口保持不变）。
-超限返回 429 与 Retry-After，客户看到明确提示，而不是一直等待。
+Enough for a single instance; counts aren't shared across instances, so use Redis then (same
+interface).
+Over the limit returns 429 with Retry-After, so customers get a clear message instead of waiting.
 """
 
 import time
@@ -21,7 +22,7 @@ class SlidingWindowLimiter:
         self._lock = Lock()
 
     def check(self, bucket: str, key: str, limit: int, window_seconds: int) -> int | None:
-        """未超限时记一次并返回 None；超限时返回需要等待的秒数。"""
+        """Under the limit, record one hit and return None; over it, return the seconds to wait."""
         now = time.monotonic()
         with self._lock:
             hits = self._hits[(bucket, key, window_seconds)]
@@ -41,7 +42,7 @@ limiter = SlidingWindowLimiter()
 
 
 def enforce(bucket: str, key: str, rules: list[tuple[int, int]]) -> None:
-    """rules: [(次数上限, 窗口秒数)]，任一超限即拒绝。"""
+    """rules: [(max hits, window seconds)]; exceeding any of them rejects the request."""
     if not get_settings().rate_limit_enabled:
         return
     for limit, window in rules:
@@ -54,7 +55,7 @@ def enforce(bucket: str, key: str, rules: list[tuple[int, int]]) -> None:
 
 
 def client_ip(request: Request) -> str:
-    # 部署在反向代理后时，由代理写入 X-Forwarded-For；这里只取第一个地址
+    # Behind a reverse proxy, the proxy writes X-Forwarded-For; take only the first address
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -75,4 +76,5 @@ def speech_limit(user: CurrentUser) -> None:
 def login_limit(request: Request, username: str) -> None:
     per_minute = get_settings().rate_limit_login_per_minute
     enforce("login-ip", client_ip(request), [(per_minute, 60)])
-    enforce("login-user", username.strip().lower(), [(per_minute, 900)])  # 防针对单个账号的暴力破解
+    # against brute force on one account
+    enforce("login-user", username.strip().lower(), [(per_minute, 900)])

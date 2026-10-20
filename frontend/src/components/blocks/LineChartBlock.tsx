@@ -16,7 +16,7 @@ import { formatWan, formatYuan } from "@/lib/api";
 import { defineCopy, useCopy } from "@/lib/i18n";
 import type { LineChartBlock as Block } from "@/lib/types";
 
-// 英文坐标轴用国际通行的紧凑写法（¥1.6M），中文用「万」
+// English axes use the common compact form (¥1.6M); Chinese uses 万
 const compactEn = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
 const COPY = defineCopy({
@@ -38,7 +38,7 @@ const COPY = defineCopy({
   },
 });
 
-// 颜色按系列顺序固定分配（已用 dataviz 校验脚本验证色盲可分辨），最多 5 条
+// Colors are assigned by series order (checked for color-blind separation with the dataviz validator), up to 5 series
 const SERIES_COLORS = [1, 2, 3, 4, 5].map((i) => `var(--series-${i})`);
 
 export function LineChartBlock({ block }: { block: Block }) {

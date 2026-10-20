@@ -1,8 +1,10 @@
-"""模型调用遥测：一轮对话中每次模型调用的用途、耗时、token 与错误。
+"""Model-call telemetry: purpose, latency, tokens and errors of every model call in a turn.
 
-通过 LangChain 回调收集（agent.invoke 的 config 传入），图中各节点内部的 model.invoke 会自动继承，
-业务代码无需改动。调用用途来自 LangGraph 附带的节点名：scope_router → router，agent → agent，
-tool_limit → summary。只记录数字，不记录提示词与回答内容。
+Collected through a LangChain callback (passed in agent.invoke's config); model.invoke calls inside
+graph nodes inherit it automatically,
+so business code doesn't change. The purpose comes from the LangGraph node name: scope_router →
+router, agent → agent,
+tool_limit → summary. Only numbers are recorded, never prompts or replies.
 """
 
 import time
@@ -34,7 +36,8 @@ class TurnTelemetry(BaseCallbackHandler):
     calls: list[LLMCall] = field(default_factory=list)
     _starts: dict[UUID, tuple[float, str, str]] = field(default_factory=dict)
 
-    # LangChain 会对回调做浅拷贝等处理，显式声明为线程安全以便在工具线程中使用
+    # LangChain shallow-copies callbacks, so declare it thread-safe explicitly for use in tool
+    # threads
     run_inline = True
 
     def on_chat_model_start(
@@ -93,7 +96,8 @@ class TurnTelemetry(BaseCallbackHandler):
 
 
 def estimate_cost(prompt_tokens: int, completion_tokens: int) -> Decimal:
-    """按配置的单价（美元 / 百万 token）估算；单价以模型服务商官网为准。"""
+    """Estimate from configured prices (USD per million tokens); the provider's published prices
+    are authoritative."""
     s = get_settings()
     million = Decimal(1_000_000)
     cost = (

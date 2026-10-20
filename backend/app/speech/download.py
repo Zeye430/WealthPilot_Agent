@@ -1,9 +1,11 @@
-"""下载本地语音识别模型（SenseVoice int8，约 240MB）到 settings.asr_model_dir。
+"""Download the local speech recognition model (SenseVoice int8, about 240 MB) to
+settings.asr_model_dir.
 
-开发：uv run python ../scripts/download_asr_model.py（在 backend/ 下）
-生产容器：uv run --no-dev python -m app.speech.download（deploy/deploy.sh 自动执行）
-网络访问 huggingface.co 较慢时，可设置镜像：HF_ENDPOINT=https://hf-mirror.com
-模型来源：k2-fsa/sherpa-onnx 转换的 FunAudioLLM/SenseVoiceSmall（开源）。
+Development: uv run python ../scripts/download_asr_model.py (from backend/)
+Production container: uv run --no-dev python -m app.speech.download (run automatically by
+deploy/deploy.sh)
+If huggingface.co is slow, use a mirror: HF_ENDPOINT=https://hf-mirror.com
+Model source: FunAudioLLM/SenseVoiceSmall (open source), converted by k2-fsa/sherpa-onnx.
 """
 
 import os
@@ -25,10 +27,11 @@ def download(url: str, target: Path) -> None:
             out.write(chunk)
             done += len(chunk)
             percent = done * 100 // total if total else 0
-            if percent >= shown + 10:  # 每 10% 打印一次
+            if percent >= shown + 10:  # print every 10%
                 print(f"  {target.name}：{percent}%", flush=True)
                 shown = percent
-    partial.rename(target)  # 下载完整后才替换，避免中断留下损坏的模型
+    # replace only after a complete download, so an interruption can't leave a corrupt model
+    partial.rename(target)
 
 
 def main() -> None:

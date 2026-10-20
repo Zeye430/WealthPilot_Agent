@@ -1,9 +1,11 @@
-"""输出审查：回答发出前的确定性检查，不调用 LLM。
+"""Output review: deterministic checks before a reply is sent. No LLM calls.
 
-规则针对**肯定句式**：「理财产品不保本」是合法的事实陈述，「保证收益」才是违规承诺。
+Rules target **affirmative statements**: "wealth products are not principal-protected" is a
+legitimate fact; "guaranteed returns" is a prohibited promise.
 
-英文界面（P8-2b）：每条规则都有英文版（*_EN）。中文界面只用中文规则（行为与之前完全一致）；
-英文界面中英文规则同时生效——模型在英文回答里夹带中文表述时同样会被拦截。
+English UI (P8-2b): every rule has an English version (*_EN). The Chinese UI uses only the Chinese
+rules (behavior unchanged);
+the English UI applies both sets, so Chinese phrasing slipped into an English reply is still caught.
 """
 
 import re
@@ -17,9 +19,11 @@ from app.core.i18n import is_en, register
 from app.knowledge.kb import KB_PATH
 from app.products.catalog import load_catalog
 
-# 命中词所在分句中、位于其之前出现否定词，视为否定陈述，不算违规。
-# 中文否定词常与被否定的词相隔较远（「没有任何一款理财产品是保本保收益的」），
-# 因此看整个分句，最多 20 字。
+# A negation word earlier in the same clause as the hit makes it a negated statement, not a
+# violation.
+# Chinese negations often sit far from the word they negate ("no wealth product at all is principal-
+# and return-guaranteed"),
+# so the whole clause is checked, up to 20 characters.
 NEGATIONS = (
     "不",
     "非",
@@ -34,11 +38,14 @@ NEGATIONS = (
     "禁止",
     "杜绝",
 )
-NOT_NEGATION = re.compile(r"不仅|不但|不只|不光|毫不|无不|不可思议")  # 含「不」但不表示否定
+# contain 不 but are not negations
+NOT_NEGATION = re.compile(r"不仅|不但|不只|不光|毫不|无不|不可思议")
 CLAUSE_BREAK = re.compile(r"[，,。！？；;：:\n]")
 NEGATION_WINDOW = 20
-# 英文否定词与被否定的词通常相隔更多字符（"we can't promise you any guaranteed returns"）
-# 转述他人说法（"any product claiming…"、"if anyone tells you…"）与否定同样处理：不是 AI 自己的承诺
+# English negations usually sit more characters away from the negated word ("we can't promise you
+# any guaranteed returns")
+# Reported speech ("any product claiming...", "if anyone tells you...") is treated like negation: it
+# isn't the AI's own promise
 NEGATIONS_EN = re.compile(
     r"\b(not|no|never|cannot|without|neither|nor|nothing|none|nobody|avoid|instead of|"
     r"claim(s|ing|ed)?|anyone|someone|beware|wary|so-called|marketed as|advertis\w*|"
@@ -46,11 +53,14 @@ NEGATIONS_EN = re.compile(
     re.I,
 )
 NOT_NEGATION_EN = re.compile(r"\bnot only\b|\bno doubt\b|\bno matter\b", re.I)
-# 场景评估发现：「regulations do not allow me to sell you a product with a guaranteed return」
-# 否定词与关键词相隔 60 字符以上，英文窗口取 100 字符（约 15–20 个词），仍以分句为界
+# Found in scenario evaluation: "regulations do not allow me to sell you a product with a guaranteed
+# return"
+# has 60+ characters between the negation and the keyword, so the English window is 100 characters
+# (about 15-20 words), still bounded by the clause
 NEGATION_WINDOW_EN = 100
-# 英文常把否定放在主语之后（场景评估 S02）：「Principal-protected bank products no longer exist」
-# 「principal-protected products with guaranteed returns are no longer issued」
+# English often puts the negation after the subject (scenario S02): "Principal-protected bank
+# products no longer exist"
+# "principal-protected products with guaranteed returns are no longer issued"
 POST_NEGATION_EN = re.compile(
     r"\b(no longer|don't exist|do not exist|doesn't exist|does not exist|"
     r"(are|is)n't (available|offered|allowed|permitted|issued|sold)|"
@@ -59,18 +69,20 @@ POST_NEGATION_EN = re.compile(
     re.I,
 )
 POST_NEGATION_WINDOW_EN = 80
-# 同一句明确是警示语境（无引号也算）：转述的说法被定性为违规、误导
+# The same sentence is clearly a warning (with or without quotes): the reported claim is called
+# non-compliant or misleading
 WARNING_SENTENCE_EN = re.compile(
     r"misleading|non-?compliant|not compl(y|iant)|violat\w*|illegal|prohibited|"
     r"not (being )?truthful|red flag|scam|fraud\w*|false claim",
     re.I,
 )
-# 英文分句：句末标点后须有空白，避免把小数点（2.5%）当作句末
+# English sentence split: end punctuation must be followed by whitespace, so a decimal point (2.5%)
+# isn't a sentence end
 SENTENCE_SPLIT_EN = r"(?<=[.!?;])\s+"
 
 
 def _rules(zh: list[re.Pattern], en: list[re.Pattern]) -> list[re.Pattern]:
-    """当前语言下生效的规则：中文界面只用中文规则，英文界面中英文同时生效。"""
+    """Rules active in the current language: Chinese UI uses Chinese rules; English UI uses both."""
     return zh + en if is_en() else zh
 
 
@@ -97,8 +109,8 @@ PROHIBITED_CLAIMS_EN = [
         rf"\b{_RETURN_WORDS}\b[^.;!?\n]{{0,20}}\b(is|are|will be|stays?)\s+(fully\s+)?guaranteed",
         r"(?<!non-)(?<!non )\bprincipal[- ](protected|guaranteed)\b",
         r"(?<!non-)\b(risk[- ]free|zero[- ]risk)\b",
-        # 只拦「there's / it carries no risk」这类断言；
-        # 「capital preservation with no risk」描述的是客户目标，不算
+        # Only block assertions such as "there's / it carries no risk";
+        # "capital preservation with no risk" describes the customer's goal and is allowed
         r"\b(there'?s|there is|it'?s|carries|carry|has|have|involves?)\s+"
         r"(virtually\s+|basically\s+|almost\s+|absolutely\s+)?no risk\b(?!-)",
         r"\b(can't|cannot|won't|will not|never) lose\b",
@@ -108,7 +120,7 @@ PROHIBITED_CLAIMS_EN = [
     )
 ]
 
-# 测评前不得出现的推荐类表述
+# Recommendation language that must not appear before a risk assessment
 RECOMMENDATION = [
     re.compile(p)
     for p in (
@@ -121,14 +133,17 @@ RECOMMENDATION_EN = [
     for p in (
         r"\b(recommend|suggest)\b[^.;!?\n]{0,15}\b(buy|buying|invest|investing|choose|choosing|"
         r"go with|put (your|the) money)",
-        # 与中文「适合您的产品是 / 有」一致：要有断言动词。
-        # 「完成测评后，我可以为您筛选 suitable products for you」是邀请测评，不算推荐（评估 R03）
+        # Same as the Chinese rule ("the products that suit you are / there are"): an asserting verb
+        # is required.
+        # "After the assessment I can pick suitable products for you" invites an assessment and
+        # isn't a recommendation (eval R03)
         r"\b(suitable|right|best) (product|option|choice)s? for you\s+(is|are|would be|include)\b",
     )
 ]
 
 
-# 真实理财公司名称：产品负责人决定产品中不出现任何真实机构的产品信息（演示只用虚构机构）
+# Real wealth-management company names: by product-owner decision, no real institution's product
+# information appears (fictional institutions only)
 REAL_INSTITUTIONS = (
     "工银理财",
     "建信理财",
@@ -161,7 +176,7 @@ REAL_INSTITUTIONS = (
     "北银理财",
     "渝农商理财",
 )
-# 真实理财公司的英文名称（含常见缩写写法）
+# English names of real wealth-management companies (including common abbreviations)
 REAL_INSTITUTIONS_EN = re.compile(
     r"\b(ICBC|CCB|ABC|BOC|BoCom|Bank of Communications|PSBC|Postal Savings|CMB|China Merchants|"
     r"CIB|Industrial Bank|CITIC|Everbright|Ping ?An|Hua ?Xia|SPDB|Minsheng|CGB|China Guangfa|"
@@ -172,23 +187,27 @@ REAL_INSTITUTIONS_EN = re.compile(
 )
 
 
-# 诱导调高风险评级：为达到收益目标而建议重新测评，是销售适当性中的典型违规（测评应反映客户真实情况）
+# Steering toward a higher risk rating: suggesting a re-assessment to reach a return target is a
+# classic suitability violation (the assessment must reflect the customer's real situation)
 REASSESSMENT = re.compile(
     r"重新(完成|进行|做)?(一次)?(风险)?(承受能力)?(测评|评估)"
     r"|调(整|高).{0,4}(评级|风险等级)|提高.{0,4}风险承受"
 )
-# 与重新测评同句出现即构成诱导：收益、更高风险，或把测评当作「解锁」更高等级产品的途径
+# Steering if it appears in the same sentence as a re-assessment: returns, higher risk, or the
+# assessment as a way to "unlock" higher-risk products
 RISK_OR_RETURN = re.compile(
     r"收益|更高(的)?风险|高风险|PR[3-5]|波动|权益类|相应等级|更高(的)?(风险)?等级"
 )
-# 另一种说法：建议（经由理财经理）评估是否需要更高的风险等级
+# Another form: suggesting (via the relationship manager) to evaluate whether a higher risk level is
+# needed
 RISK_UPGRADE = re.compile(r"(更高|提高|调高|提升)(的)?.{0,2}(风险等级|评级|风险承受)")
 SUGGESTION = re.compile(r"建议|可以|可|考虑|评估|是否需要|如需|若需")
-# 同一句明确说明了限制（与风险等级不匹配、超出评级），是在解释取舍，而不是建议调高评级
+# A sentence that states the limitation (doesn't match / exceeds the rating) explains a trade-off
+# rather than suggesting a higher rating
 LIMITATION = re.compile(r"不匹配|超出|不符合|无法购买|不能购买|无权")
 SENTENCE_SPLIT = re.compile(r"[。！？；\n]")
-# 英文：retake / redo the profile、reassess；
-# 「complete your risk profile」是给未测评客户的正常提示，不算
+# English: retake / redo the profile, reassess;
+# "complete your risk profile" is a normal prompt for an unprofiled customer and is allowed
 REASSESSMENT_EN = re.compile(
     r"\b(re-?take|redo|re-do|repeat|re-?run)\b[^.;!?\n]{0,25}\b(profile|assessment|questionnaire)\b"
     r"|\b(profile|assessment|questionnaire)\s+again\b|\breassess(ment|ing|ed)?\b"
@@ -220,7 +239,8 @@ def _sentences(text: str) -> list[str]:
     return (SENTENCE_SPLIT_ANY if is_en() else SENTENCE_SPLIT).split(text)
 
 
-# 需求匹配式推荐（产品负责人决定，2026-10-18）：允许在评级范围内推荐，以下三类仍然禁止
+# Needs-based recommendations (product-owner decision, 2026-10-18): recommending within the rating
+# is allowed; these remain prohibited
 RECOMMEND_WORDS = re.compile(r"推荐|建议|适合|匹配|首选|可以考虑|值得|不妨")
 NOT_RECOMMENDING = re.compile(r"不(作|做)?(推荐|建议)|无法推荐|不能推荐|不适合")
 RECOMMEND_WORDS_EN = re.compile(
@@ -234,8 +254,8 @@ NOT_RECOMMENDING_EN = re.compile(
     r"|\bunsuitable\b",
     re.I,
 )
-# 1. 推荐超出客户评级的产品
-# 2. 制造紧迫感的销售话术
+# 1. Recommending products above the customer's rating
+# 2. Sales pressure that creates urgency
 PRESSURE_SALES = [
     re.compile(p)
     for p in (
@@ -271,7 +291,8 @@ PRESSURE_SALES_EN = [
         r"\bnow or never\b",
     )
 ]
-# 4. 把礼品、积分、返现与购买某款产品挂钩（权益只与资产总额挂钩，见 data/benefits/benefits.yaml）
+# 4. Tying gifts, points or cash back to buying a specific product (benefits depend only on total
+# assets; see data/benefits/benefits.yaml)
 GIFT_FOR_PURCHASE = [
     re.compile(p)
     for p in (
@@ -288,7 +309,7 @@ GIFT_FOR_PURCHASE_EN = [
         rf"\b{_GIFT}\b[^.;!?\n]{{0,25}}\b(when|if|for)\s+(you\s+)?(buy|purchase|subscribe)",
     )
 ]
-# 3. 以收益高低作为推荐理由
+# 3. Using returns as the reason for a recommendation
 RETURN_PITCH = [
     re.compile(p)
     for p in (
@@ -307,7 +328,8 @@ RETURN_PITCH_EN = [
 ]
 
 
-# 宣称已接通人工：AI 只在理财经理未接手时回复，此时任何「已接入」都不属实
+# Claiming a human has joined: the AI only replies while no relationship manager has taken over, so
+# any "joined" claim is false
 FALSE_HANDOFF = [
     re.compile(p)
     for p in (
@@ -329,9 +351,11 @@ FALSE_HANDOFF_EN = [
 ]
 
 
-# 宣称已完成实际并未发生的操作（场景评估 N02 发现：模型说「已为您预约开售提醒」，但没有调用工具）。
-# 提醒：只有本轮工具结果或客户资料中的提醒记录里有「已预约开售提醒」时才能这样说；
-# 买入：AI 无法代客户买入，任何「已为您买入」都不属实。
+# Claiming an action that didn't happen (found in scenario N02: the model said "sale reminder set"
+# without calling the tool).
+# Reminders: only allowed when this turn's tool results or the customer's reminder records contain
+# "sale reminder set";
+# Purchases: the AI can't buy on the customer's behalf, so any "bought for you" claim is false.
 REMINDER_EVIDENCE = ("已预约开售提醒", "Sale reminder set")
 REMINDER_CLAIM = [
     re.compile(p)
@@ -372,9 +396,12 @@ def false_action_claims(reply: str, grounding: str) -> list[str]:
     return hits
 
 
-# 软性收益比较（P8-2b 场景评估 P05，中英文都出现）：没有出现「业绩比较基准」字样，
-# 但在推荐 / 分配语境中以收益更高为理由，如「另一部分放在稳享每日开放争取稍高一些的收益空间」
-# 「This is the highest-yielding option」。同句在讲风险取舍（更高收益意味着更高风险）的不算。
+# Soft return comparisons (P8-2b scenario P05, in both languages): no "performance benchmark"
+# wording,
+# but higher returns used as the reason in a recommendation or allocation, e.g. "put the rest in
+# Steady Daily Open for a bit more return"
+# or "This is the highest-yielding option". Sentences explaining the risk trade-off (higher return
+# means higher risk) are allowed.
 SOFT_RETURN = re.compile(
     r"(稍|略|更)高(一些|一点)?的收益|收益空间|收益(更|稍|略)高|收益(更有|占)优势"
 )
@@ -414,8 +441,10 @@ def soft_return_pitch(text: str) -> list[str]:
     return hits
 
 
-# 跨口径比较收益：业绩比较基准与七日年化（现金管理类）口径不同，不能比较高低。
-# 对比表由工具分列口径；这条规则拦截回答文字中的比较（P7 场景评估 P05 发现，Prompt 约束不可靠）
+# Comparing returns across measures: a performance benchmark and a 7-day annualized yield (cash
+# management) aren't comparable.
+# Comparison tables keep measures in separate columns; this rule blocks comparisons in the reply
+# text (found in P7 scenario P05; prompt constraints proved unreliable)
 BENCHMARK = re.compile(r"业绩比较基准")
 CASH_METRIC = re.compile(r"七日年化|万份收益|现金管理类|活钱宝|日日盈")
 COMPARISON = re.compile(r"高于|低于|更高|更低|略高|略低|稍高|稍低|高一些|低一些|超过|不如|高出")
@@ -438,7 +467,8 @@ METRIC_CAVEAT_EN = re.compile(
 
 
 def metric_mixing(text: str) -> list[str]:
-    """同句比较，或同一段落中先提现金管理类、再说某产品「业绩比较基准更高」（场景评估 P05）。"""
+    """A comparison in one sentence, or a paragraph that mentions cash management first and then
+    says a product has a "higher benchmark" (scenario P05)."""
     hits = []
     for para in PARAGRAPH_SPLIT.split(text):
         cash_in_para = _any(CASH_METRIC, CASH_METRIC_EN, para)
@@ -453,10 +483,12 @@ def metric_mixing(text: str) -> list[str]:
     return hits
 
 
-# 收益数字必须有来源：业绩比较基准、七日年化所在句中的百分数，须出现在本轮工具结果或此前对话中。
-# P7 场景评估 N02 发现模型把新品的业绩比较基准 2.80%–3.30% 说成 2.60%–3.20%。
+# Return figures need a source: percentages next to a performance benchmark or 7-day yield must
+# appear in this turn's tool results or earlier messages.
+# P7 scenario N02 found the model quoting a new product's benchmark of 2.80%-3.30% as 2.60%-3.20%.
 PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s*%")
-# 只检查紧跟在收益指标名称后的数字（含区间），不检查同句中的配置占比等其他百分数（场景评估 V02）
+# Only figures right after the metric name (including ranges) are checked, not other percentages in
+# the sentence such as allocation shares (scenario V02)
 METRIC_FIGURE = re.compile(
     r"(?:业绩比较基准|七日年化(?:收益率)?|万份收益)[^。；！？\n%\d]{0,12}"
     r"(\d+(?:\.\d+)?)\s*%(?:\s*[–—\-~至到]\s*(\d+(?:\.\d+)?)\s*%)?"
@@ -475,11 +507,14 @@ def ungrounded_figures(text: str, grounding: str) -> list[str]:
     return [f"{n}%" for n in figures if Decimal(n) not in known]
 
 
-# 金额必须有来源（P8-4）：回答中的人民币金额须出现在工具结果、客户资料或客户自己说过的话里。
-# 「金额计算一律用代码」是不可违反的规则，P8-2b 场景评估发现模型偶尔自己算「到手金额」并算错
-# （10 万元赎回费 500 元，模型写成到手 95,500 元）。
-# 允许 0.1% 的四舍五入差异（162.89 万 ≈ 1,628,894.63，误差 0.0003%）。
-# 曾用 0.5%：英文评估中模型把到手 99,500 写成 995,000，与 1,000,000 恰好相差 0.5% 而漏拦。
+# Amounts need a source (P8-4): RMB amounts in a reply must appear in tool results, the customer
+# profile or the customer's own words.
+# "All money math is done in code" is a hard rule; P8-2b scenarios found the model occasionally
+# computing net proceeds itself, and wrongly
+# (¥100,000 with a ¥500 redemption fee written as ¥95,500 received).
+# A 0.1% rounding difference is allowed (¥1.6289M vs 1,628,894.63, a 0.0003% difference).
+# 0.5% was used before: in the English eval the model wrote 99,500 as 995,000, exactly 0.5% from
+# 1,000,000, and it slipped through.
 _NUM = r"(\d[\d,]*(?:\.\d+)?)"
 AMOUNT_ZH = re.compile(_NUM + r"\s*(亿元|亿|万元|万(?!份)|元)")
 AMOUNT_YEN = re.compile(r"[¥￥]\s*" + _NUM + r"(?:\s*(万|亿|million|billion|[kK])\b)?")
@@ -519,14 +554,18 @@ def _amounts(text: str) -> list[tuple[str, Decimal]]:
 
 @lru_cache
 def _reference_amounts() -> frozenset[Decimal]:
-    """知识库中的金额（已人工核对原文，如存款保险 50 万元）：模型直接引用不算编造。"""
+    """Amounts in the knowledge base (checked against the source, e.g. the ¥500,000
+    deposit-insurance cap): quoting them isn't fabrication."""
     text = KB_PATH.read_text(encoding="utf-8")
     return frozenset(v for _, v in _amounts(text))
 
 
-# 举例用的假设金额（产品负责人决定，2026-10-19）：讲解金融常识时可以用金额举例，
-# 但同一句必须明确说明是假设，且只能是整数金额（如 60 万元、¥100,000）。
-# 计算结果（如 10.3 万元、1,790,847.70 元）不是整数金额，仍须来自工具：模型不能自己算。
+# Illustrative amounts (product-owner decision, 2026-10-19): general explanations may use example
+# amounts,
+# but the same sentence must say it's an assumption, and only round figures are allowed (e.g.
+# ¥600,000, ¥100,000).
+# Calculated results (e.g. ¥103,000 or 1,790,847.70) aren't round figures and must still come from a
+# tool: the model can't compute them.
 ASSUMPTION = re.compile(r"假设|假如|假定|举例|举个例子|例如|比如|打个比方|以[^。！？；\n]{0,8}为例")
 ASSUMPTION_EN = re.compile(
     r"\b(suppose|supposing|assume|assuming|assumption|hypothetical(ly)?|for example|"
@@ -537,7 +576,8 @@ ILLUSTRATIVE_MAX_SIGNIFICANT_DIGITS = 2
 
 
 def _illustrative(value: Decimal) -> bool:
-    """整数且有效数字不超过 2 位（600,000、450,000、1,500,000），像举例而不像计算结果。"""
+    """An integer with at most 2 significant digits (600,000, 450,000, 1,500,000): looks like an
+    example, not a calculation."""
     if value != value.to_integral_value():
         return False
     digits = str(int(abs(value))).rstrip("0")
@@ -545,7 +585,8 @@ def _illustrative(value: Decimal) -> bool:
 
 
 def _assumption_sentences(reply: str) -> list[str]:
-    # 「e.g.」中的句点不是句子结束，先替换掉，避免把标记和金额分到两句
+    # The period in "e.g." doesn't end a sentence; replace it first so the marker and the amount
+    # stay in one sentence
     text = re.sub(r"\be\.g\.", "eg,", reply, flags=re.I)
     pattern = re.compile(ASSUMPTION_EN.pattern.replace(r"e\.g\.", r"eg"), re.I)
     return [s for s in SENTENCE_SPLIT_ANY.split(text) if ASSUMPTION.search(s) or pattern.search(s)]
@@ -565,7 +606,8 @@ def ungrounded_amounts(reply: str, facts: str) -> list[str]:
 
 
 def unsuitable_recommendations(text: str, risk_rating: str | None) -> list[str]:
-    """推荐了超出客户评级的产品的句子（同句说明「超出 / 不推荐」等限制的不算）。"""
+    """Sentences recommending a product above the customer's rating (allowed if the sentence
+    states the limitation, e.g. "exceeds / not recommended")."""
     if not risk_rating:
         return []
     catalog = load_catalog()
@@ -609,8 +651,10 @@ def _sentence_steers(s: str) -> bool:
 
 
 def _paragraph_steers(p: str) -> bool:
-    # 同一段先讲「5% 需要 PR3 以上」，下一句再说「情况变化可以重新测评」，连起来读就是诱导
-    # （P7 场景评估 M01 发现）。讨论收益或更高风险时，不主动提重新测评。
+    # A paragraph saying "5% needs PR3 or higher" followed by "you can retake the assessment if
+    # things change" reads as steering
+    # (found in P7 scenario M01). When discussing returns or higher risk, don't bring up a
+    # re-assessment.
     return bool(_reassessment(p) and _any(RISK_OR_RETURN, RISK_OR_RETURN_EN, p))
 
 
@@ -620,9 +664,11 @@ def steers_reassessment(text: str) -> bool:
     )
 
 
-# 客户直接问「哪款保本 / 保收益」时，回答必须明确否定。
-# 模型有时只说「基准不是承诺」「存款保本」而回避正面回答，容易让客户误以为低风险理财也保本，
-# 因此由代码补充标准说明（P7 场景评估 S02 发现）
+# When the customer asks outright which product is principal- or return-guaranteed, the reply must
+# clearly say none is.
+# The model sometimes only says "a benchmark isn't a promise" or "deposits are protected" and
+# dodges, which can suggest low-risk wealth products are protected too,
+# so code adds the standard statement (found in P7 scenario S02)
 GUARANTEE_QUESTION = re.compile(r"保本|保收益|保证收益|稳赚|零风险|无风险|不会亏|不亏")
 GUARANTEE_DENIED = re.compile(r"不保本|不保证本金|不承诺(保本|收益)|不保证收益|没有.{0,6}保本")
 GUARANTEE_QUESTION_EN = re.compile(
@@ -649,14 +695,16 @@ def needs_no_guarantee_note(question: str, reply: str) -> bool:
 
 
 def remove_steering(reply: str) -> str:
-    """删去诱导调高评级的句子。这类句子是附加建议，删去后回答的其余内容仍然完整。
+    """Remove sentences that steer toward a higher rating. They are add-on suggestions; the rest of
+    the reply stays complete.
 
-    段落级诱导只删去该段中提到重新测评的句子，保留对收益与风险取舍的说明。
+    For paragraph-level steering, only the sentences mentioning a re-assessment are removed; the
+    explanation of the risk/return trade-off stays.
     """
     paragraphs = re.split(f"({PARAGRAPH_SPLIT.pattern})", reply)
     out = []
     for i, para in enumerate(paragraphs):
-        if i % 2:  # 段落分隔符
+        if i % 2:  # paragraph separator
             out.append(para)
             continue
         drop_reassessment = _paragraph_steers(para)
@@ -688,7 +736,8 @@ def _negated(text: str, start: int) -> bool:
     return bool(NEGATIONS_EN.search(clause))
 
 
-# 引号内的表述若出现在提醒、警示语境中（如：销售说「保本」属于违规宣传），是引述而非承诺
+# A quoted phrase in a reminder or warning context (e.g. a salesperson saying "principal-protected"
+# is false advertising) is a quotation, not a promise
 QUOTED = re.compile(r"[「『“\"‘'][^」』”\"’']{1,20}[」』”\"’']")
 WARNING_CONTEXT = re.compile(
     r"违规|不应|不要|不能|不得|禁止|警惕|谨慎|虚假|误导|所谓|别信|不可信|不实"
@@ -745,7 +794,7 @@ def _affirmative_hits(text: str, patterns: list[re.Pattern]) -> list[str]:
 
 
 def mentioned_products(text: str) -> set[str]:
-    """回答中提到的目录产品（按代码或完整名称匹配）。"""
+    """Catalog products mentioned in the reply (matched by code or full name)."""
     compact = text.replace(" ", "")
     lowered = _alnum(text)
     return {
@@ -756,7 +805,8 @@ def mentioned_products(text: str) -> set[str]:
 
 
 def _alnum(text: str) -> str:
-    """英文名比较时忽略大小写、空格与标点（模型常写成 1 Year 而不是 1-Year）。"""
+    """Compare English names ignoring case, spaces and punctuation (the model often writes 1 Year
+    instead of 1-Year)."""
     return re.sub(r"[^0-9a-z]", "", text.lower())
 
 
@@ -782,13 +832,17 @@ def check_output(
     risk_rating: str | None = None,
     facts: str | None = None,
 ) -> list[str]:
-    """返回违规代码列表；空列表表示通过。
+    """Return a list of violation codes; an empty list means the reply passes.
 
-    grounding 是本轮之前已出现的内容：测评前只含客户消息；测评后含客户消息、历史回答和工具结果。
-    回答中提到的产品必须在其中出现过，防止模型凭空编造或测评前泄露产品信息。
-    retrieved 是本轮检索到的资料编号：回答中的 [编号] 必须在其中，否则视为编造出处。
-    risk_rating 是客户的有效评级：用于检查是否推荐了超出评级的产品。
-    facts 是核对金额的依据（客户资料 + 此前全部消息与工具结果，不分测评状态）；不传时用 grounding。
+    grounding is what appeared before this turn: before an assessment, only customer messages;
+    after, customer messages, earlier replies and tool results.
+    Products mentioned in the reply must appear there, so the model can't invent products or leak
+    them before an assessment.
+    retrieved is the set of source IDs found this turn: every [ID] in the reply must be in it,
+    otherwise it's a fabricated citation.
+    risk_rating is the customer's valid rating, used to check for recommendations above it.
+    facts is the basis for checking amounts (customer profile + all earlier messages and tool
+    results, regardless of assessment state); defaults to grounding.
     """
     violations = []
     if _affirmative_hits(reply, _rules(PROHIBITED_CLAIMS, PROHIBITED_CLAIMS_EN)):
@@ -833,7 +887,7 @@ def offending_snippets(
     grounding: str | None = None,
     facts: str | None = None,
 ) -> list[str]:
-    """违规片段（写入审计记录，便于事后定位模型反复触发的表述）。"""
+    """Offending snippets (written to the audit log to find phrasing the model keeps producing)."""
     hits = _affirmative_hits(reply, _rules(PROHIBITED_CLAIMS, PROHIBITED_CLAIMS_EN))
     hits += _affirmative_hits(reply, _rules(PRESSURE_SALES, PRESSURE_SALES_EN))
     hits += _affirmative_hits(reply, _rules(RETURN_PITCH, RETURN_PITCH_EN))
@@ -848,7 +902,8 @@ def offending_snippets(
     if grounding is not None:
         hits += ungrounded_figures(reply, grounding)
         hits += ungrounded_amounts(reply, grounding if facts is None else facts)
-    # 测评前任何推荐都是违规；测评后只有推荐超评级产品才是
+    # Before an assessment any recommendation is a violation; after it, only recommending above the
+    # rating is
     hits += unsuitable_recommendations(reply, risk_rating) if risk_rating else []
     recommendation = _rules(RECOMMENDATION, RECOMMENDATION_EN)
     hits += _affirmative_hits(reply, recommendation) if not risk_rating else []
@@ -870,7 +925,7 @@ def describe(
     grounding: str | None = None,
     facts: str | None = None,
 ) -> str:
-    """给 LLM 的改写反馈。"""
+    """Rewrite feedback for the LLM."""
     hits = _affirmative_hits(reply, _rules(PROHIBITED_CLAIMS, PROHIBITED_CLAIMS_EN))
     hits += _affirmative_hits(reply, _rules(RECOMMENDATION, RECOMMENDATION_EN))
     hits += offending_snippets(reply, risk_rating, grounding, facts)

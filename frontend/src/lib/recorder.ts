@@ -1,11 +1,11 @@
 /**
- * 浏览器录音：采集麦克风 PCM，结束时降采样为 16 kHz、16 位、单声道 WAV（后端识别模型要求的格式）。
- * 直接产出 WAV，后端无需安装音频转换工具。录音只保存在内存中，上传识别后即丢弃。
+ * Browser recording: capture microphone PCM and, when done, downsample to 16 kHz, 16-bit mono WAV (the format the backend model needs).
+ * Producing WAV directly means the backend needs no audio conversion tools. Audio stays in memory and is discarded after upload.
  */
 
 const TARGET_RATE = 16000;
 
-// AudioWorklet 处理器：把每个音频块复制后发回主线程
+// AudioWorklet processor: copy each audio chunk and post it back to the main thread
 const WORKLET_SOURCE = `
 class PcmCapture extends AudioWorkletProcessor {
   process(inputs) {
@@ -32,7 +32,7 @@ export class PcmRecorder {
 
   async start(): Promise<void> {
     this.chunks = [];
-    // 先准备好采集模块，再打开麦克风：否则模块加载期间的声音会丢失（开头几个字被截掉）
+    // Set up the capture module before opening the mic; otherwise sound during module loading is lost (the first words get cut off)
     this.ctx = new AudioContext();
     const url = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: "application/javascript" }));
     try {
@@ -51,13 +51,13 @@ export class PcmRecorder {
     const source = this.ctx.createMediaStreamSource(this.stream);
     const node = new AudioWorkletNode(this.ctx, "pcm-capture");
     node.port.onmessage = (e: MessageEvent<Float32Array>) => this.chunks.push(e.data);
-    // 部分浏览器只处理连到输出端的节点：经静音增益节点接到输出，不会把声音放出来
+    // Some browsers only process nodes connected to the output: route through a muted gain node so nothing is played back
     const mute = this.ctx.createGain();
     mute.gain.value = 0;
     source.connect(node).connect(mute).connect(this.ctx.destination);
   }
 
-  /** 结束录音并返回 WAV；未开始录音时返回 null。 */
+  /** Stop recording and return the WAV; null if recording never started. */
   async stop(): Promise<Blob | null> {
     const ctx = this.ctx;
     if (!ctx) return null;
@@ -91,7 +91,7 @@ function merge(chunks: Float32Array[]): Float32Array {
   return out;
 }
 
-/** 按区间取平均降采样（对语音足够，避免引入重采样库）。 */
+/** Downsample by averaging each interval (good enough for speech, and avoids a resampling library). */
 function downsample(input: Float32Array, from: number, to: number): Float32Array {
   if (from === to) return input;
   const ratio = from / to;
@@ -114,13 +114,13 @@ function encodeWav(samples: Float32Array, rate: number): Blob {
   view.setUint32(4, 36 + samples.length * 2, true);
   text(8, "WAVE");
   text(12, "fmt ");
-  view.setUint32(16, 16, true); // fmt 块长度
+  view.setUint32(16, 16, true); // fmt chunk size
   view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // 单声道
+  view.setUint16(22, 1, true); // mono
   view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true); // 字节率
-  view.setUint16(32, 2, true); // 块对齐
-  view.setUint16(34, 16, true); // 位深
+  view.setUint32(28, rate * 2, true); // byte rate
+  view.setUint16(32, 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
   text(36, "data");
   view.setUint32(40, samples.length * 2, true);
   samples.forEach((s, i) => {

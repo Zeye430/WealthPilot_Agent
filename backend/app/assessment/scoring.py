@@ -1,4 +1,5 @@
-"""风险测评计分。纯函数，不依赖 LLM 和数据库；评级只能由这里产生。"""
+"""Risk assessment scoring. Pure functions with no LLM or database; ratings can only come from
+here."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -68,7 +69,7 @@ class Questionnaire(BaseModel):
 
     @model_validator(mode="after")
     def _check(self):
-        # 配置错误应在启动时暴露，而不是在客户测评时
+        # Configuration errors should surface at startup, not while a customer takes the assessment
         total = sum(max(o.score for o in q.options) for q in self.questions)
         if total != 100:
             raise ValueError(f"问卷满分应为 100，实际为 {total}")
@@ -86,7 +87,8 @@ class Questionnaire(BaseModel):
         return next(r for r in self.ratings if r.rating == rating)
 
     def public_view(self) -> dict:
-        """给前端的版本：不含分值和否决规则，避免客户「按分作答」。"""
+        """Version for the frontend: no scores or veto rules, so customers can't answer to the
+        score."""
         return {
             "version": self.version,
             "title": L(self.title, self.title_en),
@@ -111,8 +113,9 @@ class AssessmentResult(BaseModel):
     description: str
     max_product_risk: str
     vetoed: bool
-    warnings: list[str]  # 矛盾作答提示：提醒客户核对，不改分
-    notes: list[str]  # 其他提示（如高龄客户）
+    # inconsistent answers: ask the customer to double-check; the score is unchanged
+    warnings: list[str]
+    notes: list[str]  # other notes (e.g. elderly customers)
 
 
 @lru_cache
@@ -200,5 +203,6 @@ def _notes(answers: dict[str, str]) -> list[str]:
 
 
 def rating_allows(rating: str, product_risk: str) -> bool:
-    """客户评级不低于产品风险等级才可购买：C2 可购买 PR1–PR2。"""
+    """A customer can buy a product only if their rating is at least its risk level: C2 can buy
+    PR1-PR2."""
     return PRODUCT_RISK_ORDER.index(product_risk) <= RATING_ORDER.index(rating)

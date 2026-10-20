@@ -1,8 +1,11 @@
-"""配置情景模拟：检查一组「产品 + 金额」的组合是否满足客户的硬约束。
+"""Allocation simulation: check whether a set of "product + amount" positions meets the customer's
+hard constraints.
 
-刻意**不测算组合收益**：《银行保险机构资产管理产品信息披露管理办法》第八条禁止对实际投资业绩
-进行预测。模拟只展示可确定的事实：构成比例、流动性、风险等级、固定费用，以及目标收益与
-业绩比较基准上限的对比（事实对比，不是预测）。
+Deliberately **does not project portfolio returns**: Article 8 of China's disclosure rules for bank
+and insurance asset-management products prohibits forecasting actual performance.
+The simulation shows only facts that can be determined: composition, liquidity, risk levels, fixed
+fees, and the target return
+versus the upper end of the performance benchmarks (a factual comparison, not a forecast).
 """
 
 from decimal import Decimal
@@ -17,7 +20,7 @@ from app.products.presenter import format_money, format_rate, lockup_text
 
 CASH_NAMES = {"活期存款", "活期", "现金", "存款", "CASH", "cash", "deposit", "demand deposit"}
 CONCENTRATION_LIMIT = Decimal("0.5")
-TOLERANCE = Decimal("1")  # 合计金额允许 1 元误差
+TOLERANCE = Decimal("1")  # totals may be off by ¥1
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
 
@@ -263,7 +266,8 @@ def simulate(
 
 
 def _yield_ceiling(product: Product) -> Decimal | None:
-    """收益指标上限：业绩比较基准区间上限或七日年化；指数型基准无法给出数值，返回 None。"""
+    """Upper end of the return metric: top of the benchmark range or the 7-day yield; index-based
+    benchmarks have no number, so None."""
     if (m := product.metric(MetricType.PERFORMANCE_BENCHMARK)) and m.high is not None:
         return m.high
     if m := product.metric(MetricType.SEVEN_DAY_ANNUALIZED):

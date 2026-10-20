@@ -1,6 +1,6 @@
 /**
- * 基础界面组件：胶囊按钮、标签、浅灰卡片、列表行、四段式进度条。
- * 设计令牌见 app/globals.css（白底、浅灰分区、深海军蓝文字、亮蓝主操作）。
+ * Base UI components: pill buttons, chips, light-gray cards, list rows, four-step progress bar.
+ * Design tokens are in app/globals.css (white base, light-gray sections, deep navy text, bright blue primary actions).
  */
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
@@ -79,7 +79,7 @@ export function ChevronRight() {
   );
 }
 
-/** 四段式办理进度：真实的先后顺序（未测评不能推荐），当前步骤之前的段填充为主色。 */
+/** Four-step progress: the real order (no recommendations before an assessment); steps up to the current one are filled with the primary color. */
 export function StepProgress({ label, done, total = 4 }: { label: string; done: number; total?: number }) {
   return (
     <div aria-label={label} className="flex flex-col gap-2">
@@ -93,7 +93,7 @@ export function StepProgress({ label, done, total = 4 }: { label: string; done: 
   );
 }
 
-/** 线性图标（与设计稿一致的 24px 描边图标） */
+/** Line icons (24px stroke icons matching the design) */
 export function Icon({ name, size = 22, strokeWidth = 2 }: { name: IconName; size?: number; strokeWidth?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden>

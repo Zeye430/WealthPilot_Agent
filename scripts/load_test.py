@@ -1,17 +1,22 @@
-"""压测：对运行中的后端发起并发对话请求，统计吞吐、延迟分位数与错误。
+"""Load test: send concurrent chat requests to a running backend and measure throughput, latency
+percentiles and errors.
 
-两种用法（都应使用独立的数据库，不要压开发 / 演示库）：
-1. 测系统本身（推荐先做）：后端以 LLM_PROVIDER=fake 启动，模型延迟固定（默认 1.5 秒），
-   测的是线程池、数据库连接池、审查与写库等系统开销，不调用、不计费。
-2. 真实模型小并发：后端用真实模型，并发与请求数都要小（有费用、受服务商限流）。
+Two modes (both should use a separate database, never the development / demo database):
+1. System only (do this first): start the backend with LLM_PROVIDER=fake and a fixed model latency
+(1.5 s by default);
+   it measures system overhead (thread pool, DB pool, review, writes) with no model calls or cost.
+2. Real model, low concurrency: the backend uses the real model; keep concurrency and request counts
+small (it costs money and the provider rate-limits).
 
-后端需关闭限流（RATE_LIMIT_ENABLED=false），并有一个可登录的客户账号。
-每个请求带 X-Request-ID=load-<编号>，事后可在 turn_metrics 中按前缀筛选或清理。
+The backend needs rate limiting off (RATE_LIMIT_ENABLED=false) and a customer account that can sign
+in.
+Each request carries X-Request-ID=load-<n>, so turn_metrics can be filtered or cleaned up by prefix
+afterwards.
 
-用法（在 backend/ 下）：
+Usage (from backend/):
     uv run python ../scripts/load_test.py --base http://localhost:8100 --levels 1 5 10 20 40 \\
         --requests 40 --username load --label fake-1.5s
-报告写入 evaluations/reports/load-<日期>-<label>.md 与 .json。
+Reports go to evaluations/reports/load-<date>-<label>.md and .json.
 """
 
 import argparse
@@ -34,7 +39,8 @@ QUESTIONS = {
         "理财产品会亏本金吗？",
         "七日年化收益率是什么意思？",
     ],
-    # 真实模型压测用：只走测算工具，不依赖知识库索引（独立测试库中没有索引）
+    # For real-model load tests: only the calculator tool, no knowledge index needed (the separate
+    # test database has none)
     "calc": [
         "100万按每年5%复利10年是多少？",
         "50万按每年3%复利5年是多少？",
@@ -67,7 +73,8 @@ async def run_level(
     timeout: float,
     questions: list[str],
 ) -> dict:
-    """concurrency 个虚拟用户并发，共发出 total 个请求；每个虚拟用户沿用自己的会话（历史逐轮增长）。"""
+    """concurrency virtual users send total requests in all; each user keeps its own conversation
+    (history grows turn by turn)."""
     latencies: list[float] = []
     statuses: Counter[str] = Counter()
     queue: asyncio.Queue[int] = asyncio.Queue()

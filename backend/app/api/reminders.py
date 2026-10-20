@@ -1,4 +1,5 @@
-"""开售提醒 API：客户在产品卡片上点击「开售提醒我」、在「我的提醒」中查看和取消。"""
+"""Sale reminder API: customers tap "remind me" on a product card, and view or cancel reminders
+under "My reminders"."""
 
 from datetime import datetime
 

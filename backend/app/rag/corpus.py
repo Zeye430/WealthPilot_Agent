@@ -1,9 +1,12 @@
-"""检索语料：知识库条目 + 虚构产品说明书章节。
+"""Search corpus: knowledge-base entries + sections of the fictional prospectuses.
 
-切块原则：
-- 说明书按「## 章节」切分：一个章节是一个完整语义单元，引用也能精确到章节。
-- 知识库一条一块：检索文本包含标题、常见问法与回答，口语化提问也能命中。
-只有「已审核」且未过期的知识库条目会进入语料（过期自动降级）。
+Chunking:
+- Prospectuses split on "## section": a section is one complete unit of meaning, and citations can
+point to the exact section.
+- One chunk per knowledge-base entry: the search text includes the title, common phrasings and
+answer, so casual questions match.
+Only reviewed, unexpired knowledge-base entries enter the corpus (expired ones drop out
+automatically).
 """
 
 import hashlib
@@ -20,8 +23,10 @@ from app.products.catalog import Catalog
 DOCS_DIR = Path(__file__).resolve().parents[3] / "data/products/docs"
 SECTION_RE = re.compile(r"^## (.+)$", re.M)
 
-# 说明书章节的口语化检索别名：客户说「能投股票吗」，说明书写的是「投资范围与投资比例」。
-# 只用于检索（search_text），不进入提供给 LLM 的正文。作用与知识库的「常见问法」相同。
+# Casual search aliases for prospectus sections: customers ask "can it buy stocks" while the
+# prospectus says "investment scope and limits".
+# Used only for retrieval (search_text), never in the text given to the LLM. Same role as the
+# knowledge base's common phrasings.
 SECTION_ALIASES = {
     "重要须知": "注意事项 风险提示 风险等级为什么 适合什么人",
     "一": "基本信息 风险等级 多少钱起买 起购 成立 到期",
@@ -41,17 +46,17 @@ class ChunkKind(StrEnum):
 
 
 class Chunk(BaseModel):
-    chunk_id: str  # K17 或 ZA-F03#四
+    chunk_id: str  # K17 or ZA-F03#<section>
     kind: ChunkKind
-    title: str  # 展示用标题
+    title: str  # display title
     section: str | None
     product_code: str | None
-    text: str  # 用于检索与提供给 LLM 的正文
-    version: str  # 知识库条目版本 / 产品目录版本
+    text: str  # body used for retrieval and given to the LLM
+    version: str  # knowledge-base entry version / product catalog version
     review_due: date | None
-    source_label: str  # 「法规原文」或「本系统说明」/「产品说明书」
+    source_label: str  # "regulation text", "system note" or "prospectus"
 
-    search_aliases: str = ""  # 仅用于检索的口语化别名
+    search_aliases: str = ""  # casual aliases used only for retrieval
 
     @property
     def search_text(self) -> str:
@@ -99,7 +104,8 @@ def product_doc_chunks(catalog: Catalog, docs_dir: Path = DOCS_DIR) -> list[Chun
                     title=f"《{product.name}》说明书",
                     section=heading,
                     product_code=product.code,
-                    # 正文前加产品名与章节名：「费用」这类通用章节才能区分属于哪款产品
+                    # Prefix the body with product and section names, so generic sections like
+                    # "Fees" can be told apart by product
                     text=f"《{product.name}》（{product.code}）说明书 · {heading}\n{body}",
                     version=catalog.catalog_version,
                     review_due=None,

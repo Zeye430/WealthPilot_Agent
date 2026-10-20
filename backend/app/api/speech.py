@@ -1,4 +1,5 @@
-"""语音转文字 API：前端上传 WAV，返回识别文字，由客户确认后再发送。音频不保存。"""
+"""Speech-to-text API: the frontend uploads WAV and gets text back, which the customer confirms
+before sending. Audio isn't stored."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -11,7 +12,7 @@ from app.speech.recognizer import AudioError, decode_wav, get_recognizer, model_
 
 router = APIRouter(prefix="/api/v1/speech", tags=["speech"])
 
-# 16 kHz × 16 位 × 单声道 ≈ 32 KB/秒，留出 WAV 头的余量
+# 16 kHz × 16-bit × mono ≈ 32 KB/s, with headroom for the WAV header
 BYTES_PER_SECOND = 32000
 
 

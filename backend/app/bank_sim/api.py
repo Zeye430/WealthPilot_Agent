@@ -1,6 +1,8 @@
-"""模拟手机银行接口：登录（银行自己的账号）、首页数据、签发理财助手进入凭证、退出。
+"""Simulated mobile banking API: sign-in (the bank's own accounts), home screen data, issuing
+assistant entry tickets, sign-out.
 
-会话用银行自己的 Cookie（zabank_session，HMAC 签名、httpOnly），与 WealthPilot 的会话完全独立。
+Sessions use the bank's own cookie (zabank_session, HMAC-signed, httpOnly), fully separate from
+WealthPilot's session.
 """
 
 import hashlib
@@ -24,7 +26,8 @@ router = APIRouter(prefix="/bank-sim/api", tags=["bank-sim（模拟手机银行�
 
 BANK_COOKIE = "zabank_session"
 SESSION_SECONDS = 30 * 60
-# 银行自己的会话签名密钥：与凭证密钥无关；每次启动随机生成（演示环境重启后需重新登录手机银行）
+# The bank's own session signing key: unrelated to the ticket key; random at every start (the demo
+# bank app needs a new sign-in after a restart)
 _BANK_KEY = secrets.token_bytes(32)
 
 
@@ -44,7 +47,8 @@ def _sign(value: str) -> str:
 
 
 def _bank_customers() -> dict[str, str]:
-    """银行的客户账号（演示：与演示账号同名的客户）。真实环境是银行的统一身份认证。"""
+    """The bank's customer accounts (demo: customers with the same names as the demo accounts).
+    In reality, the bank's single sign-on."""
     return {
         a["username"]: a["customer_id"]
         for a in get_settings().demo_accounts
@@ -53,7 +57,7 @@ def _bank_customers() -> dict[str, str]:
 
 
 def bank_customer(request: Request) -> str:
-    """当前登录手机银行的客户编号（来自银行会话 Cookie）。"""
+    """Customer ID of the customer signed in to the banking app (from the bank session cookie)."""
     _enabled()
     raw = request.cookies.get(BANK_COOKIE, "")
     try:
@@ -72,8 +76,8 @@ def bank_customer(request: Request) -> str:
 def bank_login(req: BankLogin, request: Request, response: Response):
     _enabled()
     login_limit(request, f"bank:{req.username}")
-    # 公开演示设置了访问码时，模拟手机银行同样要求访问码
-    # （否则可绕过访问码进入理财助手、消耗模型额度）
+    # When the public demo sets an access code, the simulated banking app requires it too
+    # (otherwise it could be used to bypass the code, reach the assistant and burn model credits)
     code = get_settings().demo_access_code
     if code is not None and not hmac.compare_digest(
         (req.access_code or "").strip(), code.get_secret_value()
@@ -107,7 +111,7 @@ def bank_logout(response: Response):
 
 @router.get("/home")
 def bank_home(customer_id: str = Depends(bank_customer)):
-    """手机银行首页：账户概览（来自银行核心系统）。"""
+    """Banking app home screen: account overview (from the bank's core system)."""
     base = get_customer_info_system().get(customer_id)
     if base is None:
         raise HTTPException(status_code=404)
@@ -117,7 +121,7 @@ def bank_home(customer_id: str = Depends(bank_customer)):
         "name": base.localized_name,
         "tier": status.tier.display_name,
         "card": status.tier.display_card,
-        # 虚构的卡号尾号（由客户编号派生，固定不变）
+        # Fictional card-number suffix (derived from the customer ID, stable)
         "card_tail": f"{int(hashlib.sha256(customer_id.encode()).hexdigest(), 16) % 10000:04d}",
         "demand_deposit": float(assets.demand_deposit),
         "time_deposit": float(assets.time_deposit),
@@ -128,6 +132,7 @@ def bank_home(customer_id: str = Depends(bank_customer)):
 
 @router.post("/assistant-ticket")
 def assistant_ticket(customer_id: str = Depends(bank_customer), now: datetime = Depends(get_now)):
-    """客户点击「AI 理财助手」：银行后台签发一次性进入凭证（默认 60 秒有效）。"""
+    """The customer taps "AI wealth assistant": the bank's back end issues a one-time entry
+    ticket (valid for 60 s by default)."""
     ticket = app_ticket.issue(customer_id, now, current())
     return {"ticket": ticket, "expires_in": get_settings().app_ticket_ttl_seconds}

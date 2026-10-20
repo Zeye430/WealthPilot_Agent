@@ -48,8 +48,8 @@ const COPY = defineCopy({
 });
 
 /**
- * 产品页：全部在售产品都可查看（产品负责人决定）。
- * 风险等级范围内的产品排在前面、可以买入；超出等级的只能查看条款。能否买入由后端判断。
+ * Products page: every product on sale can be viewed (product-owner decision).
+ * Products within the risk level come first and can be bought; those above it are view-only. The backend decides what can be bought.
  */
 export function ProductBrowser({ state, onStartAssessment }: { state: CustomerState | null; onStartAssessment: () => void }) {
   const c = useCopy(COPY);

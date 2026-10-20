@@ -1,5 +1,5 @@
-# 话题路由评估集。previous 为上一轮助手回复（用于省略式追问）。
-# 运行：cd backend && uv run python ../evaluations/run_router_eval.py
+# Topic routing evaluation set. previous is the assistant's previous reply (for elliptical follow-ups).
+# Run: cd backend && uv run python ../evaluations/run_router_eval.py
 
 - { text: 什么是业绩比较基准？, expected: FINANCE_KNOWLEDGE }
 - { text: 固收理财会亏本金吗？, expected: FINANCE_KNOWLEDGE }

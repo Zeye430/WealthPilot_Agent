@@ -1,6 +1,8 @@
-"""密码哈希：标准库 scrypt（内存困难型 KDF），每个密码独立随机盐，不引入额外依赖。
+"""Password hashing: standard-library scrypt (memory-hard KDF) with a random salt per password, no
+extra dependencies.
 
-存储格式：scrypt$n$r$p$salt_hex$hash_hex，参数随哈希一起保存，日后可平滑提高强度。
+Stored as scrypt$n$r$p$salt_hex$hash_hex; parameters are saved with the hash so strength can be
+raised later.
 """
 
 import hashlib
@@ -31,8 +33,10 @@ def verify_password(password: str, stored: str) -> bool:
         )
     except (ValueError, TypeError):
         return False
-    return hmac.compare_digest(digest.hex(), hash_hex)  # 常数时间比较，防计时攻击
+    # constant-time comparison against timing attacks
+    return hmac.compare_digest(digest.hex(), hash_hex)
 
 
-# 用户名不存在时也做一次同等开销的校验，避免通过响应时间探测账号是否存在
+# Do an equally expensive check for unknown usernames, so response times can't reveal whether an
+# account exists
 DUMMY_HASH = hash_password(secrets.token_urlsafe(16))

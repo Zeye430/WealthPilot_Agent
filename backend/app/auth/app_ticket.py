@@ -1,14 +1,19 @@
-"""手机银行 App 进入凭证（app ticket）：客户在银行 App 中已登录，点击「AI 理财助手」时，
-银行后台签发一张短期、一次性的凭证，WealthPilot 核验后建立自己的会话，客户无需再次输入密码。
+"""Mobile banking entry ticket (app ticket): the customer is already signed in to the bank app; when
+they tap "AI wealth assistant",
+the bank's back end issues a short-lived, one-time ticket; WealthPilot verifies it and creates its
+own session, with no second password.
 
-格式：base64url(载荷 JSON) + "." + base64url(HMAC-SHA256 签名)
-载荷：iss 签发方、aud 接收方、sub 客户编号、iat / exp 签发与过期时间、jti 唯一编号、locale 界面语言
+Format: base64url(payload JSON) + "." + base64url(HMAC-SHA256 signature)
+Payload: iss issuer, aud audience, sub customer ID, iat / exp issued and expiry times, jti unique
+ID, locale UI language
 
-核验项：签名（常数时间比较）、签发方、接收方、有效期（允许 10 秒时钟偏差）、一次性（jti 写入数据库，
-重复使用即拒绝，多实例部署同样有效）。
+Checks: signature (constant-time comparison), issuer, audience, expiry (10 s clock skew allowed),
+one-time use (jti stored in the database,
+so reuse is rejected, across multiple instances too).
 
-演示用双方共享的 HMAC 密钥；生产中常见做法是银行用私钥签名（如 RS256 / ES256 的 JWT），
-WealthPilot 只持有公钥，即使 WealthPilot 被攻破也无法伪造凭证。
+The demo uses a shared HMAC key; in production the bank usually signs with a private key (e.g. an
+RS256 / ES256 JWT)
+and WealthPilot holds only the public key, so even a compromised WealthPilot can't forge tickets.
 """
 
 import base64
@@ -31,7 +36,8 @@ CLOCK_SKEW = timedelta(seconds=10)
 
 
 class TicketError(ValueError):
-    """凭证无效。原因只写日志，不返回给前端细节（避免帮助攻击者调试）。"""
+    """Invalid ticket. The reason goes only to the log; the frontend gets no details (to avoid
+    helping attackers debug)."""
 
 
 @dataclass(frozen=True)
@@ -56,7 +62,8 @@ def _sign(payload: bytes) -> str:
 
 
 def issue(customer_id: str, now: datetime, locale: str = "zh") -> str:
-    """签发凭证。生产中由银行后台执行，这里供模拟的银行系统（app/bank_sim）与测试使用。"""
+    """Issue a ticket. In production the bank's back end does this; here it serves the simulated
+    bank (app/bank_sim) and tests."""
     ttl = get_settings().app_ticket_ttl_seconds
     payload = {
         "iss": ISSUER,
@@ -99,7 +106,8 @@ def verify(token: str, now: datetime) -> AppTicket:
 
 
 def consume(db: Session, ticket: AppTicket, now: datetime) -> None:
-    """标记凭证已使用；同一凭证第二次使用时主键冲突，视为重放。"""
+    """Mark the ticket as used; a second use of the same ticket hits a primary-key conflict and
+    counts as a replay."""
     db.add(UsedAppTicket(jti=ticket.jti, used_at=now, expires_at=ticket.expires_at))
     try:
         db.flush()

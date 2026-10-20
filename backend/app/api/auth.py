@@ -1,4 +1,5 @@
-"""登录 / 退出 / 当前用户。会话令牌只通过 httpOnly Cookie 传递，前端脚本读不到。"""
+"""Sign in / sign out / current user. The session token travels only in an httpOnly cookie that
+frontend scripts can't read."""
 
 import hmac
 import logging
@@ -33,7 +34,8 @@ class LoginRequest(BaseModel):
 
 
 def _display_name(username: str, fallback: str) -> str:
-    """演示账号的显示名按当前语言返回（账号表只存中文名）。"""
+    """Display names of demo accounts in the current language (the accounts table stores only
+    Chinese names)."""
     account = next((a for a in get_settings().demo_accounts if a["username"] == username), None)
     if account is None:
         return fallback
@@ -50,7 +52,8 @@ def user_view(user: CurrentUser) -> dict:
 
 @router.get("/config")
 def login_config():
-    """登录页需要的信息：是否需要访问码、可用的演示账号（不含密码）。"""
+    """What the sign-in page needs: whether an access code is required, and the demo accounts
+    (without passwords)."""
     settings = get_settings()
     return {
         "access_code_required": settings.demo_access_code is not None,
@@ -84,7 +87,8 @@ def login(
             raise HTTPException(status_code=401, detail=L("访问码不正确", "Incorrect access code"))
     user = authenticate(db, req.username, req.password)
     if user is None:
-        # 不区分「账号不存在」和「密码错误」，避免被用来探测账号
+        # Don't distinguish "no such account" from "wrong password", so the endpoint can't be used
+        # to probe accounts
         raise HTTPException(
             status_code=401, detail=L("账号或密码不正确", "Incorrect username or password")
         )
@@ -118,14 +122,16 @@ def app_ticket_login(
     db: Session = Depends(get_session),
     now: datetime = Depends(get_now),
 ):
-    """手机银行 App 进入：核验银行签发的一次性凭证，建立 WealthPilot 会话（客户无需输入密码）。"""
+    """Entry from the mobile banking app: verify the one-time ticket issued by the bank and
+    create a WealthPilot session (no password needed)."""
     login_limit(request, "app-ticket")
     try:
         ticket = app_ticket.verify(req.ticket, now)
         app_ticket.consume(db, ticket, now)
         user = app_customer(db, ticket.customer_id)
     except (app_ticket.TicketError, ValueError) as exc:
-        # 原因只写日志；对外统一提示，不帮助攻击者区分「签名错」「已过期」「已使用」
+        # The reason goes to the log only; the response is generic so attackers can't tell "bad
+        # signature", "expired" and "used" apart
         logger.warning("app ticket rejected: %s", exc)
         raise HTTPException(
             status_code=401,

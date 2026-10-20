@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
-// 浏览器只访问 Next.js；/api 由 Next.js 代理到 FastAPI，前端无需处理跨域。
-// 注意：rewrites 在 `next build` 时求值，Docker 构建时通过 BACKEND_URL 构建参数传入。
+// The browser talks only to Next.js; /api is proxied to FastAPI, so the frontend needs no CORS handling.
+// Note: rewrites are evaluated at `next build`; Docker builds pass the BACKEND_URL build argument.
 const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
@@ -9,8 +9,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {
-    // /api 代理默认 30 秒超时；一轮对话可能包含多次工具调用与模型调用，超过 30 秒时客户会看到请求失败。
-    // 120 秒覆盖正常的多工具回合；单轮总时长的上限（超时降级）计划在 P8-4 可靠性阶段由后端控制。
+    // The /api proxy times out after 30 s by default; a turn may include several tool and model calls, and customers would see a failure past 30 s.
+    // 120 s covers normal multi-tool turns; the backend enforces the overall turn budget (graceful timeout, added in P8-4).
     proxyTimeout: 120_000,
   },
   turbopack: {
@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
       { source: "/health", destination: `${backendUrl}/health` },
-      // 模拟手机银行的后台接口（演示用）；生产中是银行自己的系统
+      // Back-end API of the simulated mobile banking app (demo); in production this is the bank's own system
       { source: "/bank-sim/api/:path*", destination: `${backendUrl}/bank-sim/api/:path*` },
     ];
   },

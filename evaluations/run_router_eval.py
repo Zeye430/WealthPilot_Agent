@@ -1,6 +1,6 @@
-"""用真实 LLM 评估话题路由准确率。
+"""Evaluate topic-routing accuracy with the real LLM.
 
-用法（在 backend/ 下）：uv run python ../evaluations/run_router_eval.py
+Usage (from backend/): uv run python ../evaluations/run_router_eval.py
 """
 
 import sys
@@ -41,7 +41,8 @@ def main() -> None:
     latencies.sort()
     print(f"\n准确率：{n - len(wrong)}/{n} = {(n - len(wrong)) / n:.0%}")
     print(f"延迟：中位数 {latencies[n // 2]:.2f}s，最大 {latencies[-1]:.2f}s")
-    # 最需要关注的错误：无关问题被放行（浪费 token）或金融问题被拒答（伤害体验）
+    # The errors that matter most: off-topic questions let through (wasted tokens) or financial
+    # questions refused (bad experience)
     leaked = [c for c, g in wrong if c["expected"] == OUT_OF_SCOPE]
     refused = [c for c, g in wrong if g == OUT_OF_SCOPE]
     print(f"无关问题被放行：{len(leaked)} 条；金融问题被误拒：{len(refused)} 条")
