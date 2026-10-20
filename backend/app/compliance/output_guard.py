@@ -524,12 +524,40 @@ def _reference_amounts() -> frozenset[Decimal]:
     return frozenset(v for _, v in _amounts(text))
 
 
+# 举例用的假设金额（产品负责人决定，2026-10-19）：讲解金融常识时可以用金额举例，
+# 但同一句必须明确说明是假设，且只能是整数金额（如 60 万元、¥100,000）。
+# 计算结果（如 10.3 万元、1,790,847.70 元）不是整数金额，仍须来自工具：模型不能自己算。
+ASSUMPTION = re.compile(r"假设|假如|假定|举例|举个例子|例如|比如|打个比方|以[^。！？；\n]{0,8}为例")
+ASSUMPTION_EN = re.compile(
+    r"\b(suppose|supposing|assume|assuming|assumption|hypothetical(ly)?|for example|"
+    r"for instance|e\.g\.|let's say|say you|imagine)\b",
+    re.I,
+)
+ILLUSTRATIVE_MAX_SIGNIFICANT_DIGITS = 2
+
+
+def _illustrative(value: Decimal) -> bool:
+    """整数且有效数字不超过 2 位（600,000、450,000、1,500,000），像举例而不像计算结果。"""
+    if value != value.to_integral_value():
+        return False
+    digits = str(int(abs(value))).rstrip("0")
+    return len(digits) <= ILLUSTRATIVE_MAX_SIGNIFICANT_DIGITS
+
+
+def _assumption_sentences(reply: str) -> list[str]:
+    # 「e.g.」中的句点不是句子结束，先替换掉，避免把标记和金额分到两句
+    text = re.sub(r"\be\.g\.", "eg,", reply, flags=re.I)
+    pattern = re.compile(ASSUMPTION_EN.pattern.replace(r"e\.g\.", r"eg"), re.I)
+    return [s for s in SENTENCE_SPLIT_ANY.split(text) if ASSUMPTION.search(s) or pattern.search(s)]
+
+
 def ungrounded_amounts(reply: str, facts: str) -> list[str]:
     known = {v for _, v in _amounts(facts)} | _reference_amounts()
     known |= {v for n in BARE_NUMBER.findall(facts) if (v := _to_decimal(n)) is not None}
+    assumed = {v for s in _assumption_sentences(reply) for _, v in _amounts(s) if _illustrative(v)}
     hits = []
     for text, value in _amounts(reply):
-        if value == 0:
+        if value == 0 or value in assumed:
             continue
         if not any(abs(value - k) <= max(abs(k) * AMOUNT_TOLERANCE, Decimal(1)) for k in known):
             hits.append(text)
@@ -855,7 +883,12 @@ def describe(
             if real_institutions(reply)
             else ""
         )
-        + ("引用了未检索到的资料编号。" if "O-FAKE_CITATION" in violations else "")
+        + (
+            "引用了本轮没有检索到的资料编号：要引用就先调用 search_documents 检索"
+            "（上一轮检索过的也要重新检索），否则删去这些编号。"
+            if "O-FAKE_CITATION" in violations
+            else ""
+        )
         + (
             "理财经理尚未接入，只能说「已将您的咨询要点同步给理财经理，您可以通过名片直接联系」。"
             if "O-FALSE_HANDOFF_CLAIM" in violations
@@ -889,9 +922,12 @@ def describe(
             else ""
         )
         + (
-            "回答中的金额没有来源：金额只能来自工具结果、客户资料或客户自己说的数字；"
-            "需要计算（如到手金额、合计、差额）时调用计算工具（calculate_fees、calculate_growth），"
-            "不要自己算；不确定时不写具体金额。"
+            "回答中的金额没有来源，上面列出的金额不能原样再写。请这样改："
+            "（1）收益、终值、费用、到手金额：先调用计算工具（calculate_growth、calculate_fees），"
+            "再按工具结果作答；"
+            "（2）工具算不了的差额或合计：不写具体数字，改用文字描述，"
+            "如「超出 50 万元的部分」「两者之和」；"
+            "（3）举例时只写假设的整数金额（同一句写明「假设」或「例如」）和资料中的限额。"
             if "O-UNGROUNDED_AMOUNT" in violations
             else ""
         )

@@ -79,6 +79,9 @@ flowchart LR
 | D49 | **客户从手机银行进入，理财助手是 App 里的一个模块**：银行签发 60 秒一次性凭证，WealthPilot 核验后建立自己的会话（嵌入模式：无登录 / 退出，只有「返回手机银行」） | 与国内银行的实际做法一致：客户不会为一个功能再记一套账号；WealthPilot 不接触银行密码；凭证短期一次性，即使泄露也很快失效 | 让 App 直接把银行会话令牌传给 WealthPilot：权限过大、无法限定用途；共用一套账号：两个系统的安全边界混在一起 |
 | D50 | **模拟银行系统与 WealthPilot 严格分开**（`app/bank_sim/`，独立 Cookie 与密钥，只通过签名凭证交互；生产中关闭） | 演示时能看到完整流程，又不把「银行的职责」写进 WealthPilot；换成真实手机银行时 WealthPilot 侧无需改动 | 在 WealthPilot 登录页加个「模拟 App 登录」按钮：边界不清，面试中说不清哪部分是谁的 |
 | D51 | **首次从 App 进入时自动开户**（账号 `app:<客户编号>`，无密码，只能经 App 进入） | 客户身份由银行核验，无需预先批量开户；账号与渠道一一对应，审计时能区分「经 App」与「其他渠道」 | 预先为所有银行客户开户：数据量大、同步复杂 |
+| D52 | **演示环境部署就绪、按需上线**：一键部署到 AWS Lightsail（一台服务器跑整套 docker compose），短期以录屏代替常开的公开链接（见 [DEPLOYMENT.md](DEPLOYMENT.md)） | 求职阶段的访问量很低，常开每月 $12–24 且要防刷；脚本化后需要时 15 分钟上线、不用时一条命令删除；演练模式不产生费用 | Render 等托管平台：免费档会休眠且内存不足以加载向量与语音模型；Kubernetes / ECS：演示规模下运维成本远大于收益 |
+| D53 | **产品与知识库数据打进后端镜像**（构建上下文为仓库根目录，`.dockerignore` 排除 `data/reference/` 与 `.env`，CI 检查） | 镜像自包含，版本与数据一一对应，回滚时数据也随之回滚；服务器上不需要额外同步数据 | 运行时挂载 `data/` 目录：代码与数据版本可能不一致；容易把本地的真实参考文件带上服务器 |
+| D54 | **Caddy 作为唯一入口**：自动申请 HTTPS 证书；`/metrics` 对外 404；用真实来源 IP 覆盖 `X-Forwarded-For`；`/health*` 直接转给后端 | 配置十几行即可得到证书续期、HSTS 与安全的转发头；健康检查不经过前端，能真实反映后端状态 | Nginx + certbot：需要另配续期任务；直接暴露后端：限流可被伪造 IP 绕过 |
 | D38 | **设计令牌集中在 globals.css**：白底 + 浅灰分区、深海军蓝文字、亮蓝主操作、胶囊按钮、20px 卡片圆角，含深色模式；设计语言参考 PayPal App，不使用其品牌元素 | 产品负责人偏好 PayPal 的简洁感；令牌化后改版只改一处；自有色值与开源字体避免品牌仿冒 | 照搬 PayPal 色值与字体：品牌与知识产权风险 |
 | D27 | **全局一个产品弹窗**（React Context）：对话卡片、产品页、配置图都通过 `open(code)` 打开同一个详情与买入流程 | 买入入口多处出现，规则与界面必须一致；避免每个组件各自挂载弹窗 | 每处各自挂载：代码重复，容易出现规则不一致 |
 
@@ -350,9 +353,9 @@ stateDiagram-v2
 
 ## 7. 配置与运行
 
-- `docker compose up` 启动 `db`（pgvector/pgvector:pg16）、`backend`、`frontend`。
-- `.env`：`LLM_BASE_URL=https://api.moonshot.cn/v1`、`LLM_API_KEY`、`LLM_MODEL`（具体模型名在 Phase 1 用实际 API 确认）、`DATABASE_URL`。
-- `.env` 不入库，仓库只提交 `.env.example`。
+- 开发：`./scripts/dev.sh` 启动数据库、后端、前端（或 `docker compose up --build` 全部用容器运行）；配置见 `.env.example`（`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`DATABASE_URL` 等）。
+- 生产（演示环境）：`deploy/docker-compose.prod.yml`（数据库、后端、前端、Caddy、每日备份），配置见 `deploy/.env.production.example`，部署步骤见 [DEPLOYMENT.md](DEPLOYMENT.md)（D52–D54）。
+- `.env` 与 `deploy/.env.production` 不入库，仓库只提交示例文件。
 
 ## 8. RAG 与知识库
 

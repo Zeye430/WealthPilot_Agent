@@ -1,0 +1,42 @@
+# 手动触发：把 main 的最新提交更新到已创建的 Lightsail 服务器（等同于本机运行 deploy/update.sh）。
+# 服务器需先用 deploy/deploy.sh 创建；需要的 Secrets 见 docs/DEPLOYMENT.md「从 GitHub 更新」。
+# 使用 production 环境：可在仓库 Settings → Environments 中设置「需要审批」后才能执行。
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: 写入 SSH 密钥、主机指纹与生产配置
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+        run: |
+          for v in SSH_KEY KNOWN_HOSTS ENV_FILE; do
+            [ -n "${!v}" ] || { echo "缺少 Secret：${v}（见 docs/DEPLOYMENT.md）"; exit 1; }
+          done
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/wealthpilot-lightsail.pem
+          chmod 600 ~/.ssh/wealthpilot-lightsail.pem
+          # 固定服务器指纹，防止连接到被冒充的主机
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$ENV_FILE" > deploy/.env.production
+          chmod 600 deploy/.env.production
+      - name: 更新
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+        run: ./deploy/update.sh
+      - name: 清理密钥
+        if: always()
+        run: rm -f ~/.ssh/wealthpilot-lightsail.pem deploy/.env.production

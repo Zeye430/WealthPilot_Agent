@@ -277,6 +277,33 @@ def test_customer_profile_amounts_are_grounded():
     ]
 
 
+def test_illustrative_amount_allowed_when_marked_as_assumption():
+    # 产品负责人决定（2026-10-19）：常识讲解可以用整数金额举例，但同一句要说明是假设
+    zh = "假设您在同一家银行存了 60 万元，存款保险最高偿付 50 万元。"
+    assert ungrounded_amounts(zh, "") == []
+    assert ungrounded_amounts("例如投入 10 万元、年化 3%，具体收益以测算结果为准。", "") == []
+    en = "For example, say you have ¥600,000 at one bank: coverage is capped at ¥500,000."
+    assert ungrounded_amounts(en, "") == []
+    split = "Coverage is per bank (e.g. ¥1.5 million split across banks)."
+    assert ungrounded_amounts(split, "") == []
+    # 同一金额在后文再次提到时沿用该假设
+    assert ungrounded_amounts(zh + "这 60 万元中超出限额的部分不受保障。", "") == []
+
+
+def test_illustrative_amount_without_assumption_marker_is_flagged():
+    assert ungrounded_amounts("您在同一家银行存了 60 万元。", "") == ["60 万元"]
+    # 假设写在另一句里不算：标记必须和金额在同一句
+    assert ungrounded_amounts("我们举个例子。您存了 60 万元。", "") == ["60 万元"]
+
+
+def test_calculated_result_in_assumption_sentence_is_still_flagged():
+    # 举例的输入可以是假设，计算结果仍须来自工具（模型不能自己算）
+    zh = "假设投入 10 万元、年化 3%，一年后约 10.3 万元。"
+    assert ungrounded_amounts(zh, "") == ["10.3 万元"]
+    en = "Suppose you invest ¥1,000,000 at 6% for 10 years; it grows to ¥1,790,848."
+    assert ungrounded_amounts(en, "") == ["¥1,790,848"]
+
+
 # ---------- 数据库连接池耗尽 ----------
 
 

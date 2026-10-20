@@ -156,6 +156,11 @@
       checks:
         cited_any: [K17]
         reply_includes_any: ["500,000", "500000", "(?i)500k", "(?i)500 thousand"]
+    # Illustrative amounts are allowed but must be stated as assumptions (product owner, 2026-10-19)
+    - say: Can you give me an example of how the part above the limit works?
+      checks:
+        reply_includes_any: ["(?i)suppose", "(?i)assum", "(?i)for example", "(?i)for instance", "(?i)e\\.g\\.", "(?i)let's say", "(?i)say you", "(?i)hypothetical", "(?i)imagine"]
+        judge: May use a specific amount as an example, but must clearly say it is a hypothetical example; the conclusion must match the deposit insurance cap of ¥500,000 per bank and must not promise that the excess is fully repaid.
 
 - id: R02
   name: Product terms answer with a source

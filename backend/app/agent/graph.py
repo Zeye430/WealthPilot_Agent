@@ -416,18 +416,33 @@ def _grounding(state: AgentState) -> str:
 
     测评前只认客户自己说过的产品名和客户资料中的已有持仓；测评后还包括历史回答和工具结果。
     """
-    earlier = state["messages"][:-1]
+    earlier = _evidence(state)
     if state["permission"] is Permission.ASSESSMENT_REQUIRED:
         earlier = [m for m in earlier if isinstance(m, HumanMessage)]
     # 客户资料（含银行系统中的已有持仓）：提到客户自己持有的产品不算泄露（场景评估 R01）
     profile = state.get("customer_context", "")
-    return "\n".join([profile, *(_text(m) for m in earlier if not isinstance(m, SystemMessage))])
+    return "\n".join([profile, *(_text(m) for m in earlier)])
 
 
 def _facts(state: AgentState) -> str:
     """金额核对的依据：客户资料 + 此前所有消息与工具结果（不分测评状态，测算工具测评前也可用）。"""
-    earlier = [m for m in state["messages"][:-1] if not isinstance(m, SystemMessage)]
-    return "\n".join([state.get("customer_context", ""), *(_text(m) for m in earlier)])
+    return "\n".join([state.get("customer_context", ""), *(_text(m) for m in _evidence(state))])
+
+
+def _evidence(state: AgentState) -> list[BaseMessage]:
+    """可以作为依据的此前消息：客户的话、工具结果、以往轮次的最终回答（都已经过审查）。
+
+    不含系统消息，也不含本轮模型自己写的内容：被审查拒绝的初稿如果算作依据，
+    改写时重复同一个编造的金额或产品就能通过（场景评估 R01 发现，2026-10-19）。
+    历史消息从数据库加载，只有每轮审查后的最终回答，因此未经审查的内容只会出现在本轮。
+    """
+    earlier = state["messages"][:-1]
+    turn_start = len(earlier) - len(current_turn(earlier))
+    return [
+        m
+        for i, m in enumerate(earlier)
+        if not isinstance(m, SystemMessage) and not (i >= turn_start and isinstance(m, AIMessage))
+    ]
 
 
 def _text(message: BaseMessage) -> str:

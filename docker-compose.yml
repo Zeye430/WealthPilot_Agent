@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: wealthpilot
       POSTGRES_DB: wealthpilot
     ports:
-      - "5433:5432"  # 宿主机用 5433，避免与本机已有的 Postgres 冲突
+      - "${DB_PORT:-5433}:5432"  # 宿主机默认用 5433，避免与本机已有的 Postgres 冲突；端口被占用时可设 DB_PORT 等变量
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,17 +17,22 @@ services:
       retries: 20
 
   backend:
-    build: ./backend
+    build:
+      context: .                         # 仓库根目录：镜像中包含 backend/ 与 data/
+      dockerfile: backend/Dockerfile
     env_file:
       - path: .env
         required: false
     environment:
       DATABASE_URL: postgresql+psycopg://wealthpilot:wealthpilot@db:5432/wealthpilot
+      WARMUP_ON_START: "true"            # 启动后在后台加载向量模型并建检索索引，第一个问题不必等待
+      EMBEDDING_CACHE_DIR: /app/.cache/fastembed
     # 本地语音识别模型不打进镜像，只读挂载本机已下载的模型；未下载时语音输入自动隐藏
     volumes:
       - ./backend/.models:/app/.models:ro
+      - model-cache:/app/.cache          # 向量模型缓存，重建容器不必重新下载
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -45,10 +50,11 @@ services:
       args:
         BACKEND_URL: http://backend:8000
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
 
 volumes:
   pgdata:
+  model-cache:

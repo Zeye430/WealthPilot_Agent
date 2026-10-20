@@ -9,13 +9,27 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.agent.graph import ALL_TOOLS, build_graph
 from app.api.chat import get_agent
+from app.db.session import get_engine
 from app.main import app
 from tests.fakes import ScriptedChatModel
 
 HIDDEN_FIELDS = {"state", "risk_rating", "customer_id", "conversation_id", "permission"}
+
+
+def _db_available() -> bool:
+    try:
+        with get_engine().connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+db_required = pytest.mark.skipif(not _db_available(), reason="数据库未启动")
 
 
 @pytest.mark.parametrize("tool", ALL_TOOLS, ids=lambda t: t.name)
@@ -37,6 +51,7 @@ def test_message_length_is_bounded():
         app.dependency_overrides.pop(get_agent, None)
 
 
+@db_required
 def test_customer_cannot_cancel_another_customers_reminder():
     owner = TestClient(app, headers={"X-Demo-User": "eval_customer"})
     other = TestClient(app, headers={"X-Demo-User": "pytest_customer"})

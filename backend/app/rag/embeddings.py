@@ -12,7 +12,8 @@ class Embedder:
     def __init__(self, model_name: str, query_instruction: str = ""):
         self.model_name = model_name
         self.query_instruction = query_instruction
-        self._model = TextEmbedding(model_name)
+        cache = get_settings().embedding_cache_dir
+        self._model = TextEmbedding(model_name, cache_dir=str(cache) if cache else None)
 
     @property
     def dim(self) -> int:

@@ -331,8 +331,11 @@ export type BankHome = {
 };
 
 export const bankApi = {
-  login: (username: string, password: string) =>
-    request<{ ok: boolean }>("/bank-sim/api/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  login: (username: string, password: string, accessCode?: string) =>
+    request<{ ok: boolean }>("/bank-sim/api/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password, access_code: accessCode || null }),
+    }),
   home: () => request<BankHome>("/bank-sim/api/home"),
   ticket: () => request<{ ticket: string; expires_in: number }>("/bank-sim/api/assistant-ticket", { method: "POST" }),
   logout: () => request<void>("/bank-sim/api/logout", { method: "POST" }),

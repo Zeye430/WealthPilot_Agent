@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -33,6 +34,19 @@ configure_logging(get_settings().log_format, [RedactingFilter()])
 logger = logging.getLogger(__name__)
 
 
+def _warmup() -> None:
+    """后台预热：加载向量模型并同步检索索引（首次部署约需几十秒，之后只计算有变化的内容）。"""
+    from datetime import date
+
+    from app.rag.service import get_retriever
+
+    try:
+        get_retriever(date.today())
+        logger.info("warmup finished: retriever ready")
+    except Exception:
+        logger.warning("warmup failed; the retriever will initialize on first use", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     try:
@@ -40,6 +54,8 @@ async def lifespan(_: FastAPI):
             ensure_demo_accounts(db)
     except OperationalError:
         logger.warning("数据库不可用，跳过演示账号初始化")
+    if get_settings().warmup_on_start:
+        threading.Thread(target=_warmup, name="warmup", daemon=True).start()
     yield
 
 

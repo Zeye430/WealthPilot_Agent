@@ -1,125 +1,166 @@
 # WealthPilot AI
 
-面向中国银行理财市场的 AI 理财助手：以 AI 为第一服务入口，必要时转交理财经理（AI-First + Human-in-the-Loop）。
+English | [中文](README.zh-CN.md)
 
-> **作品集演示系统**：使用虚构客户与标注过的样本数据，不销售任何产品，不接触真实资金，不构成投资建议。
+An AI wealth assistant for retail customers of Chinese banks. Customers open it from their mobile banking app to plan, ask questions and find products that fit their needs. When a question needs a person, the assistant hands off to the customer's relationship manager.
 
-## 设计要点
+**The core design choice: compliance decisions live in deterministic code, not in the prompt.** The language model never decides a customer's risk rating, which products are eligible, whether a purchase is allowed or whether a human has taken over. It only reads those facts. Every reply passes 15 output rules in code before the customer sees it.
 
-- **合规不靠 Prompt**：适当性规则写在代码里，分三道防线：流程门禁、工具自检、输出审查。未完成风险测评时，LLM 根本拿不到产品查询工具。
-- **数字不靠 LLM**：所有金额由 `Decimal` 计算引擎算出；图表数据直接来自工具输出，不经过模型改写。
-- **话题路由控制成本**：与理财无关的问题用固定话术回复，不调用主模型。
-- **会推荐，但不硬推销**：测评后按客户的期限、流动性需求匹配评级范围内的产品并说明理由，产品卡片可直接进入买入确认；推荐超评级产品、制造紧迫感、以收益为理由都会被输出审查拦截。买入由客户本人确认，服务端逐项校验（演示只到确认页，不下单）。
-- **适当性是硬过滤**：超出评级、已到期、金额或期限不符的产品进不了候选；排序只看期限、流动性和费用，不按收益排序。客户评级由系统注入，模型无法改写。
-- **回答有出处**：金融常识以人工编写、法规原文已核对的知识库为依据，回答标注 [K17] 这类编号并可展开查看原文与官方链接；没有依据的回答标注「一般性说明」。知识库条目过期自动停止引用。
-- **客户画像叠加而不重建**：基础画像来自银行系统、只读；对话中的新需求（金额、期限、流动性、目标收益）另行记录并标注来源，已知信息不再追问。
-- **质量可重复验证**：中英文各 25 个真实 LLM 多轮场景（门禁、诱导、推荐、权益、新品、产品、引用、计算、交接），确定性检查 + LLM 评审，每个场景重复 3 次统计通过率（最新：中文 75/75、英文 72/75，零兜底）；CI 每次提交运行全部单元与集成测试。
-- **像营销人员一样工作，但守住合规**：客户问奖励或计划资金可达更高等级时，提示贵宾等级权益与活动（只与资产总额挂钩，不「买理财送礼」）；有配置需求时介绍评级范围内的新品，客户同意后设置开售提醒，购买仍由本人完成。权益、活动、新品都来自数据，AI 引用的收益数字必须有来源。
-- **手机优先、中英双语**：手机上是可嵌入手机银行 App 的 H5（底部导航、底部弹出面板、可添加到主屏幕），电脑上三栏布局；一键切换中文 / English：界面、AI 回答、产品与问卷数据、理财经理看板全部双语，英文回答同样经过英文版合规规则审查（知识库与说明书摘录保留中文原文并标注）。
-- **语音输入**：按住麦克风说话，本地开源模型（SenseVoice）转成文字后填入输入框，确认再发送；录音不离开本机、不保存；回答可一键朗读。
-- **按真实金融应用的标准做安全**：服务端会话（httpOnly Cookie、可即时吊销）、客户与理财经理角色隔离、登录与对话限流、跨站写请求拦截、安全响应头、日志脱敏、CI 依赖漏洞扫描；每条防护都有对应测试（[威胁模型](docs/SECURITY.md)）。
-- **可观测、可运维**：每个请求一个编号，贯穿响应头、JSON 日志与每轮运行指标（延迟、模型调用、token 与费用、工具成败、审查结论）；运维看板 `/ops` 显示 P50 / P95 延迟、兜底率、合规规则命中与费用；Prometheus 格式指标与就绪检查。指标不含对话内容与客户编号。
-- **故障时行为可控**：模型连续失败自动熔断并给客户明确提示；单轮超过 60 秒停止调用模型、展示已查到的结果；工具内部异常不拖垮整轮对话；超载时快速返回「系统繁忙」。每种故障都有自动化测试；压测找到并修复了「等模型时占着数据库连接」的瓶颈（40 并发吞吐 7 → 16 次/秒）。
-- **从手机银行进入**：客户先登录（模拟的）知岸银行 App，理财助手是 App 里的一个功能模块；点击后银行签发一次性凭证，免密进入（签名、有效期、用途、防重放都有测试）。电脑上打开 `/bank` 可看到带步骤说明的演示；理财经理与运维在生产中分别从员工工作台、运维监控平台进入，登录页已标注。
-- **联系理财经理**：客户看到专属理财经理名片（企业微信、电话），咨询要点由代码生成并同步到理财经理看板；AI 不会声称理财经理「已联系您」。
+> **Portfolio project.** All institutions, products and customers are fictional and labeled as synthetic. Nothing is sold and no real money is involved: the purchase flow stops at a confirmation page. This is not investment advice.
 
-## 架构
+<!-- Demo video: drag the compressed mp4 (under 10 MB) into GitHub's README editor here. Shot list: docs/DEMO_SCRIPT.md -->
+
+## What it does
+
+| | |
+|---|---|
+| **Plans and matches** | Learns the customer's amount, time horizon and liquidity needs, then suggests products within their risk rating, with reasons based on term, liquidity, fees and minimums. |
+| **Answers questions** | Explains wealth-management concepts from a hand-written knowledge base whose regulation excerpts are checked against the source. Answers cite entries like [K17], which expand to the original text. |
+| **Calculates** | Compound growth, fees and allocation scenarios, all computed in code with `Decimal`. Charts come straight from tool output. |
+| **Hands off** | Shares a summary with the relationship manager when the customer agrees. The handoff is a state machine, and the AI can never claim a human has joined. |
+| **Works like the real channel** | Opened from a simulated mobile banking app with a signed one-time ticket. Mobile-first web app, fully bilingual (Chinese and English), with voice input transcribed on our own server. |
+
+## Design highlights
+
+**Compliance in code, three layers deep**
+- **Gate.** Before a valid risk assessment, the model isn't given any product tools at all. It can answer general questions and remind the customer to take the assessment.
+- **Tool checks.** Products above the customer's rating are hard-filtered before ranking. Ranking never uses returns. The customer's ID and rating are injected into tools, so the model can't see or change them.
+- **Output review.** 15 deterministic rules in Chinese and English. They catch guaranteed-return language, pressure tactics, product facts the tools didn't return, amounts that don't come from a tool, comparisons across different yield measures, false claims of actions and handoffs, and more. A failing reply is rewritten once with feedback; if it fails again, a safe fallback is shown. Every decision is logged with a rule version.
+
+**Numbers never come from the model**
+All amounts are calculated in code. The output review checks every RMB amount in a reply against tool results, the customer's profile and the knowledge base. The one exception is an illustrative example. It must be a round figure, and the same sentence must say it's an assumption ("Suppose you have ¥600,000 at one bank"). Any result calculated from that example still has to come from a tool.
+
+**Recommends, but doesn't hard-sell**
+The assistant is allowed to recommend: it should help customers find suitable products and get to a purchase. But it may not use returns as a selling point, create urgency, tie gifts to specific products or suggest retaking the risk assessment to qualify for riskier products.
+
+**Measured quality**
+- 25 multi-turn scenarios per language (gate, manipulation, recommendations, rewards, product terms, citations, calculations, handoffs) run against the real model 3 times each. Checks are deterministic, plus an LLM judge.
+- Latest results: Chinese 73/75, English 72/75, with one fallback per language. Each run writes a report to `evaluations/reports/`, failures included.
+- Topic routing: 24/24. Retrieval Hit@1: 96%.
+
+**Built to be operated**
+- Every request carries an ID through response headers, JSON logs and per-turn metrics (latency, model calls, tokens, cost, tool results, review outcome).
+- An ops dashboard shows P50/P95 latency, fallback rate, rule hits and cost, without conversation content or customer IDs.
+- Failures behave predictably: a circuit breaker for the model, a 60-second turn budget, tool errors contained, and a fast 503 when overloaded. Each failure mode has a test.
+- A load test found that the database connection was held while waiting for the model. Fixing it took throughput at 40 concurrent users from 7 to 16 requests per second.
+
+**Secure by default**
+Server-side sessions with httpOnly cookies, role isolation (customer, relationship manager, ops), rate limits, cross-site write checks, log redaction and dependency scanning in CI. Each control has a test; see the [threat model](docs/SECURITY.md).
+
+**Real cost numbers**
+From 289 real turns: about $0.011 per turn before caching, with input at 97% of tokens. So the cost levers are prompt caching and context trimming, not shorter answers ([cost estimate](docs/COST_ESTIMATE.md)).
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    U[Next.js 前端] -->|/api 代理| API[FastAPI]
-    API --> G[LangGraph 主流程]
-    G --> P[合规规则引擎]
-    G --> LLM[Kimi<br/>OpenAI 兼容适配层]
-    G --> T[工具层]
-    T --> CALC[计算引擎<br/>Decimal]
-    T --> DB[(PostgreSQL<br/>+ pgvector)]
+    APP[Mobile banking app<br/>simulated] -->|signed one-time ticket| FE[Next.js<br/>mobile-first web app]
+    FE -->|/api| API[FastAPI]
+    API --> R[Topic router]
+    R -->|off-topic: fixed reply| API
+    R --> G[LangGraph agent]
+    G --> LLM[LLM<br/>OpenAI-compatible adapter]
+    G --> T[Typed tools]
+    T --> BIZ[Suitability, ranking,<br/>Decimal calculations,<br/>purchase checks, RAG]
+    BIZ --> DB[(PostgreSQL<br/>+ pgvector)]
+    G --> OG[Output review<br/>15 rules]
+    OG --> API
 ```
 
-| 层 | 技术 |
+Layers run `api → agent → tools → business modules → db`. Business modules don't depend on the LLM and are tested on their own.
+
+| Layer | Stack |
 |---|---|
-| 前端 | Next.js 16、React 19、TypeScript、Tailwind CSS 4、Recharts |
-| 后端 | Python 3.13、FastAPI、Pydantic、SQLAlchemy 2、Alembic |
-| Agent | LangGraph（单主 Agent + 强类型工具） |
-| 模型 | Kimi（Moonshot，经适配层可替换） |
-| 数据 | PostgreSQL 16 + pgvector |
-| 工具链 | uv、pytest、ruff、Docker Compose |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts |
+| Backend | Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic |
+| Agent | LangGraph: one main agent with strongly typed tools |
+| Model | Kimi K2.6 (Moonshot) through an OpenAI-compatible adapter; switching models is a config change plus a re-run of the evaluation |
+| Data | PostgreSQL 16 + pgvector; local embeddings (fastembed) and speech recognition (SenseVoice) |
+| Ops | Docker Compose, Caddy (automatic HTTPS), GitHub Actions, uv, pytest, ruff |
 
-详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，其中包括 12 条架构决策及其取舍。
+## Run it locally
 
-## 快速开始
-
-前置条件：Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+、Kimi API Key。
+You need Docker, [uv](https://docs.astral.sh/uv/), Node.js 20+ and a Kimi API key ([platform.kimi.ai](https://platform.kimi.ai)). Any OpenAI-compatible model should work after changing `LLM_BASE_URL` and `LLM_MODEL`; only Kimi has been evaluated.
 
 ```bash
-cp .env.example .env          # 填写 LLM_API_KEY
-./scripts/dev.sh              # 一键启动数据库、后端、前端 → http://localhost:3000
-                               # 推荐从 http://localhost:3000/bank 体验客户入口（模拟手机银行）；演示账号：wang / chen（客户）、li / zhou（理财经理）、ops（运维看板），密码 wealthpilot-demo
+cp .env.example .env          # set LLM_API_KEY
+./scripts/dev.sh              # database, backend and frontend → http://localhost:3000
 ```
 
-也可以分步手动启动：
+Or run everything in containers: `docker compose up --build`.
+
+Start at **http://localhost:3000/bank**: sign in to the simulated banking app and open the assistant. Switch to English with the **中 / EN** button.
+
+Demo accounts (local only; password `wealthpilot-demo`):
+
+| Account | Role |
+|---|---|
+| `wang`, `chen` | Customers |
+| `li`, `zhou` | Relationship managers (`/rm`) |
+| `ops` | Operations dashboard (`/ops`) |
+
+## Tests and evaluation
 
 ```bash
-# 1. 数据库
-docker compose up -d db
-
-# 2. 后端（uv 会自动创建 .venv 虚拟环境）
-cd backend
-uv sync
-uv run alembic upgrade head
-uv run python scripts/check_llm.py   # 检查 Kimi 连通性与工具调用
-uv run uvicorn app.main:app --reload
-
-# 3. 前端（另开终端）
-cd frontend
-npm install
-npm run dev                    # http://localhost:3000
-```
-
-一键启动全部服务：`docker compose up --build`
-
-## 测试
-
-```bash
-cd backend && uv run pytest     # 计算、问卷计分、合规规则、Agent 流程（假模型）、API 集成（自动使用独立测试库 wealthpilot_test）
-cd backend && uv run python ../evaluations/run_scenarios.py --repeat 3   # 真实 Kimi 多轮场景评估，报告写入 evaluations/reports/
-cd backend && uv run python ../evaluations/run_scenarios.py --suite en --repeat 3   # 英文界面场景评估
-cd backend && uv run python ../evaluations/run_router_eval.py   # 用真实 Kimi 评估话题路由
-cd backend && uv run python ../scripts/load_test.py --help      # 压测（对独立测试库上以 LLM_PROVIDER=fake 启动的后端）
-cd backend && uv run python ../evaluations/run_rag_eval.py      # 检索命中率（不调用 LLM）
-cd backend && uv run python ../scripts/check_knowledge.py       # 知识库维护检查（核对法规原文）
+cd backend && uv run pytest                                              # unit, agent flow (fake model), API integration
+cd backend && uv run python ../evaluations/run_scenarios.py --suite en --repeat 3   # real-model scenarios (costs about $2 per suite)
+cd backend && uv run python ../evaluations/run_router_eval.py             # topic routing
+cd backend && uv run python ../evaluations/run_rag_eval.py               # retrieval hit rate
 cd frontend && npm run lint && npm run build
 ```
 
-语音输入需要本地识别模型（约 240MB，`./scripts/dev.sh` 首次启动时自动下载，也可手动运行 `cd backend && uv run python ../scripts/download_asr_model.py`；国内网络可设置 `HF_ENDPOINT=https://hf-mirror.com`）。未下载时麦克风按钮不显示，其他功能不受影响。
+On every push, CI runs:
+- the backend tests, linting and dependency audits;
+- the frontend build;
+- a boot of the full production stack with a fake model, checking HTTPS, readiness, blocked internal endpoints, the access code and the image contents.
 
-CI（`.github/workflows/ci.yml`）在每次 push / PR 时运行后端 ruff + pytest 与前端 lint + build。场景评估调用真实模型、有费用，不在 CI 中运行。
+## Deployment
 
-## 项目结构
+`deploy/` holds a production setup for one AWS Lightsail server (from $12 a month): database, backend, frontend, Caddy and daily backups. With an AWS access key configured, one command creates the server and one removes it:
 
-```text
-backend/
-  app/calculations/   纯函数金融计算（不依赖 LLM）
-  app/tools/          暴露给 LLM 的工具（校验 → 计算 → UI 块）
-  app/agent/          LangGraph 图与 Prompt
-  app/api/            REST 接口
-  app/db/             数据模型；migrations/ 为 Alembic 迁移
-  tests/              单元、流程、集成测试
-frontend/src/
-  components/blocks/  测算凭证、折线图等结构化回答组件
-docs/                 架构、合规、评估、路线图；生产落地与部署图（PRODUCTION_READINESS）、美国监管对照（US_REGULATORY_MAPPING）、成本（COST_ESTIMATE）、故障手册（RUNBOOK）
+```bash
+DRY_RUN=1 ./deploy/deploy.sh   # print every AWS and server command without creating anything
+./deploy/deploy.sh             # about 15 minutes later: https://<ip>.sslip.io
+./deploy/update.sh             # ship the latest commit (backs up the database first)
+./deploy/destroy.sh            # export the database locally, then delete the server
 ```
 
-## 进度
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (in Chinese). In a bank, the system would run very differently: inside the bank's network, with SSO for staff and a private or approved model. [PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) covers that design and the gap list.
 
-| 阶段 | 状态 |
-|---|---|
-| P0 设计文档 | ✅ |
-| P1 骨架 + 计算器链路 | ✅ 已用真实 Kimi（kimi-k2.6）端到端验证 |
-| P2 风险测评门禁 + 规则引擎 | ✅ 话题路由评估 24/24 |
-| P3 产品库与适当性 | ✅ 16 个虚构产品；132 个测试 |
-| P4 条款 RAG + 知识库 | ✅ 检索 Hit@1 96%；52 条法规摘录自动核对通过 |
-| P5 客户画像 + 配置情景 | ✅ 基础画像（银行系统）+ 本次需求；主场景跑通 |
-| P6 人工交接 | ✅ 客户同意 → 理财经理看板 → 服务中 AI 暂停，全程留痕 |
-| P7 质量与完善 | 🔄 场景评估、测试隔离、CI、最近对话 |
-| P8 生产化与双语 | 🔄 安全 ✅、界面与中英双语 ✅、可观测性 ✅、可靠性 ✅、手机银行入口与判断力文档 ✅；部署待做 |
+## Documents
+
+| Document | What it covers | Language |
+|---|---|---|
+| [US_REGULATORY_MAPPING.md](docs/US_REGULATORY_MAPPING.md) | How the controls map to Reg BI, FINRA 2111/2210/3110/4511, SEA 17a-4, Reg S-P and RN 24-09, and what a US pilot would still need | English |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture and 54 decision records with trade-offs | Chinese |
+| [COMPLIANCE_DESIGN.md](docs/COMPLIANCE_DESIGN.md) | Gate, suitability filter, all output rules and their history | Chinese |
+| [EVALUATION_PLAN.md](docs/EVALUATION_PLAN.md) | Scenario design, checks and results | Chinese |
+| [PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) | Production deployment diagram and the demo-to-production gap list | Chinese |
+| [COST_ESTIMATE.md](docs/COST_ESTIMATE.md) | Measured cost per turn and projections at scale | Chinese |
+| [RUNBOOK.md](docs/RUNBOOK.md) | Incident handling: breaker open, fallback spikes, complaints, key rotation | Chinese |
+| [SECURITY.md](docs/SECURITY.md) | Threat model with a test for each control | Chinese |
+| [DEVLOG.md](docs/DEVLOG.md) | Step-by-step build log, including problems found and how they were fixed | Chinese |
+
+## Project layout
+
+```text
+backend/app/
+  compliance/     gate, suitability filter, output review (deterministic)
+  calculations/   Decimal financial math, no LLM
+  products/       catalog loading and ranking
+  purchases/      server-side purchase checks (stops at confirmation)
+  agent/          LangGraph graph and prompts
+  tools/          typed tools exposed to the model
+  rag/            knowledge base retrieval (pgvector)
+  handoff/        relationship-manager handoff state machine
+  bank_sim/       simulated mobile banking app (kept separate from WealthPilot)
+frontend/src/     customer app, RM and ops dashboards, simulated banking app
+data/             fictional products, customers, rewards and knowledge base
+evaluations/      scenario suites (zh/en) and reports
+deploy/           production compose, Caddy and deploy scripts
+docs/             design documents
+```
+
+## Status
+
+Core product, compliance, bilingual support, security, observability, reliability and deploy-ready infrastructure are done. In progress: the demo video and English versions of the key design documents.

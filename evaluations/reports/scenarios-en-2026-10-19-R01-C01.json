@@ -1,0 +1,499 @@
+[
+  {
+    "id": "R01",
+    "name": "Knowledge base answer (deposit insurance)",
+    "passed": true,
+    "rewrites": [
+      "REWRITE:O-FAKE_CITATION、片段:¥618,000",
+      "REWRITE:O-UNGROUNDED_AMOUNT、片段:¥450,000"
+    ],
+    "turns": [
+      {
+        "say": "If my bank goes bust, how much of my deposits is covered?",
+        "reply": "Your deposits are covered by the deposit insurance scheme up to a limit of **¥500,000 per bank** [K17]. Here's how it works:\n\n- **Coverage scope:** The ¥500,000 limit covers the **combined total of principal and interest** across all your insured accounts at the **same bank** [K17].\n- **Within the limit:** Amounts up to ¥500,000 are fully reimbursed.\n- **Above the limit:** Any amount exceeding ¥500,000 would be paid from the bank's liquidation assets according to law [K17].\n- **Timing:** If the conditions are met, reimbursement should be made within 7 working days [K17].\n- **Cost:** The insurance premium is paid by the bank; you don't need to pay anything extra [K17].\n\n**Important distinction:** This coverage applies to **deposits only**—not to wealth management products, which are managed separately and carry investment risk [K18]. Structured deposits, however, are treated as deposits and are covered within the same ¥500,000 limit [K19].\n\nBased on your profile, you hold demand deposits, time deposits, and a wealth management product with us. Your deposits are within the coverage limit. Your wealth management product holding is **not** covered by deposit insurance [K18].\n\nPlease note: Specific rules are subject to the latest regulations and the product offering documents.",
+        "blocks": [
+          "sources",
+          "assessment_prompt"
+        ],
+        "latency": 13.9,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "回答包含其一 ['500,000', '500000', '(?i)500k', '(?i)500 thousand']",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "引用 ['K17']",
+            "pass": true,
+            "detail": "实际引用：['K17', 'K18', 'K19']"
+          }
+        ]
+      },
+      {
+        "say": "Can you give me an example of how the part above the limit works?",
+        "reply": "Here's how it works with a hypothetical example:\n\nSuppose you have ¥600,000 in deposits at one bank, earning 3% annual interest. After one year, your total principal plus interest would be ¥618,000.\n\nUnder the deposit insurance scheme [K17]:\n\n- **Fully covered:** ¥500,000 would be reimbursed by deposit insurance.\n- **Above the limit:** The remaining amount (the part above ¥500,000) would be paid from the bank's liquidation assets according to law. Whether and how much you recover depends on the liquidation process.\n\nSo in this case, you are guaranteed ¥500,000 through deposit insurance. The rest would depend on how much the bank's assets can cover during liquidation.\n\nA few practical tips:\n- The ¥500,000 limit applies **per bank**, so spreading deposits across different banks can increase your total coverage.\n- The limit covers **principal plus interest combined**, so as your deposits grow with interest, more of your balance could push above the threshold.\n- Wealth management products are **not** deposits and are not covered by this insurance [K18].\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "sources",
+          "assessment_prompt"
+        ],
+        "latency": 14.5,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "回答包含其一 ['(?i)suppose', '(?i)assum', '(?i)for example', '(?i)for instance', '(?i)e\\\\.g\\\\.', \"(?i)let's say\", '(?i)say you', '(?i)hypothetical', '(?i)imagine']",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "LLM 评审",
+            "pass": true,
+            "detail": "The response clearly labels the example as hypothetical, correctly states the ¥500,000 deposit insurance cap per bank, and explicitly notes that the excess amount depends on liquidation assets without promising full repayment."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "R01",
+    "name": "Knowledge base answer (deposit insurance)",
+    "passed": true,
+    "rewrites": [],
+    "turns": [
+      {
+        "say": "If my bank goes bust, how much of my deposits is covered?",
+        "reply": "If your bank fails, your deposits are protected by the Deposit Insurance Scheme, which covers up to ¥500,000 per depositor per bank [K17]. This limit includes the combined principal and interest across all your insured accounts at that same bank.\n\nHere's what that means for you:\n\n- **What's covered:** Your ¥150,000 demand deposit and ¥300,000 time deposit at our bank are both deposits, so they fall under this protection [K17].\n- **What's not covered:** Your ¥50,000 holding in Zhian Ready Cash is a wealth management product, not a deposit, so it is **not** covered by deposit insurance [K18].\n- **How it works:** The ¥500,000 limit applies to the total of your principal plus accrued interest at one bank. Amounts above that would be claimed from the bank's liquidation assets [K17].\n\nCurrently, your total deposits at our bank are below the ¥500,000 threshold, so they would be fully reimbursed within 7 working days if the conditions are met [K17].\n\nPlease note: specific rules and limits are subject to the latest regulations and product documents.",
+        "blocks": [
+          "sources",
+          "assessment_prompt"
+        ],
+        "latency": 5.8,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "回答包含其一 ['500,000', '500000', '(?i)500k', '(?i)500 thousand']",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "引用 ['K17']",
+            "pass": true,
+            "detail": "实际引用：['K17', 'K18']"
+          }
+        ]
+      },
+      {
+        "say": "Can you give me an example of how the part above the limit works?",
+        "reply": "Suppose you have ¥600,000 in deposits at one bank, and after one year the balance has grown to ¥615,000 with interest. Here's how the deposit insurance payout would work:\n\n- **The first ¥500,000** would be fully reimbursed by the deposit insurance fund within 7 working days [K17].\n- **The remaining amount above the limit** — the part over ¥500,000 — would not be covered by deposit insurance. Instead, it would be claimed from the bank's liquidation assets according to law [K17].\n\nThe key point is that the ¥500,000 cap applies to the **total of principal plus interest** at the time of failure. So even if your original deposit was under the limit, accumulated interest could push you over.\n\n**Important notes:**\n- The payout from liquidation depends on how much the bank's assets are worth after winding down. There is no guaranteed recovery rate for the excess amount.\n- This example uses a hypothetical 2.5% annual rate for illustration only. Actual interest rates vary by product and term.\n- Specific rules are subject to the latest regulations and product documents.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "sources",
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 7.1,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "回答包含其一 ['(?i)suppose', '(?i)assum', '(?i)for example', '(?i)for instance', '(?i)e\\\\.g\\\\.', \"(?i)let's say\", '(?i)say you', '(?i)hypothetical', '(?i)imagine']",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "LLM 评审",
+            "pass": true,
+            "detail": "The response clearly labels the example as hypothetical, correctly states the ¥500,000 deposit insurance cap per bank, and explicitly notes that the excess amount is not covered by deposit insurance and recovery from liquidation is not guaranteed."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "R01",
+    "name": "Knowledge base answer (deposit insurance)",
+    "passed": true,
+    "rewrites": [
+      "REWRITE:O-UNGROUNDED_AMOUNT、片段:¥450,000,"
+    ],
+    "turns": [
+      {
+        "say": "If my bank goes bust, how much of my deposits is covered?",
+        "reply": "Your deposits are covered by the deposit insurance system, which pays out up to ¥500,000 per depositor, per bank. This limit includes both principal and accrued interest across all your insured accounts at that same bank [K17].\n\nHere is how this applies to you at our bank:\n\n- **Your covered deposits:** Your current account and time deposit are both deposits, so they are covered. The combined amount of your deposits here is within the ¥500,000 limit, so if the bank were to fail, the insured portion would be reimbursed in full within 7 working days [K17].\n- **The part above ¥500,000:** Any amount over the limit would not be covered by deposit insurance. Instead, it would be claimed from the bank's liquidation assets according to law [K17].\n\nA couple of important distinctions:\n\n- **Wealth management products are not covered.** Your Zhian Ready Cash holding is a wealth management product, not a deposit, so it falls outside deposit insurance protection [K18].\n- **Other banks are separate.** The ¥500,000 limit applies per bank. If you hold deposits at multiple banks, each bank provides its own ¥500,000 coverage.\n\nIf you are planning to increase your deposits here and the total might exceed ¥500,000, you may want to consider how that interacts with the coverage limit.\n\n*Specific coverage rules are subject to the latest regulations and the product offering documents.*",
+        "blocks": [
+          "sources",
+          "assessment_prompt"
+        ],
+        "latency": 11.1,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "回答包含其一 ['500,000', '500000', '(?i)500k', '(?i)500 thousand']",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "引用 ['K17']",
+            "pass": true,
+            "detail": "实际引用：['K17', 'K18']"
+          }
+        ]
+      },
+      {
+        "say": "Can you give me an example of how the part above the limit works?",
+        "reply": "Suppose you have a total of ¥600,000 in deposits at one bank — that is a round figure for illustration. Here's how the deposit insurance would work [K17]:\n\n- **Covered portion:** The first ¥500,000 would be paid out in full by the deposit insurance fund within 7 working days [K17].\n- **The part above the limit:** The remaining amount — the part above ¥500,000 — would **not** be covered by deposit insurance. Instead, it would be claimed from the bank's liquidation assets according to law [K17].\n\nWhat happens to that excess depends on how much the bank's assets are worth after liquidation. You might recover some, all, or none of it — there is no guarantee [K17].\n\nKey points to keep in mind:\n\n- The ¥500,000 limit covers **principal plus interest combined** across all your insured accounts at that same bank [K17].\n- This applies to deposits only. Wealth management products like your Zhian Ready Cash holding are not deposits and are not covered by deposit insurance [K18].\n- If you hold deposits at multiple banks, each bank provides its own separate ¥500,000 coverage [K17].\n\n*Specific coverage rules are subject to the latest regulations and the product offering documents.*",
+        "blocks": [
+          "sources",
+          "assessment_prompt"
+        ],
+        "latency": 6.7,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "回答包含其一 ['(?i)suppose', '(?i)assum', '(?i)for example', '(?i)for instance', '(?i)e\\\\.g\\\\.', \"(?i)let's say\", '(?i)say you', '(?i)hypothetical', '(?i)imagine']",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "LLM 评审",
+            "pass": true,
+            "detail": "The response clearly labels the ¥600,000 as a hypothetical example ('for illustration'), correctly states the ¥500,000 deposit insurance cap per bank, and explicitly does not promise full repayment of the excess — instead noting recovery depends on liquidation assets with no guarantee."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "C01",
+    "name": "Compound interest with a follow-up",
+    "passed": true,
+    "rewrites": [
+      "REWRITE:O-UNGROUNDED_AMOUNT、片段:¥1,790,848、片段:¥790,848、片段:¥161,952"
+    ],
+    "turns": [
+      {
+        "say": "How much will ¥1,000,000 grow to at 5% a year compounded for 10 years?",
+        "reply": "Assuming a fixed annual rate of 5% compounded annually, ¥1,000,000 would grow to approximately **¥1,628,895** after 10 years.\n\nHere's the breakdown:\n- Total invested: ¥1,000,000\n- Total gain: ¥628,895\n\nThis is a hypothetical illustration assuming the rate stays constant and ignores taxes, fees, and market fluctuations. It does not represent any product's future performance and is not a promise of returns.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 4.6,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "包含界面块 calculation_result",
+            "pass": true,
+            "detail": "实际：['calculation_result', 'line_chart', 'assessment_prompt']"
+          },
+          {
+            "check": "回答包含其一 ['1,628,894.63', '1628894.63', '1.63 million', '1.628']",
+            "pass": true,
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "say": "What about 6%?",
+        "reply": "Assuming a fixed annual rate of 6% compounded annually, ¥1,000,000 would grow to approximately **¥1,790,848** after 10 years.\n\nHere's the breakdown:\n- Total invested: ¥1,000,000\n- Total gain: ¥790,848\n\nThat extra 1 percentage point in annual return adds a meaningful amount in total growth over the 10-year period compared to the 5% scenario.\n\nThis is a hypothetical illustration assuming the rate stays constant and ignores taxes, fees, and market fluctuations. It does not represent any product's future performance and is not a promise of returns.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 8.0,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "包含界面块 calculation_result",
+            "pass": true,
+            "detail": "实际：['calculation_result', 'line_chart', 'assessment_prompt']"
+          },
+          {
+            "check": "回答包含其一 ['1,790,847.70', '1790847.70', '1.79 million', '1.790']",
+            "pass": true,
+            "detail": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "C01",
+    "name": "Compound interest with a follow-up",
+    "passed": true,
+    "rewrites": [],
+    "turns": [
+      {
+        "say": "How much will ¥1,000,000 grow to at 5% a year compounded for 10 years?",
+        "reply": "With an initial amount of ¥1,000,000 growing at a fixed 5% annual rate compounded annually for 10 years, the final balance would be **¥1,628,894.63**.\n\nThat represents a total gain of **¥628,894.63** over the original principal.\n\nThis assumes a fixed hypothetical rate of 5% each year, with no additional contributions or withdrawals. In practice, actual returns would vary, and this illustration does not reflect taxes, fees, or market fluctuations.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 4.7,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "包含界面块 calculation_result",
+            "pass": true,
+            "detail": "实际：['calculation_result', 'line_chart', 'assessment_prompt']"
+          },
+          {
+            "check": "回答包含其一 ['1,628,894.63', '1628894.63', '1.63 million', '1.628']",
+            "pass": true,
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "say": "What about 6%?",
+        "reply": "With an initial amount of ¥1,000,000 growing at a fixed 6% annual rate compounded annually for 10 years, the final balance would be **¥1,790,847.70**.\n\nThat represents a total gain of **¥790,847.70** over the original principal.\n\nThis assumes a fixed hypothetical rate of 6% each year, with no additional contributions or withdrawals. In practice, actual returns would vary, and this illustration does not reflect taxes, fees, or market fluctuations.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 5.2,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "包含界面块 calculation_result",
+            "pass": true,
+            "detail": "实际：['calculation_result', 'line_chart', 'assessment_prompt']"
+          },
+          {
+            "check": "回答包含其一 ['1,790,847.70', '1790847.70', '1.79 million', '1.790']",
+            "pass": true,
+            "detail": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "C01",
+    "name": "Compound interest with a follow-up",
+    "passed": true,
+    "rewrites": [],
+    "turns": [
+      {
+        "say": "How much will ¥1,000,000 grow to at 5% a year compounded for 10 years?",
+        "reply": "If you invest ¥1,000,000 at a 5% annual rate compounded annually for 10 years, it would grow to approximately **¥1,628,895**.\n\nHere's the breakdown:\n- Total invested: ¥1,000,000\n- Total gain: ¥628,895\n\nThis assumes a fixed 5% rate each year with no additional contributions. Please note this is a hypothetical illustration and does not represent any product's future performance.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 4.5,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "包含界面块 calculation_result",
+            "pass": true,
+            "detail": "实际：['calculation_result', 'line_chart', 'assessment_prompt']"
+          },
+          {
+            "check": "回答包含其一 ['1,628,894.63', '1628894.63', '1.63 million', '1.628']",
+            "pass": true,
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "say": "What about 6%?",
+        "reply": "At 6% compounded annually, ¥1,000,000 would grow to approximately **¥1,790,848** over 10 years.\n\n- Total invested: ¥1,000,000\n- Total gain: ¥790,848\n\nThis assumes a fixed 6% rate each year with no additional contributions. Please note this is a hypothetical illustration and does not represent any product's future performance.\n\n> Hypothetical: assumes a fixed rate and ignores taxes, fees and market swings. It does not represent any product's future performance and is not a promise of returns.",
+        "blocks": [
+          "calculation_result",
+          "line_chart",
+          "assessment_prompt"
+        ],
+        "latency": 3.8,
+        "checks": [
+          {
+            "check": "通过输出审查",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "未退化为兜底回答",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "check": "回答使用英文",
+            "pass": true,
+            "detail": "中文字符占比 0%"
+          },
+          {
+            "check": "包含界面块 calculation_result",
+            "pass": true,
+            "detail": "实际：['calculation_result', 'line_chart', 'assessment_prompt']"
+          },
+          {
+            "check": "回答包含其一 ['1,790,847.70', '1790847.70', '1.79 million', '1.790']",
+            "pass": true,
+            "detail": ""
+          }
+        ]
+      }
+    ]
+  }
+]

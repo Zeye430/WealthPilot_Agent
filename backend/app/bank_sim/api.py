@@ -31,6 +31,7 @@ _BANK_KEY = secrets.token_bytes(32)
 class BankLogin(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)
+    access_code: str | None = Field(default=None, max_length=64)
 
 
 def _enabled() -> None:
@@ -71,6 +72,13 @@ def bank_customer(request: Request) -> str:
 def bank_login(req: BankLogin, request: Request, response: Response):
     _enabled()
     login_limit(request, f"bank:{req.username}")
+    # 公开演示设置了访问码时，模拟手机银行同样要求访问码
+    # （否则可绕过访问码进入理财助手、消耗模型额度）
+    code = get_settings().demo_access_code
+    if code is not None and not hmac.compare_digest(
+        (req.access_code or "").strip(), code.get_secret_value()
+    ):
+        raise HTTPException(status_code=401, detail=L("访问码不正确", "Incorrect access code"))
     customer_id = _bank_customers().get(req.username.strip().lower())
     password_ok = hmac.compare_digest(req.password, get_settings().demo_password.get_secret_value())
     if customer_id is None or not password_ok:

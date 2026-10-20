@@ -1,0 +1,14 @@
+# 后端镜像以仓库根目录为构建上下文：只放入 backend/ 与 data/，其余一律排除
+*
+!backend/
+!data/
+
+# 真实机构的公开文件仅作本地参考，绝不能进入镜像
+data/reference/
+# 本地环境与缓存
+backend/.venv/
+backend/.models/
+backend/.env
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/

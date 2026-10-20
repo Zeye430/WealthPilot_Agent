@@ -264,6 +264,37 @@ def test_repeated_violation_falls_back():
     assert [d["decision"] for d in decisions(result, "OUTPUT")] == ["REWRITE", "FALLBACK"]
 
 
+def test_rejected_draft_cannot_ground_the_rewrite():
+    # R01 场景评估发现：被拒绝的初稿曾被当作「此前的消息」，改写时重复同一个编造的金额就能通过
+    draft = "超出限额部分为 11.2 万元。"
+    model = ScriptedChatModel(responses=[AIMessage(draft), AIMessage(draft)])
+    result = run(model, label="FINANCE_KNOWLEDGE", text="能举个例子说明超过限额的部分怎么算吗？")
+    assert result["reply"] == SAFE_FALLBACK_REPLY
+    assert [d["decision"] for d in decisions(result, "OUTPUT")] == ["REWRITE", "FALLBACK"]
+
+
+def test_rejected_draft_cannot_ground_a_product():
+    # 同一漏洞也影响产品来源核对：初稿中编造的产品不能为改写后的回答「作证」
+    draft = "推荐知岸稳享每日开放。"
+    model = ScriptedChatModel(responses=[AIMessage(draft), AIMessage(draft)])
+    result = run(model, label="PRODUCT", text="有什么稳健的产品？")
+    assert result["reply"] == SAFE_FALLBACK_REPLY
+
+
+def test_tool_result_in_rewrite_still_grounds_amount():
+    # 改写时调用工具得到的金额是正当来源
+    model = ScriptedChatModel(
+        responses=[
+            AIMessage("约 170 万元。"),
+            tool_call("calculate_growth", GROWTH_ARGS),
+            AIMessage("约 1,628,894.63 元。"),
+        ]
+    )
+    result = run(model)
+    assert result["reply"].startswith("约 1,628,894.63 元。")
+    assert [d["decision"] for d in decisions(result, "OUTPUT")] == ["REWRITE"]
+
+
 def test_repeated_steering_is_redacted_instead_of_fallback():
     steer = "想要更高收益的话，您可以重新评估风险承受能力。"
     model = ScriptedChatModel(

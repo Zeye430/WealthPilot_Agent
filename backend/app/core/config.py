@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     embedding_dim: int = 512
     embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
+    # 向量模型缓存目录；不设置时用 fastembed 默认的临时目录（容器重建后需重新下载）。生产挂载持久卷
+    embedding_cache_dir: Path | None = None
+    # 启动时在后台预热：加载向量模型并同步检索索引，避免第一位客户等待
+    # （生产开启；测试与开发默认关闭）
+    warmup_on_start: bool = False
 
     # 本地语音识别（SenseVoice，经 sherpa-onnx 运行）：录音在本机转成文字，不发送给第三方，也不保存
     asr_model_dir: Path = Path(__file__).resolve().parents[2] / ".models/sensevoice-zh"

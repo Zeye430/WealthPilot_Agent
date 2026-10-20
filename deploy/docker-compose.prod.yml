@@ -1,0 +1,102 @@
+# 生产部署：数据库 + 后端 + 前端 + Caddy（HTTPS）+ 每日数据库备份。
+# 由 deploy/deploy.sh 在服务器上执行；本机验证：见 docs/DEPLOYMENT.md「本机验证生产配置」。
+# 只有 Caddy 对外开放端口；数据库、后端、前端只在容器网络内可达。
+name: wealthpilot-prod  # 与开发环境的 compose 项目（wealthpilot）区分，避免误用开发数据卷
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: wealthpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?在 .env.production 中设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: wealthpilot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wealthpilot"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ..                        # 仓库根目录：镜像中包含 backend/ 与 data/（见 backend/Dockerfile、.dockerignore）
+      dockerfile: backend/Dockerfile
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgresql+psycopg://wealthpilot:${POSTGRES_PASSWORD}@db:5432/wealthpilot
+      CORS_ORIGINS: '["${PUBLIC_ORIGIN:-https://${DOMAIN}}"]'   # PUBLIC_ORIGIN 只在本机验证（非 443 端口）时设置
+      COOKIE_SECURE: "true"
+      LOG_FORMAT: json
+      WARMUP_ON_START: "true"
+      EMBEDDING_CACHE_DIR: /app/.cache/fastembed
+      GIT_SHA: ${GIT_SHA:-unknown}
+    volumes:
+      - asr-models:/app/.models          # 语音模型（部署脚本下载一次，重建容器不丢）
+      - model-cache:/app/.cache          # 向量模型缓存
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN: ${DOMAIN:?在 .env.production 中设置 DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data                 # 证书（重启不必重新申请，避免触发签发频率限制）
+      - caddy-config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+  # 每天导出一次数据库，保留最近 7 天；恢复步骤见 docs/DEPLOYMENT.md
+  backup:
+    image: pgvector/pgvector:pg16
+    environment:
+      PGHOST: db
+      PGUSER: wealthpilot
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: wealthpilot
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/wealthpilot-$$(date +%F).sql.gz
+          pg_dump --no-owner | gzip > "$$f.tmp" && mv "$$f.tmp" "$$f" && echo "backup written: $$f"
+          find /backups -name 'wealthpilot-*.sql.gz' -mtime +7 -delete
+          sleep 86400
+        done
+    depends_on:
+      backend:
+        condition: service_healthy     # 后端健康 = 迁移已完成，避免首份备份是空库
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  asr-models:
+  model-cache:
+  caddy-data:
+  caddy-config:

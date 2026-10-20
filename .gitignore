@@ -14,3 +14,8 @@ data/reference/
 
 # 本地语音识别模型（scripts/download_asr_model.py 下载，约 240MB）
 backend/.models/
+
+# 生产部署：密钥配置、本机部署状态、本机验证时的备份目录
+deploy/.env.production
+deploy/.state
+deploy/backups/

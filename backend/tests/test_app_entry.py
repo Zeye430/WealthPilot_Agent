@@ -112,6 +112,18 @@ def test_wrong_audience_rejected():
         app_ticket.verify(forged, now())
 
 
+def test_bank_login_requires_access_code_when_configured(client, monkeypatch):
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "demo_access_code", SecretStr("open-sesame"))
+    creds = {"username": "wang", "password": "wealthpilot-demo"}
+    assert client.post("/bank-sim/api/login", json=creds).status_code == 401
+    ok = client.post("/bank-sim/api/login", json={**creds, "access_code": "open-sesame"})
+    assert ok.status_code == 200
+
+
 def test_bank_sim_can_be_disabled(client, monkeypatch):
     from app.core.config import get_settings
 

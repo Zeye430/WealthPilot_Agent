@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, bankApi, type BankHome } from "@/lib/api";
+import { ApiError, bankApi, getLoginConfig, type BankHome, type LoginConfig } from "@/lib/api";
 import { notifyDemoStep, setEmbedded } from "@/lib/embed";
 import { defineCopy, intlLocale, LocaleToggle, useCopy, useLocale } from "@/lib/i18n";
 
@@ -27,7 +27,7 @@ const COPY = defineCopy({
     login: "登录",
     loggingIn: "登录中…",
     pick: "演示客户",
-    hint: "演示密码：wealthpilot-demo",
+    accessCode: "访问码",
     greeting: (name: string) => `您好，${name}`,
     total: "总资产（元）",
     show: "显示金额",
@@ -64,7 +64,7 @@ const COPY = defineCopy({
     login: "Sign in",
     loggingIn: "Signing in…",
     pick: "Demo customers",
-    hint: "Demo password: wealthpilot-demo",
+    accessCode: "Access code",
     greeting: (name: string) => `Hello, ${name}`,
     total: "Total assets (CNY)",
     show: "Show amounts",
@@ -129,15 +129,24 @@ function BankLogin({ onDone }: { onDone: () => void }) {
   const { locale } = useLocale();
   const [username, setUsername] = useState("wang");
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  // 与 WealthPilot 登录页同一份配置：是否需要访问码、演示密码提示（公开部署时由服务器配置决定）
+  const [config, setConfig] = useState<LoginConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getLoginConfig()
+      .then(setConfig)
+      .catch(() => setConfig(null));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await bankApi.login(username, password);
+      await bankApi.login(username, password, accessCode);
       notifyDemoStep(1);
       onDone();
     } catch (err) {
@@ -182,6 +191,14 @@ function BankLogin({ onDone }: { onDone: () => void }) {
           {c.password}
         </label>
         <input id="bank-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={c.password} autoComplete="current-password" className="h-12 rounded-xl border border-[#d9e1e0] px-4 text-[15px] outline-none focus:border-[#0b5f5a]" required />
+        {config?.access_code_required && (
+          <>
+            <label className="sr-only" htmlFor="bank-access-code">
+              {c.accessCode}
+            </label>
+            <input id="bank-access-code" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} placeholder={c.accessCode} className="h-12 rounded-xl border border-[#d9e1e0] px-4 text-[15px] outline-none focus:border-[#0b5f5a]" required />
+          </>
+        )}
         {error && (
           <p role="alert" className="text-sm text-[#b42318]">
             {error}
@@ -190,7 +207,7 @@ function BankLogin({ onDone }: { onDone: () => void }) {
         <button type="submit" disabled={busy} className="h-12 rounded-xl text-[15px] font-bold text-white disabled:opacity-50" style={{ background: BANK }}>
           {busy ? c.loggingIn : c.login}
         </button>
-        <p className="text-center text-xs text-[#5c6b6a]">{c.hint}</p>
+        {config?.hint && <p className="text-center text-xs text-[#5c6b6a]">{config.hint}</p>}
         <p className="mt-auto pb-6 text-center text-[11px] leading-4 text-[#8a9796]">{c.simNote}</p>
       </form>
     </main>

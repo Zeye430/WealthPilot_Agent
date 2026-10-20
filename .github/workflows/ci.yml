@@ -52,3 +52,46 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run build
+
+  # 生产配置冒烟测试：用假模型在 CI 中启动完整的生产编排（数据库 + 后端 + 前端 + Caddy HTTPS + 备份），
+  # 检查镜像内容、就绪检查、对外屏蔽的路径与访问码。部署脚本改动也在这里做静态检查。
+  deploy-config:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy
+    env:
+      DOMAIN: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - name: 部署脚本静态检查
+        run: shellcheck -x ./*.sh
+      - name: 生成测试用配置（随机密钥，假模型）
+        run: |
+          cat > .env.production <<ENV
+          LLM_PROVIDER=fake
+          FAKE_LLM_LATENCY_SECONDS=0.2
+          POSTGRES_PASSWORD=$(openssl rand -hex 16)
+          APP_TICKET_SECRET=$(openssl rand -hex 32)
+          DEMO_PASSWORD=$(openssl rand -hex 12)
+          DEMO_ACCESS_CODE=ci-code
+          METRICS_TOKEN=$(openssl rand -hex 16)
+          ENV
+      - name: 构建并启动
+        run: GIT_SHA="${GITHUB_SHA::7}" docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build --wait --wait-timeout 300
+      - name: 检查
+        run: |
+          set -x
+          curl -fsSk --retry 10 --retry-delay 3 --retry-all-errors https://localhost/health/ready | grep '"status":"ready"'
+          curl -fsSk https://localhost/login -o /dev/null
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/metrics)" = 404
+          curl -sk -D - -o /dev/null https://localhost/ | grep -i '^strict-transport-security'
+          # 不带访问码登录被拒绝
+          test "$(curl -sk -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/login \
+            -H 'content-type: application/json' -d '{"username":"wang","password":"x"}')" = 401
+          # 镜像包含演示数据，但不含 data/reference（真实文件仅本地参考）与 .env
+          docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend \
+            sh -c 'test -f /data/products/products.yaml && test ! -e /data/reference && test ! -e /app/.env'
+      - name: 失败时输出日志
+        if: failure()
+        run: docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail 100
